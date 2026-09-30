@@ -389,6 +389,49 @@ async function run() {
     T(CN, 'R255d workflow 直接跑导出脚本（服务器端无 CORS，可读云端）',
       /run:\s*node tools\/export-static\.js/.test(wf),
       '导出步骤');
+
+    /* 5.9 ★★ 快照的**确定性** —— 这条是被实测逼出来的设计修复。
+           首版把 exportedAt 原样写进 JSON，结果 workflow 第一次跑就产出了一个
+           只有时间戳变化的提交：也就是**每 6 小时污染一次历史** ——
+           正是 workflow 里那句"无变更不提交"想避免的，却被时间戳废掉了。
+
+           这里把脚本里的 writeSnapshotIfChanged 抽出来**真跑**：
+           只改时间戳 → 不重写；内容真变 → 重写。 */
+    let detOk = false, detHow = '', tmpFile = '';
+    try {
+      const m = /const VOLATILE_LINE = [\s\S]*?\nfunction writeSnapshotIfChanged\(file, obj\) \{[\s\S]*?\n\}/.exec(exp);
+      if (!m) throw new Error('抽不到 writeSnapshotIfChanged');
+      /* eslint-disable no-new-func */
+      const fn = new Function('fs', m[0] + '\nreturn writeSnapshotIfChanged;')(fs);
+
+      tmpFile = path.join(require('os').tmpdir(), 'neon-snapshot-determinism.json');
+      const base = { exportedAt: '2026-01-01T00:00:00Z', posts: [1, 2], radio: [] };
+      const onlyTime = { exportedAt: '2026-06-06T12:00:00Z', posts: [1, 2], radio: [] };
+      const realChange = { exportedAt: '2026-06-06T12:00:00Z', posts: [1, 2, 3], radio: [] };
+
+      fs.writeFileSync(tmpFile, JSON.stringify(base, null, 2), 'utf8');
+      const r1 = fn(tmpFile, onlyTime);     /* 期望 false */
+      const afterR1 = fs.readFileSync(tmpFile, 'utf8');
+      const r2 = fn(tmpFile, realChange);   /* 期望 true */
+      const afterR2 = fs.readFileSync(tmpFile, 'utf8');
+
+      detOk = r1 === false &&
+              r2 === true &&
+              JSON.stringify(onlyTime, null, 2) !== afterR1 &&   /* 文件确实没被换掉 */
+              afterR2 === JSON.stringify(realChange, null, 2);   /* 真变了就写进去 */
+      detHow = '仅时间戳变→' + r1 + ' / 内容变→' + r2;
+    } catch (e) {
+      detHow = '抽取失败：' + (e && e.message || e);
+    } finally {
+      try { if (tmpFile) fs.unlinkSync(tmpFile); } catch (e2) { /* 忽略 */ }
+    }
+    T(CN, 'R256 快照是确定性产物：只有时间戳变则**不重写**，内容真变才写',
+      detOk, detHow);
+
+    /* 5.10 与上一条配套：脚本必须**真的用了**这个函数（钉调用点） */
+    T(CN, 'R256b 脚本确实调用 writeSnapshotIfChanged（不是定义完没人用）',
+      /^\s*const snapChanged = writeSnapshotIfChanged\(/m.test(exp),
+      /^\s*const snapChanged = writeSnapshotIfChanged\(/m.test(exp) ? '调用点在位' : '⚠ 未调用');
   }
 
   return { pass: S.results.filter(function (r) { return r.pass; }).length,

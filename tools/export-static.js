@@ -121,6 +121,31 @@ function slimPost(p) {
   return out;
 }
 
+/* ⚠⚠ 快照必须是**确定性产物** —— 这条是被实测逼出来的：
+   `exportedAt` 每次运行都变，原样写入的话，每次同步都会产生一个
+   「内容其实没变」的提交。实测第一次 workflow 跑完就产出了这样一个提交
+   （diff 只有 exportedAt 一行），也就是**每 6 小时污染一次提交历史** ——
+   正是 workflow 里那句"无变更不提交"想避免的事，却被这里的时间戳废掉了。
+
+   做法：比对时忽略 exportedAt；**没有实质变化就不碰文件**。
+   于是那个时间戳的含义变成"最后一次真正变化的时间"，而不是"最后一次跑的时间"
+   —— 后者没有价值，前者有。
+
+   （data/radio 与 data/images 是逐字节写入，内容相同时 git 自然看不到差异，
+     所以只有这个 JSON 需要这层保护。） */
+const VOLATILE_LINE = /"exportedAt":\s*"[^"]*",?\n?/;
+
+function writeSnapshotIfChanged(file, obj) {
+  const next = JSON.stringify(obj, null, 2);
+  let prev = null;
+  try { prev = fs.readFileSync(file, 'utf8'); } catch (e) { /* 首次运行 */ }
+  if (prev !== null && prev.replace(VOLATILE_LINE, '') === next.replace(VOLATILE_LINE, '')) {
+    return false;
+  }
+  fs.writeFileSync(file, next, 'utf8');
+  return true;
+}
+
 /* 与 app.js 的 safeName 同一保守口径：只留字母数字与点 */
 function safeExt(contentType, id) {
   const m = EXT_BY_MIME[String(contentType || '').toLowerCase()];
@@ -253,7 +278,10 @@ async function main() {
   });
   files.forEach(function (f) { fs.writeFileSync(f.path, f.buf); });
   radioFiles.forEach(function (f) { fs.writeFileSync(f.path, f.buf); });
-  fs.writeFileSync(path.join(DATA_DIR, 'posts.json'), json, 'utf8');
+  const snapChanged = writeSnapshotIfChanged(path.join(DATA_DIR, 'posts.json'), snapshot);
+  console.log(snapChanged
+    ? '  快照有实质变化 → 已更新'
+    : '  快照无实质变化 → 保持原文件（时间戳不刷新，避免空提交）');
 
   console.log('\n✓ 快照已写入 data/\n');
 }
