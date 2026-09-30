@@ -98,4 +98,4 @@ openssl dgst -sha384 -binary js/vendor/supabase-js.js | openssl base64 -A
 > 想找回它：`git log --diff-filter=D -- js/vendor/workbuddy-cloud-sdk.js`，
 > 或者从 npm 取 `@tencent-ai/workbuddy-cloud-sdk@0.1.2-dev.1b37f73.202609222026`
 > （sha256 `64f437dcb30bec53a65cac36c4e0a38eb46b68e7ceee93662e3fa3cfb6fb5bde`，62057 bytes）。
-> 旧实现"为什么那么写"的记录仍在 `docs/handover-notes/PROJECT-NOTES.md` 与 `安全审计报告.md`。
+> 旧实现"为什么那么写"的记录仍在 `docs/handover-notes/PROJECT-NOTES.md` 与 `docs/archive/安全审计报告.md`。

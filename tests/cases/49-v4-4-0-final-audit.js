@@ -232,7 +232,7 @@ async function run() {
       handover ? '缺项或头部版本未更新' : 'HANDOVER 缺失');
 
     var plan = '';
-    try { plan = fs.readFileSync(path.join(ROOT, '4.0-改版方案.md'), 'utf8'); } catch (e) { plan = ''; }
+    try { plan = fs.readFileSync(path.join(ROOT, 'docs/archive/4.0-改版方案.md'), 'utf8'); } catch (e) { plan = ''; }
     T(CN, 'R243b 4.0 方案文件在位且含五批定义（B1~B5）',
       /B1 · 地基重铸/.test(plan) && /B4 · 控制台/.test(plan) && /B5 · 终审/.test(plan),
       plan ? '方案完整' : '方案文件缺失');
