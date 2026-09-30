@@ -12,7 +12,6 @@
     "fault": "node tests/fault-matrix.js",
     "regress": "node tests/regress.js",
     "sandbox": "node tests/sandbox-p2.js",
-    "split": "node tools/split-regress.js --write",
     "baseline": "node tools/baseline-cases.js",
     "feed": "node tools/gen-feed.js",
     "build": "npm run gate && npm run feed",

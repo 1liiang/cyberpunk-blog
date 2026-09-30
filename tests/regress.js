@@ -16,7 +16,7 @@
      · lintFloatingAsync   —— 上面那个坑的根因，钉在语法层面
 
    ⚠ 新增/删除断言后必须跑 `npm run baseline` 更新基线，否则对账会报红。
-   ⚠ 新增 case 文件后必须跑 `node tools/split-regress.js --write` 更新 manifest。
+   ⚠ 新增 case 文件后必须跑 `node tools/baseline-cases.js` 更新 manifest（拆分器 split-regress.js 已于 v4.8.1 清理删除，拆分工作早已完成）。
    ============================================================ */
 const fs = require('fs');
 const path = require('path');
@@ -29,7 +29,7 @@ const MANIFEST = path.join(CASE_DIR, 'manifest.json');
 
 function loadManifest() {
   if (!fs.existsSync(MANIFEST)) {
-    throw new Error('找不到 tests/cases/manifest.json —— 先跑 node tools/split-regress.js --write');
+    throw new Error('找不到 tests/cases/manifest.json —— 先跑 node tools/baseline-cases.js');
   }
   return JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
 }

@@ -55,8 +55,7 @@ async function run() {
     T('E 供应链', 'R17b 不再加载 @dev 漂移标签资源', !/src="[^"]*@dev/.test(html));
 
     const VENDORED = [
-      { name: 'supabase-js', path: SRC.vendorPath.replace(/workbuddy-cloud-sdk\.js$/, 'supabase-js.js'), min: 100000 },
-      { name: 'workbuddy-cloud-sdk', path: SRC.vendorPath, min: 10000 },
+      { name: 'supabase-js', path: SRC.vendorPath, min: 100000 },
       { name: 'marked', path: require('path').join(require('../common').ROOT, 'js/vendor/marked.min.js'), min: 20000 },
       { name: 'dompurify', path: require('path').join(require('../common').ROOT, 'js/vendor/dompurify.min.js'), min: 15000 },
       { name: 'highlight.js', path: require('path').join(require('../common').ROOT, 'js/vendor/highlight.min.js'), min: 80000 }
@@ -68,7 +67,7 @@ async function run() {
       const hash = crypto.createHash('sha384').update(fs.readFileSync(v.path)).digest('base64');
       if (readme.indexOf('sha384-' + hash) === -1 && readme.indexOf(hash) === -1) missing.push(v.name + ':README 哈希不符');
     });
-    T('E 供应链', 'R18 vendor SDK 文件存在且非空（两个 SDK 各自成档）', missing.length === 0,
+    T('E 供应链', 'R18 vendor 文件存在且非空（数据层 SDK + 三个渲染库各自成档）', missing.length === 0,
       missing.length ? missing.join(' / ') : VENDORED.map(function (v) { return v.name + '=' + fs.statSync(v.path).size; }).join(' '));
     T('E 供应链', 'R19 vendor README 哈希与文件一致', missing.filter(function (m) { return /README/.test(m); }).length === 0);
   }

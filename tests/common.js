@@ -42,7 +42,9 @@ const SRC = {
   /* 构建/发版工具（O10 改号校验要读它的实现，确保防护没被削弱） */
   bump: fs.readFileSync(path.join(ROOT, 'tools/bump.js'), 'utf8'),
   pkg: fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'),
-  vendorPath: path.join(ROOT, 'js/vendor/workbuddy-cloud-sdk.js'),
+  /* 数据层 SDK 的本地归档路径：v4.8.1 起指向 supabase-js。
+     旧平台的 workbuddy-cloud-sdk.js 已随瘦身清理删除（见 js/vendor/README.md）。 */
+  vendorPath: path.join(ROOT, 'js/vendor/supabase-js.js'),
   vendorReadme: path.join(ROOT, 'js/vendor/README.md')
 };
 

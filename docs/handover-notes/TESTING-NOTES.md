@@ -12,7 +12,7 @@
 - 每个 case 可 `node tests/cases/xx.js` 独立跑（`standalone` 只在 `require.main` 时自跑，
   所以也能被别的脚本安全 require）。
 - **增删断言后必须 `npm run baseline`**（红项被拒写）。新增 case：手写文件 → manifest 加 `expect: null` → 跑 baseline。
-- ⚠ `tools/split-regress.js` 是**一次性拆分器，重跑会覆盖**，别再跑
+- ⚠ `tools/split-regress.js` 是**一次性拆分器，重跑会覆盖**，别再跑 —— **v4.8.1 已连同其输入（`tools/archive/regress-monolith-2.1.2.js`）一起删除**；manifest 现由 `node tools/baseline-cases.js` 维护
   （`regress.js` 头注释里那句"新增 case 跑 --write"是错的）。
 - 门禁三套件：故障注入 `fault-matrix.js` / 功能回归 `regress.js` / 行为沙箱 `sandbox-p2.js`。
 
