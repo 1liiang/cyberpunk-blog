@@ -3,7 +3,27 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v4.7.0（**4.0 大改版已收官；4.5.0 = 出厂色相改为紫**） ｜ **门禁**：1106/1106 全绿 ｜ **线上**：已发布
+**交接日期**：2026-09-30 ｜ **版本**：v4.8.0（**数据层已从 WorkBuddy 云迁到 Supabase**） ｜ **门禁**：1135/1135 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+
+> **v4.8.0 迁移要点（接手先看这段）**
+> - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
+>   配置在 `js/cloud.js` 顶部 `PUBLIC_CONFIG`：`endpoint` = 项目 URL **基址**（别带 `/rest/v1/`），
+>   `publishableKey` = `sb_publishable_…`（新版公开键，非 JWT）。
+> - **改动面只有 SDK 边界**：`init()` 建 `supabase.createClient`，`makeAuthAdapter()` 抹平 auth 三处差异
+>   （发码 / 验码 / 改密）。其余约 1200 行（快照回退、图片压缩、电台、脱敏）**一行未动**。
+> - **发码的真实机制**（踩过才写下来）：Supabase 没有 `sendOtp`，且出于防枚举不回话 ——
+>   适配器先用 `shouldCreateUser:false` 探一次，报 `otp_disabled / Signups not allowed for otp`
+>   即判为新用户，再补一次 `shouldCreateUser:true` 真发码。**已与真服务逐字核对过**（52 号用例 + 真项目实测）。
+> - **邮件模板必须含 `{{ .Token }}`**：站点用 `signInWithOtp`，Supabase 发的是 **Magic Link 模板**；
+>   默认模板只有 `{{ .ConfirmationURL }}`（一个链接），**收不到 6 位验证码**就是这个原因。
+>   另外 `mailer_otp_length` 默认 8，已改成 6 与前端文案一致。
+> - **`?v=` 缓存教训再现**：改了 `js/` 却忘了 bump，浏览器复用旧 `cloud.js`（指向旧后端）→
+>   登录报 `Failed to fetch`。**改完立刻 bump，并 Ctrl+F5 硬刷新一次**
+>   （`index.html` 自己没有版本号可击穿；docs/MIGRATION.md §0 记了这次事故）。
+> - **电台已退役**（站长决定"不做歌曲部分"）：3 首商业歌曲（27MB）移出仓库与快照，不导入新库；
+>   表结构与界面保留（未登录访客看不到空播放器，站长登录后仍有上传入口）。
+> - **免费档边界**：直连域名 `db.<ref>.supabase.co` 只有 AAAA（IPv6），IPv4 环境要用 Session pooler；
+>   建库/灌数据可走 Management API（PAT）或 SQL Editor 粘 `db/bootstrap-*.sql`。
 
 ---
 
@@ -75,19 +95,41 @@ cyberpunk-blog/
 
 ---
 
-## 4. 云端资源（关键）
+## 4. 后端资源（关键）
+
+**当前：Supabase**（v4.8.0 起）
 
 | 项 | 值 |
 |---|---|
-| 云服务 resourceId | `wbcs_asyuRz8PhuNwUVq3nDDomM`（**属于当前 WorkBuddy 账号**） |
-| 主要数据表 | `posts`（文章）、`post_images`（图片）、`tags`（标签）、`radio_tracks`（歌单） |
-| 认证 | 匿名可读已发布内容；写入需登录（`ACCESS` 入口） |
+| 项目 ref | `taxrgizbmgwzxnvlxudq`（区域 ap-southeast-1 / 新加坡） |
+| 项目 URL | `https://taxrgizbmgwzxnvlxudq.supabase.co`（写进 `cloud.js` 的 `endpoint`，**只填基址**） |
+| 公开键 | `sb_publishable_…`（写进 `publishableKey`；设计上随前端公开，权限由 RLS 管） |
+| 数据表 | `posts`（文章）、`post_images`（图片）、`radio_tracks`（电台，**已退役、0 行**）、`error_logs`（前端错误上报） |
+| 读视图 | `public_images`（匿名读图，不含 owner_id）、`public_radio`（匿名读电台） |
+| 认证 | 匿名可读已发布内容；写入需登录（`ACCESS` 入口）。**发码走邮件验证码**（`signInWithOtp` + `verifyOtp`） |
+| 建库资料 | `db/schema.sql`（DDL）+ `db/bootstrap-1-schema-posts.sql` / `bootstrap-2-image.sql`（粘 SQL Editor 即可建库） |
+| 建库/灌数据脚本 | `db/tools/import-to-supabase.js`（直连）、`db/tools/verify-supabase.js`（真后端验收） |
 
-⚠ **两个必须知道的怪点**（都是当初为了绕开限制而做的取舍）：
+⚠ **三个必须知道的怪点**（前两个是历史取舍，第三个是 Supabase 特性）：
 
-1. **图片与音频以 base64 存在数据库里**，不走云存储。原因是云存储只服务登录用户，而博客图片必须匿名可读。
-   后果：表行有长度上限（`data` 约 3.6MB），所以上传管线会**自动压缩**（`cloud.js` 里的 `compressImage`）。
-2. **读视图与写基表的字段不能混用** —— 曾经因此把字段写坏过（v2.9.2 事故，详见 `PROJECT-NOTES.md` §1.3）。
+1. **图片以 base64 存在数据库里**，不走对象存储。原平台的对象存储只服务登录用户，而博客图片必须匿名可读。
+   后果：表行有长度上限（`data` ≤ 3.6M 字符），所以上传管线会**自动压缩**（`cloud.js` 的 `compressImage`）。
+   （Supabase 的 Storage 支持公开桶，将来若想改成对象存储，这是一次独立改动。）
+2. **读视图与写基表的字段不能混用** —— `has_data` 是视图算出来的列，写路径引用它会报 42703
+   （v2.9.2 事故，详见 `PROJECT-NOTES.md` §1.3）。
+3. **直连 Postgres 的域名只有 IPv6**：`db.<ref>.supabase.co` 无 A 记录，IPv4 环境要用 Session pooler
+   （`aws-0-ap-southeast-1.pooler.supabase.com`，用户名 `postgres.<ref>`）。
+   建库/灌数据更省事的通道是 **Management API**（个人访问令牌 PAT）——`POST /v1/projects/{ref}/database/query`。
+
+### 历史后端（WorkBuddy，2026-09-30 之前）
+
+| 项 | 当时的值 |
+|---|---|
+| resourceId | `wbcs_asyuRz8PhuNwUVq3nDDomM`（原账号内） |
+| 主站 | `https://cyberpunk-blog.app.workbuddy.host/cyberpunk-blog/`（可登录发文；随云服务停用而失效） |
+
+旧平台的权限是「Origin 白名单 + RLS」两层，所以 `*.github.io` 一律 403；**Supabase 不设这道闸**，
+放开 CSP 的 `connect-src` 之后 GitHub Pages 也能直连数据库 —— 于是 `data/` 快照从"唯一出路"退化为"兜底"。
 
 ---
 
@@ -191,7 +233,7 @@ cyberpunk-blog/
 ## 8. 接手第一小时建议
 
 1. 读 `docs/handover-notes/MEMORY.md`（建立全局认知）
-2. 跑一次 `npm run gate`，确认 1106/1106
+2. 跑一次 `npm run gate`，确认 1135/1135
 3. 打开线上站点，把每个页面点一遍（首页 / 归档 / 标签 / 搜索 / 收藏 / 关于 / 详情页 / 编辑器），
    再按 **Ctrl+`** 玩玩命令终端（先 `help`）、点开右上角的**装置面板**（氛围九层开关在那儿）
 4. **先别改代码** —— 先写一篇真文章，用下来哪里硌手，那才是真正值得改的地方
@@ -224,28 +266,29 @@ cyberpunk-blog/
 
 ---
 
-## 10. GitHub Pages 部署（v4.6.0）
+## 10. 部署与两套地址（v4.8.0 更新）
 
-线上有**两套**，数据来源不同 —— 改代码前务必先分清：
-
-| | 主站（WorkBuddy） | GitHub Pages |
+| | 本地 / 自建静态托管 | GitHub Pages |
 |---|---|---|
-| 地址 | `https://cyberpunk-blog.app.workbuddy.host/cyberpunk-blog/` | `https://1liiang.github.io/cyberpunk-blog/` |
-| 仓库 | 无（由 `workbuddy_sites_deploy` 发布） | `github.com/1liiang/cyberpunk-blog`（公开） |
-| 内容来源 | 云数据库（实时） | `data/` 静态快照 |
-| 登录/发文/上传 | ✅ | ❌ 无后端 |
+| 地址 | `http://127.0.0.1:8898/`（本机预览，`dev serve`） | `https://1liiang.github.io/cyberpunk-blog/` |
+| 仓库 | 无 | `github.com/1liiang/cyberpunk-blog`（公开） |
+| 内容来源 | **Supabase（实时）** | **Supabase（实时）** —— 连不上时自动回退 `data/` 快照 |
+| 登录/发文/上传 | ✅ | ✅（v4.8.0 起：Supabase 不设 Origin 白名单，CSP 已放行 `*.supabase.co`） |
 
-**为什么 Pages 不能直连云端**：两道闸同时拦 —— CSP 的 `connect-src 'self'`
-让跨源请求浏览器直接不发；云端点又按 Origin 白名单放行（`*.github.io` → 403）。
-唯一出路是内容也变**同源**，这就是 `tools/export-static.js` + `js/cloud.js` 里
-`withFallback` 的由来。
+⚠ **v4.8.0 的结论变化**：旧平台按 Origin 白名单放行（`*.github.io` → 403），所以 Pages 只能读
+同源快照；**Supabase 不设这道闸**（浏览器直连是它的正常用法）。放开 CSP 的 `connect-src` 之后，
+Pages 也能直连数据库 —— 于是 `data/` 快照从"唯一出路"退化为"**兜底**"
+（免费档暂停、额度用尽、网络故障时站点照常能看）。`withFallback` 的机制完全保留。
 
-⚠ **Pages 是只读快照，不会自动跟随云端。** 内容更新后必须手动刷新并推送：
+静态快照仍由 `tools/export-static.js` 刷新（`.github/workflows/sync-snapshot.yml` 每 6 小时一次）：
 
 ```bash
-node tools/export-static.js      # 刷新 data/ 快照
+node tools/export-static.js      # 刷新 data/ 快照（音频已退役，现在很轻）
 git add -A && git commit -m "chore: 刷新静态快照" && git push
 ```
+
+> ⚠ 该脚本已改为读 Supabase（PostgREST），并带**音频增量拉取**（本地同尺寸就跳过下载）——
+> 否则每 6 小时全量拉一次音频会把免费档 5GB/月的额度吃光。
 
 ⚠ 仓库是**公开**的（用户 2026-09-30 确认「全部公开」），所以仓库里的一切
 （含安全审计报告、本交接文档）都对外可见。往里加东西前先想一下这一点。

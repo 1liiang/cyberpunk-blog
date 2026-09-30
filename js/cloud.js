@@ -1,13 +1,27 @@
 /* ============================================================
-   cloud.js — WorkBuddy Cloud SDK 初始化 + 数据访问层
-   endpoint / publishableKey 来自激活时返回的 publicConfig
+   cloud.js — 数据访问层（Supabase）
+   ------------------------------------------------------------
+   迁移记录（2026-09-30）：后端从 WorkBuddy 云服务换成 Supabase。
+   本文件对外接口、快照回退机制、图片压缩与电台逻辑**一律未改** ——
+   变的只有最底下那层"SDK 边界"：
+     · init()            —— 由 createWorkBuddyCloud 换成 supabase.createClient
+     · makeAuthAdapter() —— 抹平 auth 的几处签名差异（发码 / 验码 / 改密）
+     · .database.from()  —— Supabase 的 from() 在顶层，挂到 database 名下对齐旧形状
+
+   为什么保留 PUBLIC_CONFIG 的字段名（endpoint / publishableKey）：
+   ① tools/export-static.js 与 51 号用例都按这两个名字从本文件读配置（单一来源）；
+   ② 语义也成立 —— anon key 本来就是"可公开的键"，真正的门是库里的 RLS。
    ============================================================ */
 (function () {
   'use strict';
 
   var PUBLIC_CONFIG = {
-    endpoint: 'https://cyberpunk-blog.app.workbuddy.host',
-    publishableKey: 'wbpk_pQJvN8eWX3KFQyE3DVhDDj_FLZMpPbJoseRqprhQCUXxFwVmrCGr8Ce'
+    /* Supabase 项目 URL（Project Settings → API → Project URL）。
+       ⚠ 只填**基址**：末尾别带 /rest/v1/ —— 客户端自己拼 /rest/v1 与 /auth/v1。 */
+    endpoint: 'https://taxrgizbmgwzxnvlxudq.supabase.co',
+    /* Supabase 的公开键。设计上就随前端公开，权限由库里的 RLS 决定。
+       ⚠ 新版 Supabase 发的是 sb_publishable_… 形态（非 JWT）；已实测被 REST 接受。 */
+    publishableKey: 'sb_publishable_UTy5nvywck24rPk-HvUvVQ_H3-Wr7Ro'
   };
 
   var cloud = null;
@@ -16,14 +30,25 @@
   /* ---------- 初始化（必须在 SDK 脚本加载后调用一次） ---------- */
   function init() {
     if (sdkReady) return cloud;
-    if (typeof WorkBuddyCloud === 'undefined' || typeof WorkBuddyCloud.createWorkBuddyCloud !== 'function') {
-      console.error('[NEON] WorkBuddy Cloud SDK 未加载');
+    if (typeof supabase === 'undefined' || typeof supabase.createClient !== 'function') {
+      console.error('[NEON] 数据层 SDK（supabase-js）未加载');
       return null;
     }
-    cloud = WorkBuddyCloud.createWorkBuddyCloud({
-      endpoint: PUBLIC_CONFIG.endpoint,
-      publishableKey: PUBLIC_CONFIG.publishableKey
+    var sb = supabase.createClient(PUBLIC_CONFIG.endpoint, PUBLIC_CONFIG.publishableKey, {
+      auth: {
+        persistSession: true,        /* 会话存 localStorage，刷新不掉登录 */
+        autoRefreshToken: true,
+        /* 本站是 hash 路由，且找回密码走"邮件验证码"而不是魔法链接，
+           故关掉 URL 里的 token 嗅探 —— 否则 #access_token=… 会被路由当成页面地址 */
+        detectSessionInUrl: false
+      }
     });
+    cloud = {
+      raw: sb,                                  /* 需要底层客户端时用（storage / functions） */
+      database: { from: function (t) { return sb.from(t); } },
+      auth: makeAuthAdapter(sb),
+      storage: { from: function (b) { return sb.storage.from(b); } }
+    };
     sdkReady = true;
     return cloud;
   }
@@ -45,6 +70,94 @@
 
   function pgCode(err) {
     return err && err.code ? String(err.code) : '';
+  }
+
+  /* ---------- auth 适配器 ----------
+     cloud.js 内部的 Auth 包装层（下面那个对象）是按旧 SDK 的**返回形状**写的：
+       signInWithPassword/sendOtp/verifyOtp 取 r.data，且 sendOtp 认 verificationId / isExistingUser。
+     Supabase 的形状大同小异，只有三处真差异，全部在这里抹平：
+
+     ① getSession / signInWithPassword / verifyOtp
+        Supabase 返回 { data: { session, user } }，旧 SDK 的 data 直接就是会话对象
+        ⇒ 统一剥一层 .session，让上层拿到的仍是"会话本身"（app.js 到处读 session.user.id）。
+
+     ② 发码：Supabase 没有 sendOtp，等价物是 signInWithOtp。
+        而 isExistingUser 关系到 UI 走"注册"还是"登录"页签，必须判出来；
+        Supabase 出于防用户枚举**不会**直接告诉你账号是否存在
+        ⇒ 先用 shouldCreateUser:false 探一次：报「不允许注册/用户不存在」= 新用户，
+          再补一次 shouldCreateUser:true 把码发出去（新用户多一个往返，老用户零额外代价）。
+
+     ③ 验码与改密：Supabase 用 { email, token, type } 三件套换会话；
+        注册页还要顺手设密码，故验码成功后追加一次 updateUser({ password })。
+        找回密码同理 —— 邮件模板里放 {{ .Token }} 出 6 位码，
+        按 type:'recovery' 换会话后改密码（app.js 期望的 r.updateUser({nonce,password}) 就落在这里）。 */
+  function makeAuthAdapter(sb) {
+    function fail(err, fallback) { return { error: errMsg(err, fallback) }; }
+
+    return {
+      getSession: async function () {
+        var r = await sb.auth.getSession();
+        if (r.error) return fail(r.error, '会话获取失败');
+        return { data: r.data ? r.data.session : null };
+      },
+      getUser: async function () {
+        var r = await sb.auth.getUser();
+        if (r.error) return fail(r.error, '用户信息获取失败');
+        return { data: r.data ? r.data.user : null };
+      },
+      signInWithPassword: async function (opts) {
+        var r = await sb.auth.signInWithPassword(opts);
+        if (r.error) return fail(r.error, '账号或密码错误');
+        return { data: r.data ? r.data.session : null };
+      },
+      sendOtp: async function (opts) {
+        var email = opts && opts.email;
+        var probe = await sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: false } });
+        if (!probe.error) {
+          return { data: { verificationId: email, isExistingUser: true } };
+        }
+        var code = String((probe.error && (probe.error.code || probe.error.error_code)) || '');
+        var msg = String((probe.error && probe.error.message) || '');
+        var looksNew = code === 'otp_disabled' || code === 'user_not_found' ||
+          /signups?\s+not\s+allowed|user\s+not\s+found|not\s+found/i.test(msg);
+        if (!looksNew) return fail(probe.error, '验证码发送失败');
+
+        var create = await sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true } });
+        if (create.error) return fail(create.error, '验证码发送失败');
+        /* verificationId 在 Supabase 侧没有对应物：换码只认 email + token。
+           这里回填 email 本身，好让上层那段 pending.email === email 的一致性校验照旧生效。 */
+        return { data: { verificationId: email, isExistingUser: false } };
+      },
+      verifyOtp: async function (opts) {
+        var r = await sb.auth.verifyOtp({ email: opts.email, token: opts.token, type: 'email' });
+        if (r.error) return fail(r.error, '验证失败');
+        if (opts.password) {
+          var u = await sb.auth.updateUser({ password: opts.password });
+          if (u.error) return fail(u.error, '密码设置失败（请重试）');
+        }
+        return { data: r.data ? r.data.session : null };
+      },
+      resetPasswordForEmail: async function (email) {
+        var r = await sb.auth.resetPasswordForEmail(email);
+        if (r.error) return fail(r.error, '重置邮件发送失败');
+        return { data: { updateUser: async function (o) {
+          var v = await sb.auth.verifyOtp({ email: email, token: o.nonce, type: 'recovery' });
+          if (v.error) return fail(v.error, '验证码无效或已过期');
+          var u = await sb.auth.updateUser({ password: o.password });
+          if (u.error) return fail(u.error, '密码更新失败');
+          return {};
+        } } };
+      },
+      signOut: async function () {
+        var r = await sb.auth.signOut();
+        if (r.error) return fail(r.error, '退出失败');
+        return {};
+      },
+      onAuthStateChange: function (cb) {
+        /* Supabase 回调签名是 (event, session) —— 与 app.js 的既有用法一致，直接透传 */
+        return sb.auth.onAuthStateChange(cb);
+      }
+    };
   }
 
   /* ---------- 认证 ---------- */

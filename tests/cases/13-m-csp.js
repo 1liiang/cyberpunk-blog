@@ -36,6 +36,11 @@ async function run() {
          （这两个写法必须与 cloud.js / radio.js 的实际取址方式保持一致。） */
       ['media-src 含 data:', /media-src[^;]*data:/],
       ['media-src 含 blob:', /media-src[^;]*blob:/],
+      /* v4.8：数据层搬到 Supabase 后，connect-src 必须放行它的域。
+         漏了这条的症状极具迷惑性 —— **界面照常渲染、文章一篇不剩**：
+         CSP 违规的请求浏览器根本不发，页面不白屏、只有控制台报错，
+         很容易被误判成"数据库挂了/后端宕了"。故在此钉死。 */
+      ['connect-src 含 supabase 域', /connect-src[^;]*supabase\.co/],
       ['object-src none', /object-src 'none'/],
       ["base-uri 'self'", /base-uri 'self'/],
       ["form-action 'self'", /form-action 'self'/]
@@ -44,8 +49,14 @@ async function run() {
       T('M CSP', 'R35b ' + pair[0], pair[1].test(csp));
     });
 
-    /* 铁律：策略必须覆盖实际用到的全部外域，否则会拦掉自己的资源 */
-    const origins = Array.from(new Set((SRC.html.match(/https:\/\/[a-z0-9.-]+/g) || [])));
+    /* 铁律：策略必须覆盖实际用到的全部外域，否则会拦掉自己的资源。
+       ⚠ 只统计**页面会去加载**的引用 —— `<meta content="https://…">` 里的地址
+         （og:url / og:image / twitter:image）是给爬虫看的，浏览器不会请求它，
+         不适用 connect-src/script-src 那套。v4.8.0 把卡片地址改指 GitHub Pages 时
+         撞上了这条：它会把 og:url 的域也当成"必须被 CSP 覆盖"，于是假红。
+         故先剥掉 meta 标签再统计（其余 script/link/img 引用一律照旧受检）。 */
+    const htmlForOrigins = SRC.html.replace(/<meta\b[^>]*>/gi, '');
+    const origins = Array.from(new Set((htmlForOrigins.match(/https:\/\/[a-z0-9.-]+/g) || [])));
     const uncovered = origins.filter(function (o) {
       const host = o.replace(/^https:\/\//, '').replace(/^www\./, '');
       const esc = host.replace(/\./g, '\\.');

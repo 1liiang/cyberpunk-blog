@@ -15,17 +15,31 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '4.7.0',
+    BUILD: '4.8.0',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20260930T2025+0800-buildveos',
+    BUILD_ID: '20261001T0220+0800-buildb3iw',
 
     /* 构建日期（随版本一起更新） */
-    BUILT_AT: '2026-09-30',
+    BUILT_AT: '2026-10-01',
 
     /* 工程日志：最新的一条放最前面 */
     LOG: [
+      {
+        version: '4.8.0',
+        date: '2026-10-01',
+        title: 'Supabase 数据层迁移',
+        items: [
+          '数据层：SDK 边界换成 supabase-js（init + auth 适配器），业务逻辑与静态快照回退一行未动',
+          '后端：新建 Supabase 项目；schema.sql 建表 + 4 篇文章 / 1 张图入库（图片 sha256 与原件逐字节一致）',
+          '认证：发码 / 验码 / 改密三处签名差异在 makeAuthAdapter 抹平；邮件模板补 Token 占位才收得到验证码',
+          '电台：按站长决定退役 —— 3 首商业歌曲（27MB）移出仓库与快照，表结构与界面保留',
+          'CSP：connect-src 放行 supabase 域；supabase-js 2.117.2 改为本地托管',
+          '工具链：export-static.js / export-cloud-full.js 指向 PostgREST，并新增音频增量拉取（省免费额度）',
+          '测试：新增 52 号用例（auth 适配 28 条，已做反向验证）；门禁 1106 到 1135 全绿'
+        ]
+      },
       {
         version: '4.7.0',
         date: '2026-09-30',

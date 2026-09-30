@@ -4,22 +4,23 @@
 
    为什么需要它
    ------------------------------------------------------------
-   本站内容存在 WorkBuddy 云数据库里，页面靠云 SDK 取数。
-   一旦把站点搬到**没有该云端点的环境**（GitHub Pages 等），
-   取数会被两道闸同时拦住：
+   本站内容存在 Supabase（Postgres + PostgREST）。页面走云 SDK 取数，
+   快照则服务两类场景：
 
-     ① CSP   `connect-src 'self'`  —— 跨源请求直接不发
-     ② CORS  云端点按 Origin 白名单放行（只认自己的域名 + localhost，
-              *.github.io 一律 403）
+     ① **兜底**：Supabase 连不上时（免费档长期无请求会被暂停、额度用尽、
+        网络故障）站点自动改读 `data/`，界面与文章照常在。
+     ② **零后端托管**：任何静态托管都能只靠 `data/` 把"能看能听"跑起来。
 
-   结果就是"界面在、文章全没有"的空壳。绕开这两道闸的唯一办法是
-   **让内容也变成同源资源** —— 这就是本脚本的产出：把已发布文章与
-   被引用的图片导出到 `data/`，由 js/cloud.js 在云端不可达时自动改读它们。
+   ⚠ 迁移到 Supabase 后有一处结论变了：**旧平台按 Origin 白名单放行，
+     *.github.io 一律 403；Supabase 不设这道闸**（浏览器直连是它的正常用法）。
+     于是放开了 CSP 的 `connect-src` 之后，GitHub Pages 也能**直连** Supabase ——
+     快照从"唯一出路"退化为"兜底"。两者并存，代价只是每 6 小时一次的增量同步。
 
    产出
    ------------------------------------------------------------
-     data/posts.json          已发布文章全文 + 图片索引
+     data/posts.json          已发布文章全文 + 图片索引 + 电台元数据
      data/images/<id>.<ext>   被文章引用到的图片（原图）
+     data/radio/<id>.<ext>    电台音频（文件落地，不进 JSON）
 
    设计取舍
    ------------------------------------------------------------
@@ -59,11 +60,21 @@ function readCloudConfig() {
 }
 
 const { endpoint: ENDPOINT, key: KEY } = readCloudConfig();
-const REST = ENDPOINT + '/.cloud/database/rest';
+/* Supabase 的 PostgREST 数据面。查询串语法与旧平台同源（都是 PostgREST），
+   所以 ?select= / eq. / order= / limit= 这些一律照旧 —— 换的只是前缀与鉴权头。 */
+const REST = ENDPOINT + '/rest/v1';
+
+const FORCE_AUDIO = process.argv.includes('--force-audio');
 
 async function rest(pathAndQuery) {
   const res = await fetch(REST + pathAndQuery, {
-    headers: { 'x-wb-webapp-access-key': KEY, 'Accept': 'application/json' }
+    headers: {
+      /* anon key 走这两颗头（Supabase 的约定）：apikey 做项目识别，
+         Authorization 让 PostgREST 以 anon 角色执行 —— RLS 决定能看到什么。 */
+      apikey: KEY,
+      Authorization: 'Bearer ' + KEY,
+      Accept: 'application/json'
+    }
   });
   if (!res.ok) {
     throw new Error('REST ' + res.status + ' ' + pathAndQuery + ' → ' + (await res.text()).slice(0, 200));
@@ -73,6 +84,10 @@ async function rest(pathAndQuery) {
     throw new Error('REST 错误 ' + data.code + ': ' + data.message);
   }
   return data;
+}
+
+function localFileSize(p) {
+  try { return fs.statSync(p).size; } catch (e) { return -1; }
 }
 
 /* 从文章正文与封面里抠出所有 cloudimg://N 引用 */
@@ -205,14 +220,36 @@ async function main() {
     for (const row of radioRows) {
       const item = Object.assign({}, row);
       if (row.has_data) {
+        const ext = AUDIO_EXT_BY_MIME[String(row.mime || '').toLowerCase()];
+        const file = ext ? 'radio/' + row.id + '.' + ext : null;
+        const localPath = file ? path.join(DATA_DIR, file) : null;
+
+        /* ⚠ 增量拉取（迁移到 Supabase 后新加的一层，直接关系到免费额度）：
+           云端每次拉音频都是十几 MB，而 workflow 每 6 小时跑一次 ——
+           三首全量 = 48MB/轮 ≈ 5.8GB/月，**光同步就把 5GB/月的免费额度吃光**。
+           故：本地已有同名文件且字节数与云端 size_bytes 一致时，跳过下载。
+           （曲目被换成"尺寸恰好相同"的另一首歌才会漏判，概率极低；
+             真遇到时跑 `node tools/export-static.js --force-audio` 强制全量。） */
+        if (ext && !FORCE_AUDIO) {
+          const localSize = localFileSize(localPath);
+          if (localSize >= 0 && row.size_bytes && localSize === Number(row.size_bytes)) {
+            item.file = file;
+            /* 仍要把本地文件登记进 radioFiles：下面的"清理旧曲"是按
+               radioFiles 决定留谁，漏登记会把好好的文件当残留删掉。 */
+            radioFiles.push({ path: localPath, buf: fs.readFileSync(localPath) });
+            console.log('        #' + String(row.id).padEnd(4) + ' ' + String(row.title).slice(0, 24).padEnd(26) +
+              (localSize / 1048576).toFixed(1) + ' MB  （与云端同尺寸，跳过下载）');
+            radio.push(item);
+            continue;
+          }
+        }
+
         const dr = await rest('/public_radio?select=id,data&id=eq.' + row.id + '&limit=1');
         const drow = Array.isArray(dr) ? dr[0] : null;
         if (drow && drow.data) {
-          const ext = AUDIO_EXT_BY_MIME[String(row.mime || '').toLowerCase()];
           if (!ext) {
             console.warn('        ⚠ #' + row.id + ' MIME 不受支持（' + row.mime + '），只导元数据');
           } else {
-            const file = 'radio/' + row.id + '.' + ext;
             /* ⚠ 修复（2026-09-30，迁移包内）：drow.data 是 **data URL**
                （`data:audio/mpeg;base64,…`），必须**先剥前缀再解码**——
                直接 Buffer.from(dataUrl, 'base64') 会让前缀里的字母字符
@@ -291,7 +328,13 @@ async function main() {
     ? '  快照有实质变化 → 已更新'
     : '  快照无实质变化 → 保持原文件（时间戳不刷新，避免空提交）');
 
-  console.log('\n✓ 快照已写入 data/\n');
+  /* ⚠ 末行必须**如实**反映发生了什么。
+     原先无条件打印「✓ 快照已写入 data/」—— 排查幂等性时被它误导过一次：
+     同一脚本连跑两次，第二次明明「无实质变化、未写盘」，日志看起来却像又写了一遍。
+     （CI 每 6 小时跑它，日志是判断"到底提没提交"的第一依据，不能含糊。） */
+  console.log(snapChanged
+    ? '\n✓ 快照内容已更新并写入 data/\n'
+    : '\n✓ data/ 已是最新，无需改动（文件未被触碰）\n');
 }
 
 main().catch(function (e) {

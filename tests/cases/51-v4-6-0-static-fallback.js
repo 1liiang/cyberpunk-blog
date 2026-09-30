@@ -306,7 +306,14 @@ async function run() {
     const CN = 'v4.7 电台与自动同步';
     const snap = readSnapshot();
 
-    /* 5.1 快照里有电台，且每条 has_data 的曲目都落成了文件 */
+    /* 5.1 ⚠ 2026-09-30 站长决定：**不做歌曲部分**。
+       3 首商业歌曲（夜航星 / 孤勇者 / 苦昼短）的音频已从仓库移除 ——
+       GitHub Pages 上不再公开分发，新库也不导入电台；界面保留（点开是空态）。
+       本断言随之从"快照含电台"翻转为**决策锁**：
+         · 快照的 radio 必须是数组（形状不能坏）
+         · 当前必须为空 —— 将来若有人把音频导回来，这里当场报红，
+           提醒同时确认版权与仓库体积（这批音频是 27MB）
+         · 万一真有曲目，每条 has_data 的音频文件必须真的落地（旧判据保留） */
     const radio = (snap && snap.radio) || [];
     const missingAudio = [];
     radio.forEach(function (r) {
@@ -314,9 +321,10 @@ async function run() {
         missingAudio.push('#' + r.id);
       }
     });
-    T(CN, 'R253 快照含电台，且标了 has_data 的曲目音频都真的落地了',
-      Array.isArray(radio) && radio.length > 0 && missingAudio.length === 0,
-      '曲目 ' + radio.length + ' 首' + (missingAudio.length ? '，缺音频：' + missingAudio.join(',') : '，音频齐全'));
+    T(CN, 'R253 快照已无曲目（2026-09-30 决定不做歌曲部分；若残留则音频须落地）',
+      Array.isArray(radio) && radio.length === 0 && missingAudio.length === 0,
+      radio.length ? '⚠ 竟有 ' + radio.length + ' 首：' + radio.map(function (r) { return '#' + r.id; }).join(',')
+                   : '0 首（音频已退役）');
 
     /* 5.2 ★ 关键设计守卫：音频**不许**塞进 JSON。
            云端存的是十几 MB 的 base64；若照搬进快照，posts.json 会变成 30MB，
@@ -345,7 +353,9 @@ async function run() {
       /Radio: withFallback\(Radio, StaticRadio, \['list', 'playUrl'\]\)/.test(cloud),
       'Radio 回退');
 
-    /* 5.4 行为：云端不可用时，list 出曲目、playUrl 返回同源文件路径 */
+    /* 5.4 行为：云端不可用时的电台读路径。
+       ⚠ 音频退役后这条反而更值钱了：**空列表是现在线上的常态** ——
+         面板点开没东西，读路径绝不能因此抛错或返回坏形状。 */
     const ctx = bootDom({ url: 'https://x.test/#/', noSDK: true });
     ctx.w.fetch = function (url) {
       if (String(url).indexOf('data/posts.json') === 0) {
@@ -353,17 +363,18 @@ async function run() {
       }
       return Promise.reject(new Error('CSP 拦截'));
     };
-    let rows = null, url4 = null, rerr = null;
-    try {
-      rows = await ctx.w.NEON.Radio.list();
-      if (rows && rows.length) url4 = await ctx.w.NEON.Radio.playUrl(rows[0]);
-    } catch (e) { rerr = String(e && e.message || e); }
-    T(CN, 'R254b 云端不可用 → Radio.list() 返回快照曲目',
-      !rerr && Array.isArray(rows) && rows.length > 0,
+    let rows = null, rerr = null;
+    try { rows = await ctx.w.NEON.Radio.list(); } catch (e) { rerr = String(e && e.message || e); }
+    T(CN, 'R254b 云端不可用 → Radio.list() 仍走快照且不抛错（无曲目时给空数组）',
+      !rerr && Array.isArray(rows) && rows.length === 0,
       rerr || (rows ? rows.length + ' 首' : 'null'));
-    T(CN, 'R254c 云端不可用 → Radio.playUrl() 返回同源文件路径（不是 data URL）',
-      !rerr && typeof url4 === 'string' && url4.indexOf('data/radio/') === 0,
-      rerr || String(url4));
+
+    /* playUrl 在无曲目时必须**明确失败**：withFallback 的纪律是"快照也接不住就抛原始错误"，
+       绝不能静默返回一个坏地址 —— 播放器拿到坏地址只会更难排查。 */
+    let perr = null;
+    try { await ctx.w.NEON.Radio.playUrl(4); } catch (e) { perr = String(e && e.message || e); }
+    T(CN, 'R254c 快照无曲目时 playUrl 明确报错（不静默返回坏地址）',
+      !!perr, perr || '⚠ 竟然返回了结果');
 
     /* 5.5 自动同步 workflow：结构三要素 */
     const wfPath = path.join(ROOT, '.github', 'workflows', 'sync-snapshot.yml');

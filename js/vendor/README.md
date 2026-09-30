@@ -2,7 +2,46 @@
 
 本地托管的第三方脚本。改动或升级前必读本文件。
 
-## workbuddy-cloud-sdk.js
+## supabase-js.js ★ 当前在用
+
+| 项 | 值 |
+| --- | --- |
+| 包名 | `@supabase/supabase-js` |
+| 版本 | `2.117.2`（精确版本，非 dist-tag） |
+| 来源 | npm registry tarball `@supabase/supabase-js@2.117.2` → `package/dist/umd/supabase.js` |
+| 下载日期 | 2026-09-30 |
+| sha256 | `59d39487c3589843b410322d8a3d562ce022aba1e5ccb16898ef3fb2a0da2ecd` |
+| sha384(SRI) | `sha384-Rj26LVGvoeRVR6+mwQmFfcR3QOBEwT+ZmuCWpuiqeTzJpCs0ER4ITAWGb4Hiy3Ok` |
+| 大小 | 217945 bytes |
+
+### 为什么从 npm tarball 取，而不是 jsdelivr
+
+迁移当天实测：本机到 `cdn.jsdelivr.net`（Cloudflare）**连接超时**，而 npm registry 正常。
+tarball 还有一个好处 —— 内容与 registry 的 `dist.integrity` 出自同一份字节，可复核。
+
+### 为什么本地托管
+
+与下面那份 WorkBuddy SDK 同理：CDN 的 dist-tag 是**可变**的，本地托管后脚本内容随仓库
+版本控制，上游漂移影响不到本站。附带好处是 CSP 的 `script-src` 不必再放开一个域。
+
+### 升级流程
+
+1. 从 npm registry 确认目标版本（**精确版本号**，禁用 `@latest`）
+2. 取 `dist/umd/supabase.js` 覆盖本文件，更新上表的 sha256 / sha384 / 大小
+3. 跑 `node tests/run-all.js`，全绿后随版本发布
+4. 更新本文件的上表
+
+### 验证命令
+
+```bash
+openssl dgst -sha384 -binary js/vendor/supabase-js.js | openssl base64 -A
+# 应输出上表的 sha384（去掉 sha384- 前缀）
+```
+
+## workbuddy-cloud-sdk.js（历史存档，已不再加载）
+
+> 迁移到 Supabase 后 index.html 不再引入本文件；保留它是为了对照旧的数据层实现
+> （排查"当年为什么这么写"时有用）。E 供应链用例仍校验它的档案完整。
 
 | 项 | 值 |
 | --- | --- |

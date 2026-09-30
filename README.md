@@ -3,8 +3,10 @@
 一座霓虹废墟里的日记本 —— 赛博朋克风格的**单页博客**。纯静态，零依赖，无构建步骤。
 
 > **线上**
-> - 主站（有后端，可登录发文）：<https://cyberpunk-blog.app.workbuddy.host/cyberpunk-blog/>
-> - GitHub Pages（只读快照，见下）：<https://1liiang.github.io/cyberpunk-blog/>
+> - 本站（Supabase 后端，可登录发文）：GitHub Pages <https://1liiang.github.io/cyberpunk-blog/>
+> - 本地预览：`http://127.0.0.1:8898/`（`dev serve`）
+> - 旧主站（WorkBuddy，v4.6.0 停在旧代码，将随云服务停用而失效）：
+>   <https://cyberpunk-blog.app.workbuddy.host/cyberpunk-blog/>
 
 ---
 
@@ -25,38 +27,34 @@
 python -m http.server 8898 --bind 127.0.0.1
 # 然后打开 http://127.0.0.1:8898/
 
-# 全量门禁（1094 条断言）
+# 全量门禁（1135 条断言）
 npm run gate
 
 # 生成 RSS
 npm run build
 ```
 
-## 两套部署，两种数据来源
+## 数据来源：Supabase（实时）+ 静态快照（兜底）
 
-这是本项目最容易踩坑的地方，单独说清楚。
+**v4.8.0 起后端是 Supabase**（配置在 `js/cloud.js` 顶部 `PUBLIC_CONFIG`）。
+关键结论与旧平台不同：
 
-| | 主站（WorkBuddy） | GitHub Pages |
-|---|---|---|
-| 内容来源 | 云数据库（实时） | `data/` 静态快照 |
-| 登录 / 发文 / 上传 | ✅ 可用 | ❌ 无后端，必然失败 |
-| 图片 | 云端按需取 | `data/images/` 同源文件 |
+| | 说明 |
+|---|---|
+| 浏览器直连 | ✅ **可以** —— Supabase 不设 Origin 白名单（旧平台按白名单放行，`*.github.io` 一律 403） |
+| 前提 | `index.html` 的 CSP `connect-src` 放行 `*.supabase.co`（已放行） |
+| 因此 | 登录 / 发文 / 上传在 Pages 上**也能用**；不再受"没有后端"限制 |
+| 快照的角色 | 从"唯一出路"退化为**兜底**：Supabase 不可达（免费档暂停、额度用尽、断网）时，`js/cloud.js` 自动改读 `data/` |
 
-**为什么 GitHub Pages 不能直连云端？** 两道闸同时拦着：
-
-1. **CSP** —— `connect-src 'self'`，跨源请求浏览器直接不发
-2. **CORS** —— 云端点按 Origin 白名单放行，`*.github.io` 返 403
-
-绕开它们的唯一办法是让内容也变成**同源资源**。所以有 `tools/export-static.js`：
-把已发布文章与被引用的图片导出到 `data/`，`js/cloud.js` 在云端不可达时自动改读它。
+快照仍由 `tools/export-static.js` 生成（workflow 每 6 小时刷一次，带音频增量拉取以省额度）：
 
 ```bash
-# 内容更新后刷新快照（GitHub Pages 上的内容随之更新）
-node tools/export-static.js
+node tools/export-static.js      # 刷新 data/ 快照
 ```
 
-> ⚠ **GitHub Pages 是只读快照，不会自动跟随云端更新。** 要让它显示最新文章，
-> 得跑一次上面的命令并提交。这一点是有意为之 —— 没有后端就没有实时性。
+> ⚠ 动过 `js/` 或 `css/` **必须 bump 版本号**（`?v=` 是唯一的缓存击穿手段）。
+> 忘记 bump 的真实症状：浏览器复用旧 `cloud.js`（指向旧后端）→ 登录报 `Failed to fetch`。
+> 另外 `index.html` 自己没有版本号可击穿 —— 大改动后请 Ctrl+F5 硬刷新一次。
 
 ## 目录结构
 
@@ -74,7 +72,7 @@ cyberpunk-blog/
 │   ├── console.js        命令终端
 │   └── ...
 ├── data/                 ★ 静态快照（GitHub Pages 的内容来源，勿手改）
-├── tests/                门禁用例（50 个 case，1094 条断言）
+├── tests/                门禁用例（52 个 case，1135 条断言）
 └── tools/                导出 / 构建 / 版本脚本
 ```
 

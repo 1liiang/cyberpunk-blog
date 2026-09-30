@@ -372,8 +372,19 @@ function bootDom(opts) {
   const unhandled = [];
   w.addEventListener('unhandledrejection', function (e) { unhandled.push(String(e.reason)); });
 
+  /* 数据层 SDK 桩：形状必须是 **Supabase 客户端**的形状 ——
+     cloud.js 的 init() 调 supabase.createClient(...)，随后取 sb.from / sb.auth / sb.storage。
+     makeCloudStub 产出的仍是原来那份查询桩（数据库链 / 查询记录 / 固定数据），
+     这里只把它的三条口子摊平到顶层，免得整个桩重写一遍。
+     ⚠ 登录相关方法（signInWithOtp 等）桩里没有：现有门禁不点击登录表单，
+       真正要验登录链路得在真项目上做（见 docs/SUPABASE-SETUP.md 的验收清单）。 */
   if (!opts.noSDK) {
-    w.WorkBuddyCloud = { createWorkBuddyCloud: function () { return makeCloudStub(opts.fixtures || FIXTURES, queries); } };
+    w.supabase = {
+      createClient: function () {
+        var s = makeCloudStub(opts.fixtures || FIXTURES, queries);
+        return { from: s.database.from, auth: s.auth, storage: s.storage };
+      }
+    };
   }
 
   /* O11：模拟「首绘前」这一步。

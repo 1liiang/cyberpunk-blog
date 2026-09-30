@@ -75,7 +75,7 @@
     "file": "13-m-csp.js",
     "name": "M CSP",
     "blocks": 1,
-    "expect": 14
+    "expect": 15
   },
   {
     "file": "14-n-第三批.js",
@@ -298,5 +298,11 @@
     "name": "v4.6 静态快照：GitHub Pages 同源回退",
     "blocks": 1,
     "expect": 37
+  },
+  {
+    "file": "52-v4-8-0-supabase-adapter.js",
+    "name": "v4.8 Supabase 适配",
+    "blocks": 1,
+    "expect": 28
   }
 ]

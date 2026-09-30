@@ -236,6 +236,14 @@ async function run() {
     T('E3 等待态', 'R103c 端到端：点击后同步进入等待态（▚ LOADING + disabled + .loading）',
       btn.classList.contains('loading') && btn.disabled === true && btn.textContent === '▚ LOADING',
       'loading="' + btn.classList.contains('loading') + '" text="' + btn.textContent + '"');
+    /* 关窗前必须先等在途的 loadHome(true) 落地。
+       jsdom 的 window.close() 会把 window.document 置为 undefined，
+       而这次点击触发的 loadHome(true) 是 async：续段（append 分支的
+       document.querySelector('.post-list')）在关窗后才恢复执行 ⇒
+       TypeError 逃逸成【未处理 Promise 拒绝】⇒ Node 默认策略直接终止进程，
+       整条门禁 exit 1（断言数却照样 1106/1106，极具迷惑性）。
+       桩数据全部走 Promise.resolve，一个宏任务边界足以排空整条微任务链。 */
+    await new Promise(function (r) { setTimeout(r, 0); });
     ctx.dom.window.close();
   })();
 

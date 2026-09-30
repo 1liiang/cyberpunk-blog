@@ -15,9 +15,10 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-/* 注意：根路径 / 只是跳转页，真实内容在 /cyberpunk-blog/ 下。
-   所有对外 URL 必须带这层前缀，否则阅读器 GET 到的是空壳。 */
-const SITE_URL = 'https://cyberpunk-blog.app.workbuddy.host/';
+/* 站点对外地址：RSS 里的链接必须是**能打开的绝对地址**。
+   v4.8.0 起线上主地址是 GitHub Pages（旧的 WorkBuddy 主站随云服务停用而失效）。
+   换自定义域名时：改这里的默认值，或临时用环境变量覆盖（不改代码）。 */
+const SITE_URL = (process.env.NEON_SITE_URL || 'https://1liiang.github.io/').replace(/\/?$/, '/');
 const BASE_URL = SITE_URL + 'cyberpunk-blog/';
 const FEED_URL = BASE_URL + 'feed.xml';
 const SITE_TITLE = 'NEON://DIARY';
@@ -25,9 +26,20 @@ const SITE_DESC = '一座霓虹废墟里的日记本 —— 代码、小说，�
 const AUTHOR = '漓江';
 const LANG = 'zh-CN';
 
-/* 云配置与 cloud.js 同源；密钥本身无权限，真正边界是 RLS（只放行 status=published） */
-const ENDPOINT = SITE_URL.replace(/\/$/, '');
-const PUBLISHABLE_KEY = 'wbpk_pQJvN8eWX3KFQyE3DVhDDj_FLZMpPbJoseRqprhQCUXxFwVmrCGr8Ce';
+/* ⚠ 云配置从 js/cloud.js 读（**单一来源**）。
+   这里原先硬编码了旧平台的 endpoint 与公钥，注释却写着"与 cloud.js 同源" ——
+   迁移到 Supabase 后它会直接拉不到数据（端点换了、键也换了）。
+   与 tools/export-static.js 用同一套解析方式。 */
+function readCloudConfig() {
+  const src = fs.readFileSync(path.join(ROOT, 'js', 'cloud.js'), 'utf8');
+  const ep = /endpoint:\s*'([^']+)'/.exec(src);
+  const key = /publishableKey:\s*'([^']+)'/.exec(src);
+  if (!ep || !key) throw new Error('无法从 js/cloud.js 解析 endpoint / publishableKey');
+  return { endpoint: ep[1].replace(/\/$/, ''), key: key[1] };
+}
+const CLOUD = readCloudConfig();
+const ENDPOINT = CLOUD.endpoint;
+const PUBLISHABLE_KEY = CLOUD.key;
 const FIELDS = 'id,title,summary,tags,created_at,updated_at,owner_name';
 
 function esc(s) {
@@ -48,13 +60,18 @@ function toRFC822(iso) {
 }
 
 async function fetchPublished() {
-  const url = ENDPOINT + '/.cloud/database/rest/posts' +
+  /* Supabase PostgREST（查询串语法与旧平台同源，换的只是前缀与鉴权头） */
+  const url = ENDPOINT + '/rest/v1/posts' +
     '?select=' + encodeURIComponent(FIELDS) +
     '&status=eq.published' +
     '&order=created_at.desc' +
     '&limit=50';
   const res = await fetch(url, {
-    headers: { 'x-wb-webapp-access-key': PUBLISHABLE_KEY, 'Accept': 'application/json' }
+    headers: {
+      apikey: PUBLISHABLE_KEY,
+      Authorization: 'Bearer ' + PUBLISHABLE_KEY,
+      Accept: 'application/json'
+    }
   });
   if (!res.ok) {
     throw new Error('拉取文章失败：HTTP ' + res.status + ' ' + (await res.text()).slice(0, 200));
