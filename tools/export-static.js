@@ -213,7 +213,15 @@ async function main() {
             console.warn('        ⚠ #' + row.id + ' MIME 不受支持（' + row.mime + '），只导元数据');
           } else {
             const file = 'radio/' + row.id + '.' + ext;
-            const buf = Buffer.from(drow.data, 'base64');
+            /* ⚠ 修复（2026-09-30，迁移包内）：drow.data 是 **data URL**
+               （`data:audio/mpeg;base64,…`），必须**先剥前缀再解码**——
+               直接 Buffer.from(dataUrl, 'base64') 会让前缀里的字母字符
+               （data / audio / mpeg / base64 都是 base64 合法字符）被一并解码，
+               凭空多出 15 字节前导垃圾（实测：旧版产出的全部 .mp3 都带 15B 垃圾，
+               ID3 魔数从偏移 0 漂到 15）。Chromium 解码器能容错（已实测可播），
+               但那是**非规范 MP3**，严格解码器/工具可能拒播或识别错误。 */
+            const b64 = String(drow.data).replace(/^data:[^,]*,/, '');
+            const buf = Buffer.from(b64, 'base64');
             item.file = file;
             radioFiles.push({ path: path.join(DATA_DIR, file), buf: buf });
             console.log('        #' + String(row.id).padEnd(4) + ' ' + String(row.title).slice(0, 24).padEnd(26) +
