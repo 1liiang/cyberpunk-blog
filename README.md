@@ -72,6 +72,10 @@ cyberpunk-blog/
 │   ├── console.js        命令终端
 │   └── ...
 ├── data/                 ★ 静态快照（GitHub Pages 的内容来源，勿手改）
+├── docs/
+│   ├── handover-notes/   长期维护的经验沉淀（MEMORY / PROJECT-NOTES / TESTING-NOTES）
+│   └── archive/          历史方案与报告（当时成文的文件，不是当前规范；见其中的 README）
+├── db/                   后端结构（schema.sql + 建库 SQL 生成器）
 ├── tests/                门禁用例（52 个 case，1136 条断言）
 └── tools/                导出 / 构建 / 版本脚本
 ```
