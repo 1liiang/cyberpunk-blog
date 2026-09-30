@@ -27,7 +27,7 @@
     "file": "05-e-供应链.js",
     "name": "E 供应链",
     "blocks": 1,
-    "expect": 13
+    "expect": 14
   },
   {
     "file": "06-f-编辑器.js",

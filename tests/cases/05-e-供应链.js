@@ -19,29 +19,47 @@ async function run() {
   /* ================= 场景 E：A1 供应链加固（静态断言） ================= */
   {
     const html = SRC.html;
+    /* v4.8.1：三个库从 CDN 改为**本地托管**（js/vendor/）。
+       判据随之从「CDN 精确版本 + SRI + crossorigin」改为「本地引用 + 不再走 CDN + 档案哈希」——
+       每库仍 3 条断言，另新增 1 条"全站零外部脚本"（故本 case 由 13 条变 14 条，已重刷基线）。
+       供应链加固的**意图**没变：版本锁死、字节可校验。 */
     const LIBS = [
-      { name: 'marked', url: 'marked@12.0.2/marked.min.js' },
-      { name: 'dompurify', url: 'dompurify@3.4.16/dist/purify.min.js' },
-      { name: 'highlight.js', url: 'cdn-assets@11.12.0/highlight.min.js' }
+      { name: 'marked', file: 'js/vendor/marked.min.js', pkg: 'marked@12.0.2', min: 20000 },
+      { name: 'dompurify', file: 'js/vendor/dompurify.min.js', pkg: 'dompurify@3.4.16', min: 15000 },
+      { name: 'highlight.js', file: 'js/vendor/highlight.min.js', pkg: 'cdn-assets@11.12.0', min: 80000 }
     ];
+    const readmeSrc = fs.existsSync(SRC.vendorReadme) ? fs.readFileSync(SRC.vendorReadme, 'utf8') : '';
     LIBS.forEach(function (lib) {
-      const re = new RegExp('<script[^>]*src="https://cdn\\.jsdelivr\\.net/npm/[^"]*' +
-        lib.url.replace(/[@/.]/g, '\\$&') + '"[^>]*></script>');
-      const m = re.exec(html);
-      const tag = m ? m[0] : '';
-      T('E 供应链', 'R16 ' + lib.name + ' 锁定精确版本', !!m, lib.url);
-      T('E 供应链', 'R16b ' + lib.name + ' 带 SRI integrity', /integrity="sha384-[A-Za-z0-9+/=]{40,}"/.test(tag));
-      T('E 供应链', 'R16c ' + lib.name + ' 带 crossorigin', /crossorigin="anonymous"/.test(tag));
+      const localTag = new RegExp('<script[^>]*src="' + lib.file.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + '\\?v=[0-9.]+"').test(html);
+      T('E 供应链', 'R16 ' + lib.name + ' 本地托管（js/vendor/ 带版本查询串）', localTag,
+        localTag ? lib.file : '未引用本地文件');
+
+      const stillCdn = html.indexOf('cdn.jsdelivr.net/npm/' + lib.pkg) !== -1;
+      T('E 供应链', 'R16b ' + lib.name + ' 不再从 CDN 加载（无 jsdelivr 引用）', !stillCdn);
+
+      const p = require('path').join(require('../common').ROOT, lib.file);
+      let okSize = false, hashOk = false, size = 0;
+      if (fs.existsSync(p)) {
+        const buf = fs.readFileSync(p);
+        size = buf.length;
+        okSize = size > lib.min;
+        hashOk = readmeSrc.indexOf('sha384-' + crypto.createHash('sha384').update(buf).digest('base64')) !== -1;
+      }
+      T('E 供应链', 'R16c ' + lib.name + ' 文件非空且 sha384 与 vendor 档案一致', okSize && hashOk,
+        (size / 1024).toFixed(0) + 'KB' + (hashOk ? '' : '（档案哈希不符！）'));
     });
-    /* 数据层 SDK 本地托管：迁移到 Supabase 后，实际加载的是 supabase-js.js；
-       原 WorkBuddy SDK 仍留在 vendor 目录作对照参考（下方 R18/R19 一并校验两者档案）。
-       断言数不变 —— R17/R18/R19 各仍是一条。 */
+    T('E 供应链', 'R16d 全站零外部脚本（CSP script-src 不必再放开任何 CDN 域）',
+      !/src="https:\/\//.test(html),
+      /src="https:\/\//.test(html) ? '仍有外部 <script src>' : '全部本地');
     T('E 供应链', 'R17 数据层 SDK 本地托管（js/vendor/）', html.indexOf('js/vendor/supabase-js.js') !== -1);
     T('E 供应链', 'R17b 不再加载 @dev 漂移标签资源', !/src="[^"]*@dev/.test(html));
 
     const VENDORED = [
       { name: 'supabase-js', path: SRC.vendorPath.replace(/workbuddy-cloud-sdk\.js$/, 'supabase-js.js'), min: 100000 },
-      { name: 'workbuddy-cloud-sdk', path: SRC.vendorPath, min: 10000 }
+      { name: 'workbuddy-cloud-sdk', path: SRC.vendorPath, min: 10000 },
+      { name: 'marked', path: require('path').join(require('../common').ROOT, 'js/vendor/marked.min.js'), min: 20000 },
+      { name: 'dompurify', path: require('path').join(require('../common').ROOT, 'js/vendor/dompurify.min.js'), min: 15000 },
+      { name: 'highlight.js', path: require('path').join(require('../common').ROOT, 'js/vendor/highlight.min.js'), min: 80000 }
     ];
     const readme = fs.existsSync(SRC.vendorReadme) ? fs.readFileSync(SRC.vendorReadme, 'utf8') : '';
     const missing = [];

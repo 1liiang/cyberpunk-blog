@@ -22,7 +22,9 @@ async function run() {
 
     const need_ = [
       ["default-src 'self'", /default-src 'self'/],
-      ['script-src 含 jsdelivr', /script-src[^;]*https:\/\/cdn\.jsdelivr\.net/],
+      /* v4.8.1：三个第三方库改本地托管后，script-src 不再需要放开 CDN 域 ——
+         这条判据随之从「含 jsdelivr」变为「只有 'self'」（外部脚本域一个都不许有）。 */
+      ['script-src 仅 self（零外部脚本域）', /script-src\s+'self'\s*(;|$)/],
       ['script-src 无 unsafe-inline', /script-src(?![^;]*unsafe-inline)/],
       ['img-src 含 data:', /img-src[^;]*data:/],
       ['img-src 含 blob:', /img-src[^;]*blob:/],

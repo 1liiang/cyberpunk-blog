@@ -243,15 +243,19 @@ async function run() {
       /renderSearch[\s\S]{0,600}listPublished/.test(SRC.app) &&
       /renderArchive[\s\S]{0,600}listPublished/.test(SRC.app));
     /* 只统计真正作为资源地址出现的外域（…"https://host/ 或 …="https://host"），
-       不要用宽松正则扫到 CSP 策略文本里的 https:// 字样。 */
+       不要用宽松正则扫到 CSP 策略文本里的 https:// 字样。
+       ⚠ v4.8.1：三个第三方库改本地托管后，index.html 里**不该再有任何外部资源域**。
+         og:url / og:image / twitter:image 指向的 GitHub Pages 地址是给爬虫看的、
+         浏览器不会加载它 —— 故先剥掉 meta 标签再统计（与 13 号 case 的 R36 同口径）。 */
+    const htmlRes = SRC.html.replace(/<meta\b[^>]*>/gi, '');
     const origins = {};
-    (SRC.html.match(/["'(]https:\/\/([a-z0-9.-]+)/gi) || []).forEach(function (raw) {
+    (htmlRes.match(/["'(]https:\/\/([a-z0-9.-]+)/gi) || []).forEach(function (raw) {
       const host = raw.replace(/^["'(]https:\/\//i, '').replace(/[;'")\s].*$/, '');
       if (host && host.indexOf('www.w3.org') === -1) origins[host] = 1;
     });
-    T('N 第三批', 'R41d 未新增外部依赖域（仅 jsdelivr + 自身域名）',
-      Object.keys(origins).length === 2 && !!origins['cdn.jsdelivr.net'],
-      Object.keys(origins).join(', '));
+    T('N 第三批', 'R41d 零外部依赖域（第三方库全部本地托管，不再有 CDN）',
+      Object.keys(origins).length === 0,
+      Object.keys(origins).length ? '仍有：' + Object.keys(origins).join(', ') : '无外部资源域');
   }
 
   return { pass: results.filter(function (r) { return r.pass; }).length,

@@ -8,7 +8,13 @@
        代价：meta 版不支持 frame-ancestors / report-uri，故防点击劫持与违规上报缺失。
        策略说明（逐条对应实际资源，改前端资源时必须同步复核）：
          · default-src 'self'          —— 默认同源
-         · script-src 'self' cdn.jsdelivr.net —— 本站 4 个 js + 3 个锁版本 CDN 库（均带 SRI）
+         · script-src 'self'           —— **全站零外部脚本**（v4.8.1 起）：
+                                          本站 js + js/vendor/ 下 5 个本地托管的第三方库
+                                          （supabase-js / workbuddy SDK 存档 / marked /
+                                           DOMPurify / highlight.js）。原先这 3 个库走
+                                          cdn.jsdelivr.net（带 SRI），但该 CDN 在本机网络下
+                                          时通时不通 —— 失败时 Markdown 不渲染、代码不高亮。
+                                          改本地托管后 CSP 不必再放开任何外部脚本域。
          · style-src 'self' 'unsafe-inline'   —— 样式表；'unsafe-inline' 因大量动态内联样式
                                                  （编辑器/预览/懒加载回填 backgroundImage）
          · img-src 'self' data: blob:  —— data: 是 cloudimg:// 解析出的 base64 图；
@@ -25,7 +31,7 @@
          · form-action 'self'          —— 表单只能提交到本站
        注意：脚本无 'unsafe-inline'，故任何内联 <script> 与 onclick= 都会被拦——
        本项目已零内联脚本/零内联事件属性，符合要求。 -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="description" content="NEON://DIARY — 一座赛博朋克风格的个人博客，霓虹之下，记录一切信号。">
   <title>NEON://DIARY — 赛博朋克博客</title>
   <!-- C5：社交分享卡片（站点级）。纯静态 SPA 无法为每篇文章动态生成 og，
@@ -54,39 +60,42 @@
        必须【同步】加载且排在样式表【之前】—— 否则会先暗后亮闪一帧。
        为什么是外部脚本而非内联：CSP 的 script-src 不含 'unsafe-inline'。
        它零依赖、全程 try/catch，加载失败也只是退回暗色兜底，不影响后续启动。 -->
-  <script src="js/theme-boot.js?v=4.8.0"></script>
+  <script src="js/theme-boot.js?v=4.8.1"></script>
   <!-- 本地资源带版本查询串：每次发布改版本号，CDN 缓存键随之失效，避免旧文件滞留 -->
-  <link rel="stylesheet" href="css/style.css?v=4.8.0">
-  <!-- CDN 依赖：锁定精确版本 + SRI 完整性校验（供应链加固，审计 H-1） -->
-  <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js" integrity="sha384-a7SzOxErzJ3ZpQz0zJ32d67dSitNzPcbfybc/ykU9KJhMgZkwqfSxlhhdJRS+XGL" crossorigin="anonymous"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.12.0/highlight.min.js" integrity="sha384-wjfDDhOPPdjtva8vWBhWeVprSpmxisEu5aYT3q1JyACqXpdKpo3PWZTMVq24MBix" crossorigin="anonymous"></script>
+  <link rel="stylesheet" href="css/style.css?v=4.8.1">
+  <!-- 第三方库：**全部本地托管**（来源 / 版本 / sha256 / sha384 见 js/vendor/README.md）。
+       v4.8.1 起不再走 cdn.jsdelivr.net —— 该 CDN 在本机网络下时通时不通，
+       失败时 Markdown 不渲染、代码不高亮；改本地后 CSP 的 script-src 只需 'self'。
+       ⚠ 升级这三个库要走 js/vendor/README.md 里的流程（下载 → 更新档案 → 跑门禁）。 -->
+  <script defer src="js/vendor/marked.min.js?v=4.8.1"></script>
+  <script defer src="js/vendor/dompurify.min.js?v=4.8.1"></script>
+  <script defer src="js/vendor/highlight.min.js?v=4.8.1"></script>
   <!-- 数据层 SDK：本地托管（来源与哈希见 js/vendor/README.md），
        摆脱 CDN 漂移标签。迁移到 Supabase 后由 supabase-js 承担这一层；
        原 WorkBuddy SDK 仍留在 js/vendor/ 作对照参考，但不再加载。 -->
-  <script defer src="js/vendor/supabase-js.js?v=4.8.0"></script>
-  <script defer src="js/version.js?v=4.8.0"></script>
-  <script defer src="js/cloud.js?v=4.8.0"></script>
+  <script defer src="js/vendor/supabase-js.js?v=4.8.1"></script>
+  <script defer src="js/version.js?v=4.8.1"></script>
+  <script defer src="js/cloud.js?v=4.8.1"></script>
   <!-- v4.1 B2：霓虹字标的字形路径数据（字体转曲生成物；必须在 views.js 之前，
        views 渲染 Hero 时惰性读取 window.NEONWordmark） -->
-  <script defer src="js/wordmark-paths.js?v=4.8.0"></script>
-  <script defer src="js/views.js?v=4.8.0"></script>
-  <script defer src="js/keys.js?v=4.8.0"></script>
+  <script defer src="js/wordmark-paths.js?v=4.8.1"></script>
+  <script defer src="js/views.js?v=4.8.1"></script>
+  <script defer src="js/keys.js?v=4.8.1"></script>
   <!-- v4.0 B1：场景框架 + 氛围运行时。必须在 app.js 之前 ——
        app.js 的路由会调 NEONScene.apply()；atmo.js 负责数字雨与帧率保底。 -->
-  <script defer src="js/scene.js?v=4.8.0"></script>
-  <script defer src="js/atmo.js?v=4.8.0"></script>
+  <script defer src="js/scene.js?v=4.8.1"></script>
+  <script defer src="js/atmo.js?v=4.8.1"></script>
   <!-- v4.1 B2：开场序列（首访首页播放；依赖 theme-boot 的 .boot-first，
        不依赖 app.js，故放在它之前） -->
-  <script defer src="js/boot.js?v=4.8.0"></script>
+  <script defer src="js/boot.js?v=4.8.1"></script>
   <!-- v2.8.0：电台播放器内核。必须在 app.js 之前 —— app 初始化时要调它。
        纯逻辑无 DOM，界面由 app.js 注入，便于沙箱测试。 -->
-  <script defer src="js/radio.js?v=4.8.0"></script>
-  <script defer src="js/app.js?v=4.8.0"></script>
+  <script defer src="js/radio.js?v=4.8.1"></script>
+  <script defer src="js/app.js?v=4.8.1"></script>
   <!-- v4.3 B4：装置 —— 点击反馈（tap.js）+ 命令终端（console.js，惰性读
        NEONControls / NEONRadio / NEONScene；终端 DOM 首次唤起才建） -->
-  <script defer src="js/tap.js?v=4.8.0"></script>
-  <script defer src="js/console.js?v=4.8.0"></script>
+  <script defer src="js/tap.js?v=4.8.1"></script>
+  <script defer src="js/console.js?v=4.8.1"></script>
 </head>
 <body>
   <!-- C10：跳转到主内容。键盘/读屏用户按 Tab 第一下即可跳过顶栏导航，

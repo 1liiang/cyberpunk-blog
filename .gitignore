@@ -23,3 +23,13 @@ npm-debug.log*
 # 上内容的唯一来源。它必须进仓库 —— 忽略掉就等于把 Pages 变回空壳。
 # （刻意写下这段注释：任何人整理 .gitignore 时都会想"data 一般是产物，忽略吧"，
 #   而这里恰恰相反。已有 51 号用例断言它必须在位。）
+
+# ---- db/ 的**生成物**（v4.8.1）----
+# db/schema.sql 与 db/make-bootstrap.js 进仓库（后端结构随仓库自描述）；
+# 生成器产出的这两个文件不进：
+#   · bootstrap-2-images.sql 体积取决于图片（当前 ~2MB），且内容可由 data/images/ 现生成
+#     → 需要建库时跑 `node db/make-bootstrap.js` 即可，不必让它占仓库体积
+#   · bootstrap-1 虽然不大，但它是 schema.sql + data/posts.json 的拼接产物，
+#     同样属于"可现生成"，故一并忽略，避免与源头不一致
+db/bootstrap-1-schema-posts.sql
+db/bootstrap-2-images.sql

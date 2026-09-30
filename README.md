@@ -1,6 +1,6 @@
 # NEON://DIARY
 
-一座霓虹废墟里的日记本 —— 赛博朋克风格的**单页博客**。纯静态，零依赖，无构建步骤。
+一座霓虹废墟里的日记本 —— 赛博朋克风格的**单页博客**。纯静态、无构建步骤、**零外部脚本依赖**（第三方库全部本地托管在 `js/vendor/`）。
 
 > **线上**
 > - 本站（Supabase 后端，可登录发文）：GitHub Pages <https://1liiang.github.io/cyberpunk-blog/>
@@ -27,7 +27,7 @@
 python -m http.server 8898 --bind 127.0.0.1
 # 然后打开 http://127.0.0.1:8898/
 
-# 全量门禁（1135 条断言）
+# 全量门禁（1136 条断言）
 npm run gate
 
 # 生成 RSS
@@ -72,7 +72,7 @@ cyberpunk-blog/
 │   ├── console.js        命令终端
 │   └── ...
 ├── data/                 ★ 静态快照（GitHub Pages 的内容来源，勿手改）
-├── tests/                门禁用例（52 个 case，1135 条断言）
+├── tests/                门禁用例（52 个 case，1136 条断言）
 └── tools/                导出 / 构建 / 版本脚本
 ```
 

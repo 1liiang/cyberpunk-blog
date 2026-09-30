@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v4.8.0（**数据层已从 WorkBuddy 云迁到 Supabase**） ｜ **门禁**：1135/1135 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v4.8.1（**数据层已迁到 Supabase；全站零外部脚本**） ｜ **门禁**：1136/1136 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -33,7 +33,7 @@
 
 - **技术**：原生 JS（无框架）+ CSS + 原生 DOM，`index.html` 是唯一入口，hash 路由（`#/post/1`）
 - **数据**：WorkBuddy 云端（见第 4 节）。文章、图片、标签、歌单都在云数据库里
-- **Markdown**：`marked` + `DOMPurify`（CDN 引入，带 SRI）
+- **Markdown**：`marked` + `DOMPurify`（**v4.8.1 起本地托管**，见 `js/vendor/README.md`；不再走 CDN）
 - **线上地址**：`https://cyberpunk-blog.app.workbuddy.host/cyberpunk-blog/`
   ⚠ **必须带 `/cyberpunk-blog/` 子目录**；根路径 `/` 是**停在 2.3.0 的遗留快照**，平台不清理，别拿它当线上
 
@@ -44,7 +44,7 @@
 ```bash
 cd cyberpunk-blog
 
-npm run gate        # ★ 全量门禁（1106 条断言）。改任何东西之后都跑它
+npm run gate        # ★ 全量门禁（1136 条断言）。改任何东西之后都跑它
 npm run baseline    # 增删断言后更新基线（**新增 case 必须手动登记进 tests/cases/manifest.json**）
 npm run build       # = gate + 生成 feed.xml
 ```
@@ -233,7 +233,7 @@ cyberpunk-blog/
 ## 8. 接手第一小时建议
 
 1. 读 `docs/handover-notes/MEMORY.md`（建立全局认知）
-2. 跑一次 `npm run gate`，确认 1135/1135
+2. 跑一次 `npm run gate`，确认 1136/1136
 3. 打开线上站点，把每个页面点一遍（首页 / 归档 / 标签 / 搜索 / 收藏 / 关于 / 详情页 / 编辑器），
    再按 **Ctrl+`** 玩玩命令终端（先 `help`）、点开右上角的**装置面板**（氛围九层开关在那儿）
 4. **先别改代码** —— 先写一篇真文章，用下来哪里硌手，那才是真正值得改的地方
