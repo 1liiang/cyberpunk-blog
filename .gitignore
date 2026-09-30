@@ -1,0 +1,25 @@
+# ---- 依赖与构建产物 ----
+# 本站零依赖、无构建步骤，此目录仅在有人跑 npm install 时才会出现
+node_modules/
+
+# ---- 操作系统垃圾 ----
+.DS_Store
+Thumbs.db
+desktop.ini
+*.lnk
+
+# ---- 编辑器 ----
+.vscode/
+.idea/
+*.swp
+*~
+
+# ---- 日志与临时文件 ----
+*.log
+npm-debug.log*
+
+# ---- ⚠ 不要忽略 data/ ----
+# data/ 是 tools/export-static.js 导出的**静态快照**，是 GitHub Pages
+# 上内容的唯一来源。它必须进仓库 —— 忽略掉就等于把 Pages 变回空壳。
+# （刻意写下这段注释：任何人整理 .gitignore 时都会想"data 一般是产物，忽略吧"，
+#   而这里恰恰相反。已有 51 号用例断言它必须在位。）
