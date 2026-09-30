@@ -115,13 +115,46 @@ function project(row, fields) {
 /* ---------- 云 SDK 桩：按表分派 + 记录查询 ---------- */
 function makeCloudStub(fixtures, queries) {
   const posts = fixtures.posts, images = fixtures.images;
+  /* v4.9.0：收藏是**账号数据**，桩里维护一份可变数组 ——
+     这样"点收藏 → 再读回来 → 取消 → 再读回来"整条链路都能被断言，
+     而不是只验证"函数被调用过"。 */
+  const bookmarks = fixtures.bookmarks || (fixtures.bookmarks = []);
 
   function resolve(state) {
     queries.push({
       table: state.table, kind: state.kind, fields: state.fields, opts: state.opts,
       conds: state.conds.slice(), range: state.range, payload: state.payload || null
     });
-    if (state.kind === 'insert') return Promise.resolve({ data: { id: 9001 }, error: null });
+    if (state.kind === 'insert' && state.table !== 'bookmarks') return Promise.resolve({ data: { id: 9001 }, error: null });
+
+    /* ---------- v4.9.0 收藏 ---------- */
+    if (state.table === 'bookmarks') {
+      /* 故障注入：让写路径失败，用来验证"乐观更新要回滚" */
+      if ((state.kind === 'insert' || state.kind === 'upsert') && fixtures.__bookmarkWriteError) {
+        return Promise.resolve({ data: null, error: fixtures.__bookmarkWriteError });
+      }
+      if (state.kind === 'insert' || state.kind === 'upsert') {
+        const pid = parseInt((state.payload || {}).post_id, 10);
+        if (isFinite(pid) && !bookmarks.some(function (b) { return b.post_id === pid; })) {
+          bookmarks.push({ owner_id: fixtures.__uid || 'u1', post_id: pid, created_at: new Date().toISOString() });
+        }
+        return Promise.resolve({ data: null, error: null });
+      }
+      if (state.kind === 'delete') {
+        const want = state.conds.filter(function (c) { return c.type === 'eq' && c.col === 'post_id'; })
+          .map(function (c) { return parseInt(c.val, 10); });
+        for (let i = bookmarks.length - 1; i >= 0; i--) {
+          if (want.indexOf(bookmarks[i].post_id) !== -1) bookmarks.splice(i, 1);
+        }
+        return Promise.resolve({ data: null, error: null });
+      }
+      let bk = bookmarks.slice();
+      state.conds.forEach(function (c) {
+        if (c.type === 'eq' && c.col === 'post_id') bk = bk.filter(function (b) { return String(b.post_id) === String(c.val); });
+      });
+      const bkf = state.fields || '*';
+      return Promise.resolve({ data: bk.map(function (r) { return project(r, bkf); }), error: null });
+    }
 
     if (state.table === 'posts') {
       let rows = posts.slice();
@@ -186,6 +219,7 @@ function makeCloudStub(fixtures, queries) {
       range: function (f, t) { state.range = [f, t]; return api; },
       limit: function () { return api; },
       insert: function (p) { state.kind = 'insert'; state.payload = p; return api; },
+      upsert: function (p, opts) { state.kind = 'upsert'; state.payload = p; state.upsertOpts = opts || null; return api; },
       update: function (p) { state.kind = 'update'; state.payload = p; return api; },
       delete: function () { state.kind = 'delete'; return api; },
       maybeSingle: function () { state.maybeSingle = true; return resolve(state); },
@@ -197,9 +231,19 @@ function makeCloudStub(fixtures, queries) {
 
   return {
     auth: {
-      getSession: async function () { return { data: null, error: null }; },
-      getUser: async function () { return { data: null, error: null }; },
-      onAuthStateChange: function () { return { data: { subscription: { unsubscribe: function () {} } } }; }
+      /* v4.9.0：`fixtures.__session` 用来模拟"已登录"（不传 = 访客，与从前一致）。
+         形状必须与真 supabase-js 一致：`{ data: { session } }` ——
+         cloud.js 的 makeAuthAdapter 正是按这个形状取 session 的。 */
+      getSession: async function () { return { data: { session: fixtures.__session || null }, error: null }; },
+      getUser: async function () {
+        return { data: { user: (fixtures.__session && fixtures.__session.user) || null }, error: null };
+      },
+      onAuthStateChange: function (cb) {
+        /* 桩把回调存下来，用例可手动触发 SIGNED_IN / SIGNED_OUT ——
+           否则"退出登录要清缓存"这类断言无从下手（真项目里靠 GoTrue 推送事件）。 */
+        fixtures.__onAuth = cb;
+        return { data: { subscription: { unsubscribe: function () {} } } };
+      }
     },
     database: { from: makeQ },
     storage: {}
@@ -389,6 +433,28 @@ function bootDom(opts) {
     };
   }
 
+  /* ⚠ 存储注入**不能**藏在 opts.themeBoot 里（v4.9.0 踩过）：
+     原先 `storage` / `breakStorage` 只在传了 themeBoot 时才生效，
+     于是"预置一个 localStorage 键"这种与主题无关的测试会静默拿到空存储 ——
+     现象是"被测逻辑好像没跑"，极难查。这两个选项现在独立生效。 */
+  if (opts.breakStorage) {
+    /* 模拟「存储被禁用」——隐私模式 / 第三方 cookie 拦截 / Safari 的 SecurityError
+       都会让 localStorage 的**访问本身**抛错（不只是返回 null）。
+       这条路径必须被真测：引导脚本若没兜住，会在首绘前抛异常，
+       轻则主题漂移，重则整站白屏 —— 而它是最靠前执行的脚本，破坏力最大。 */
+    try {
+      Object.defineProperty(w, 'localStorage', {
+        configurable: true,
+        get: function () { throw new Error('SecurityError: 存储被禁用'); }
+      });
+    } catch (e) { /* 不支持拦截时跳过，断言侧会据此说明 */ }
+  } else if (opts.storage) {
+    /* jsdom 的 localStorage 可用；如需预置偏好直接写进去 */
+    Object.keys(opts.storage).forEach(function (k) {
+      try { w.localStorage.setItem(k, opts.storage[k]); } catch (e) {}
+    });
+  }
+
   /* O11：模拟「首绘前」这一步。
      真实浏览器里 js/theme-boot.js 是 <head> 中的同步脚本，在 CSS 生效与首绘
      之前执行；而 bootDom 要到下面才 eval 脚本，时机偏晚。
@@ -396,25 +462,6 @@ function bootDom(opts) {
      这里先把 theme-boot.js 真跑一遍（用 eval 走真实代码，不是重写一份逻辑），
      再决定是否继续 eval 其余脚本。 */
   if (opts.themeBoot) {
-    const saved = [];
-    /* opts.breakStorage：模拟「存储被禁用」——
-       隐私模式 / 第三方 cookie 拦截 / Safari 的 SecurityError 都会让
-       localStorage 的**访问本身**抛错（不只是返回 null）。
-       这条路径必须被真测：引导脚本若没兜住，会在首绘前抛异常，
-       轻则主题漂移，重则整站白屏 —— 而它是最靠前执行的脚本，破坏力最大。 */
-    if (opts.breakStorage) {
-      try {
-        Object.defineProperty(w, 'localStorage', {
-          configurable: true,
-          get: function () { throw new Error('SecurityError: 存储被禁用'); }
-        });
-      } catch (e) { /* 不支持拦截时跳过，断言侧会据此说明 */ }
-    } else if (opts.storage) {
-      /* jsdom 的 localStorage 可用；如需预置偏好直接写进去 */
-      Object.keys(opts.storage).forEach(function (k) {
-        try { w.localStorage.setItem(k, opts.storage[k]); saved.push(k); } catch (e) {}
-      });
-    }
     w.eval(SRC.themeBoot);
   }
   /* opts.themeBootOnly：只跑到引导脚本为止，用来断言"首绘瞬间"的状态 */

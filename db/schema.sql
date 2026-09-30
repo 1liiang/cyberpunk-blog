@@ -191,7 +191,45 @@ create policy err_select_own on error_logs
 -- 刻意不建 UPDATE / DELETE 策略：日志只可追加（cloud.js 的授权设计）
 
 -- ------------------------------------------------------------
--- 5) 权限（GRANT）
+-- 5) bookmarks — 收藏（读者账号功能，v4.9.0）
+--    站长的要求：**只有登录了才能收藏，未登录只能浏览**。
+--    既然收藏已经绑定登录态，再存在浏览器里就会出现
+--    "登录了、收藏却只在这台设备上"的错位 —— 所以直接跟账号走。
+--
+--    设计要点：
+--      · 主键 (owner_id, post_id) —— 天然去重，"重复收藏"是幂等的
+--      · post_id 外键 on delete cascade —— 文章删了收藏自动清，
+--        不需要前端定时清扫"收藏了一篇已删除文章"的僵尸条目
+--      · **anon 不授权**（见下方 GRANT）：未登录连表都碰不到，
+--        而不是"授权了但被 RLS 挡住" —— 少一层可出错的地方
+--      · owner_id 用 text，与 posts 一致（error_logs 的 uuid 是历史特例）
+-- ------------------------------------------------------------
+create table if not exists bookmarks (
+  owner_id   text not null default auth.uid()::text,   -- ⚠ text（与 posts 一致）
+  post_id    bigint not null references posts(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (owner_id, post_id)
+);
+
+alter table bookmarks enable row level security;
+
+-- 三条策略都以 auth.uid() 为界：只能读/加/删**自己的**收藏
+create policy bookmarks_select_own on bookmarks
+  for select to authenticated using (owner_id = auth.uid()::text);
+
+create policy bookmarks_insert_own on bookmarks
+  for insert to authenticated with check (owner_id = auth.uid()::text);
+
+create policy bookmarks_delete_own on bookmarks
+  for delete to authenticated using (owner_id = auth.uid()::text);
+
+-- 刻意不建 UPDATE 策略：收藏没有"改"的语义（改 = 取消 + 重收）
+
+-- 列表按"最近收藏在前"取，走这条索引
+create index if not exists bookmarks_owner_idx on bookmarks (owner_id, created_at desc);
+
+-- ------------------------------------------------------------
+-- 6) 权限（GRANT）
 --    Supabase 惯例：grant 给 anon / authenticated，行级由 RLS 控制。
 -- ------------------------------------------------------------
 grant select on public_images to anon, authenticated;      -- 匿名读图（走视图）
@@ -203,8 +241,17 @@ grant select, insert, update, delete on radio_tracks to anon, authenticated;
 grant insert on error_logs to anon, authenticated;
 grant select on error_logs to authenticated;
 
+-- ⚠ 收藏是**账号功能**：显式 revoke 掉 anon。
+--   为什么不能只靠"不写 grant"：Supabase 的 public schema 带
+--   `alter default privileges ... grant all to anon, authenticated`，
+--   新建表会自动被授权 —— 不 revoke 的话匿名**拿得到表权限**，
+--   只是被 RLS 挡成 0 行（PGlite 预演实测过：那条断言当场报红）。
+--   这里要的是"未登录连表都碰不到"（42501 权限不足），而不是"被策略挡"。
+revoke all on bookmarks from anon;
+grant select, insert, delete on bookmarks to authenticated;
+
 -- ------------------------------------------------------------
--- 6) 导入种子数据后必须执行（重置自增序列，防主键冲突）
+-- 7) 导入种子数据后必须执行（重置自增序列，防主键冲突）
 -- ------------------------------------------------------------
 -- select setval(pg_get_serial_sequence('posts','id'),        coalesce((select max(id) from posts),1));
 -- select setval(pg_get_serial_sequence('post_images','id'),  coalesce((select max(id) from post_images),1));

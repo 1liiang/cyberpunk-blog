@@ -248,11 +248,14 @@
        ① HTML 禁止 a 嵌套 ② 收藏是"动作"不是"跳转"，语义上 button 才对。
        aria-pressed 让读屏知道当前是否已收藏（配合 C10）。 */
     var marked = !!(p._marked);
-    var markHtml = '<button type="button" class="card-mark' + (marked ? ' is-on' : '') +
+    /* v4.9.0：未登录时按钮仍是可点的（点了给"需要登录"的引导），
+       但要**看起来**像锁上的 —— 否则访客会以为点了没反应。 */
+    var locked = !!p._markLocked;
+    var markHtml = '<button type="button" class="card-mark' + (marked ? ' is-on' : '') + (locked ? ' is-locked' : '') +
       '" data-mark="' + p.id + '" aria-pressed="' + (marked ? 'true' : 'false') +
-      '" title="' + (marked ? '从收容所移除' : '收容这条信号') + '"' +
-      ' aria-label="' + (marked ? '从收容所移除：' : '收容这条信号：') + esc(p.title) + '">' +
-      '<span class="mark-glyph" aria-hidden="true">' + (marked ? '◈' : '◇') + '</span></button>';
+      '" title="' + (locked ? '登录后可收藏' : (marked ? '取消收藏' : '收藏这条信号')) + '"' +
+      ' aria-label="' + (locked ? '登录后可收藏：' : (marked ? '取消收藏：' : '收藏这条信号：')) + esc(p.title) + '">' +
+      '<span class="mark-glyph" aria-hidden="true">' + (locked ? '🔒' : (marked ? '◈' : '◇')) + '</span></button>';
     return '' +
       /* F1 卡片键盘可达：tabindex 让整卡进入 Tab 序，role=link + aria-label
          告诉读屏这是一个"链接到文章"的元素及其目的地。
@@ -798,12 +801,15 @@
     var p = state.post;
     /* C18：详情页也标注阅读时长 —— 与卡片同源同算法，读者在列表与详情看到的一致 */
     var readLabel = readingLabel(p);
-    /* C19：收藏按钮（详情页版本，与卡片版共用 data-mark 委托） */
+    /* C19：收藏按钮（详情页版本，与卡片版共用 data-mark 委托）
+       v4.9.0：未登录时显示锁定态（点了会引导去登录） */
     var marked = !!(state.marked);
-    var markBtn = '<button type="button" class="btn btn-ghost btn-mark' + (marked ? ' is-on' : '') +
-      '" id="post-mark" data-mark="' + p.id + '" aria-pressed="' + (marked ? 'true' : 'false') + '">' +
-      '<span class="mark-glyph" aria-hidden="true">' + (marked ? '◈' : '◇') + '</span>' +
-      (marked ? '已收容' : '收容信号') + '</button>';
+    var markLocked = !!state.markLocked;
+    var markBtn = '<button type="button" class="btn btn-ghost btn-mark' + (marked ? ' is-on' : '') + (markLocked ? ' is-locked' : '') +
+      '" id="post-mark" data-mark="' + p.id + '" aria-pressed="' + (marked ? 'true' : 'false') + '"' +
+      ' title="' + (markLocked ? '登录后可收藏' : (marked ? '取消收藏' : '收藏这条信号')) + '">' +
+      '<span class="mark-glyph" aria-hidden="true">' + (markLocked ? '🔒' : (marked ? '◈' : '◇')) + '</span>' +
+      (markLocked ? '登录后可收藏' : (marked ? '已收藏' : '收藏')) + '</button>';
     /* v3.2.0 B3 / v4.2 B3：正文改为「阅读栅格」——正文列 + TOC 辅助栏。
        v4.2 在栅格之上叠加「终端阅读框」：工具条（解码读数 + 行号开关）+ 行号 gutter。
        ⚠ TOC 的 DOM 位置在正文**之后**（视觉上在第 2 列）：
@@ -1191,23 +1197,39 @@
     var posts = state.posts || [];
     var html = '' +
       '<div class="page-head">' + pageNo('10') + '<h1>收藏夹 / STASH</h1>' +
-        '<div class="crumb">收容所 · 本地暂存 <b>' + posts.length + '</b> 条信号</div>' +
+        '<div class="crumb">跟随账号 · 已收藏 <b>' + posts.length + '</b> 条信号</div>' +
       '</div>';
 
+    /* ★ v4.9.0 门槛：未登录只能浏览。
+       与「标签管理」同一处理 —— 给明确引导，而不是渲染一个点了没反应的界面。 */
+    if (state.needLogin) {
+      html += '<div class="empty-state"><span class="empty-glyph">🔒</span><span class="empty-code">ACCESS REQUIRED</span>' +
+        '<span class="empty-hint">收藏是账号功能：登录后才能收藏，未登录只能浏览。' +
+        '登录后收藏跟着账号走 —— 换设备也在。</span>' +
+        '<div style="margin-top:22px"><button class="btn" id="marks-login">去登录 / ACCESS</button></div></div>';
+      return html;
+    }
+
     if (state.loading) {
-      html += loadingBlock('LOADING...', '正在读取本地收容所');
+      html += loadingBlock('LOADING...', '正在读取你账号下的收藏');
+      return html;
+    }
+    if (posts.length === 0 && state.offline) {
+      /* 云端不可达 ≠ 没有收藏 —— 这两件事必须分开说，否则用户以为收藏被清空了 */
+      html += '<div class="empty-state"><span class="empty-glyph">⚠</span><span class="empty-code">CLOUD UNREACHABLE</span>' +
+        '<span class="empty-hint">现在连不上云端，收藏暂时读不出来（不是被清空了）。恢复连接后刷新即可。</span>' +
+        '<div style="margin-top:22px"><a class="btn" href="#/">回信号流</a></div></div>';
       return html;
     }
     if (posts.length === 0) {
       html += '<div class="empty-state"><span class="empty-glyph">◇</span><span class="empty-code">STASH EMPTY</span>' +
-        '<span class="empty-hint">还没有收容任何信号 · 在卡片或文章页点 ◇ 即可收容</span>' +
+        '<span class="empty-hint">还没有收藏任何信号 · 在卡片或文章页点 ◇ 即可收藏</span>' +
         '<div style="margin-top:22px"><a class="btn" href="#/">去信号流里逛逛</a></div></div>';
       return html;
     }
-    /* 本地收藏的边界必须写在页面上，不能只写在代码注释里 */
-    html += '<div class="partial-note">// 收容记录保存在本浏览器，换设备或清缓存后会丢失；这是「稍后读」，不是云端同步</div>';
+    html += '<div class="partial-note">// 收藏保存在你的账号下，换设备登录后依然在</div>';
     html += '<div style="margin-bottom:22px"><button class="btn btn-ghost" id="marks-clear" ' +
-      'style="color:var(--red);border-color:rgba(255,56,96,.4)">✕ 清空收容所</button></div>';
+      'style="color:var(--red);border-color:rgba(255,56,96,.4)">✕ 清空收藏</button></div>';
     html += '<div class="post-list">' + posts.map(postCard).join('') + '</div>';
     return html;
   }

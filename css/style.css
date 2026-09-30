@@ -3867,6 +3867,21 @@ a:focus-visible { text-decoration: underline; }
   color: var(--yellow);
   border-color: var(--yellow);
 }
+/* v4.9.0：未登录时的锁定态 —— 按钮仍可点（点了引导去登录），
+   但要一眼看出"现在还不能收藏"，否则访客会以为点了没反应。
+   ⚠ 不做 pointer-events:none / disabled —— 那会连"为什么不能点"都问不出来。 */
+.card-mark.is-locked,
+.btn-mark.is-locked {
+  opacity: .55;
+  color: var(--dim, #7a8394);
+  border-color: rgba(122, 131, 148, .45);
+}
+.card-mark.is-locked:hover,
+.btn-mark.is-locked:hover {
+  color: var(--cyan);
+  opacity: .85;
+}
+
 /* 键盘可达：卡片获得焦点时，收藏按钮也应有可见焦点环 */
 .card-mark:focus-visible {
   outline: 2px solid var(--cyan);

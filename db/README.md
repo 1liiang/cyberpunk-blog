@@ -43,7 +43,14 @@ node db/make-bootstrap.js
    基表 `post_images` 对匿名返回 0 行（RLS 默认拒绝）。
 4. **电台（`radio_tracks` / `public_radio`）已退役**：表与视图结构保留、当前 0 行，
    界面也保留（未登录访客看不到空播放器，站长登录后仍有上传入口）。
-5. 直连 Postgres 的域名 `db.<ref>.supabase.co` **只有 IPv6（AAAA）**；IPv4 环境要用
+5. **收藏（`bookmarks`，v4.9.0）是账号功能**：站长的规则是「只有登录了才能收藏，未登录只能浏览」。
+   实现要点：主键 `(owner_id, post_id)` 天然去重；`post_id` 外键 `on delete cascade`
+   （文章删了收藏自动清，不留僵尸条目）；三条 RLS 策略都以 `auth.uid()` 为界；
+   **并且显式 `revoke all on bookmarks from anon`** —— Supabase 的 public schema 带
+   `alter default privileges ... grant all to anon, authenticated`，新表会被自动授权，
+   只"不写 grant"挡不住匿名（PGlite 预演实测报红过）。未登录时应当是
+   **42501 权限不足**，而不是"授权了被 RLS 挡成 0 行"。
+6. 直连 Postgres 的域名 `db.<ref>.supabase.co` **只有 IPv6（AAAA）**；IPv4 环境要用
    Session pooler（`aws-0-ap-southeast-1.pooler.supabase.com`，用户名 `postgres.<ref>`）。
 
 ## 验证方式

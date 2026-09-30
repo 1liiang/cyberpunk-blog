@@ -205,6 +205,67 @@
     }
   };
 
+  /* ---------- 收藏（bookmarks，v4.9.0） ----------
+     站长的规则：**只有登录了才能收藏，未登录只能浏览**。
+
+     为什么从 localStorage 搬到数据库：既然收藏已经绑定登录态，再存本机就会出现
+     "登录了、收藏却只在这台设备上"的错位 —— 于是直接跟账号走（换设备也在）。
+     表结构见 db/schema.sql §5：主键 (owner_id, post_id)、外键 cascade、anon 被 revoke。
+
+     与 Posts/Images 的纪律一致，但有一处**刻意不同**：
+       · 读路径 list() 在云端不可达时返回**空表**、不抛错 ——
+         收藏是账号数据，静态快照里根本没有它；让页面显示"空收藏 + 一句提示"
+         比整页报错合理（与电台退役后 Radio.list() 的处理同口径）。
+         界面靠 NEON.isSnapshot() 区分"真的没有收藏"与"云端不可达"。
+       · 写路径 add/remove **没有兜底**：云端不可达时就是不能收藏，抛错让界面给提示。
+         绝不能"看起来收藏成功了、其实没存" —— 那比不能收藏更糟。 */
+  var BOOKMARK_MAX = 500;   /* 与列表取数上限一致，防止无限增长 */
+
+  var Bookmarks = {
+    /* 我收藏的文章 id（最近收藏在前） */
+    list: async function () {
+      /* 快照模式下不必去试 —— 收藏是账号数据，静态快照里没有它。
+         短路掉是为了省一次注定失败的请求（也让契约更明确：空表，不抛）。 */
+      if (snapshotMode) return [];
+      try {
+        var r = await ensure().database.from('bookmarks')
+          .select('post_id,created_at')
+          .order('created_at', { ascending: false })
+          .limit(BOOKMARK_MAX);
+        if (r.error) throw new Error(errMsg(r.error, '读取收藏失败'));
+        return (r.data || []).map(function (row) { return row.post_id; });
+      } catch (e) {
+        return [];   /* 云端不可达 / 未登录：空表，由界面给提示 */
+      }
+    },
+
+    /* 收藏一篇（幂等：重复收藏不报错，靠主键 + ignore-duplicates） */
+    add: async function (postId) {
+      var id = parseInt(postId, 10);
+      if (!isFinite(id) || id <= 0) throw new Error('收藏失败：文章 id 无效');
+      var r = await ensure().database.from('bookmarks')
+        .upsert({ post_id: id }, { onConflict: 'owner_id,post_id', ignoreDuplicates: true });
+      if (r.error) {
+        var code = pgCode(r.error);
+        if (code === '42501') throw new Error('权限不足：请先登录再收藏');
+        throw new Error(errMsg(r.error, '收藏失败'));
+      }
+      return true;
+    },
+
+    /* 取消收藏 */
+    remove: async function (postId) {
+      var id = parseInt(postId, 10);
+      if (!isFinite(id) || id <= 0) return true;
+      var r = await ensure().database.from('bookmarks').delete().eq('post_id', id);
+      if (r.error) throw new Error(errMsg(r.error, '取消收藏失败'));
+      return true;
+    },
+
+    /* 旧版本地收藏列表（一次性迁移用；v4.9.0 之前的 neon_bookmarks 键） */
+    LEGACY_KEY: 'neon_bookmarks'
+  };
+
   /* ---------- 文章 ---------- */
   var LIST_FIELDS = 'id,title,summary,tags,cover_ref,status,owner_name,created_at,updated_at';
 
@@ -1302,6 +1363,10 @@
     dbFrom: function (table) { return ensure().database.from(table); },
     Auth: Auth,
     Posts: withFallback(Posts, StaticPosts, ['listPublished', 'get', 'tagStats']),
+    /* v4.9.0：收藏（账号功能，**不套 withFallback** —— 云端数据没有静态兜底，
+       读路径自己容错返回空表，写路径按"不能就不能"抛错） */
+    Bookmarks: Bookmarks,
+    BOOKMARK_MAX: BOOKMARK_MAX,
     Images: (function () {
       var imgs = withFallback(Images, StaticImages, ['fetchMany']);
       imgs.dims = dimsWithFallback;

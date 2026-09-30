@@ -197,121 +197,172 @@
     lastHash: null
   };
 
-  /* ============ C19：收容所（本地收藏） ============
-     存 localStorage 键 neon_bookmarks，值是 post id 的数组。
+  /* ============ C19：收藏（v4.9.0 起跟账号走） ============
+     规则（站长定）：**只有登录了才能收藏，未登录只能浏览**。
 
-     为什么是本地而非云端：博客是单作者、读者无需登录；
-     云端收藏要引入读者账号体系（大工程 + 大攻击面），收益不成比例。
-     代价是换设备/清缓存会丢 —— 这一点必须在界面上说清（见 marksView 的提示条），
-     不能只写在注释里让用户自己踩。
+     为什么从 localStorage 搬到数据库：v4.9.0 之前收藏存在本机（键 neon_bookmarks），
+     理由是"读者无需登录"。现在既然收藏绑定了登录态，再存本机就会出现
+     "登录了、收藏却只在这台设备上"的错位 —— 所以跟账号走（表见 db/schema.sql §5）。
 
-     存储安全：
-       · 读失败（隐私模式 / 配额）一律降级为空数组，绝不让收藏功能拖垮整页
-       · 写入用「读-改-写」而非直接覆盖，避免并发标签页互相抹掉
-       · 去重 + 上限：id 数组不会无限膨胀（上限 500，与列表取数上限一致） */
-  var MARK_KEY = 'neon_bookmarks';
-  var MARK_MAX = 500;
+     ⚠ 渲染路径必须保持**同步**：postCard 渲染时读 `_marked`，若每张卡都 await
+     一次云端，列表会被拆成 N 次重绘。所以登录后把 id 列表取回内存（State.marks 是个 Set），
+     渲染只读内存。缓存的刷新点只有三处：启动（若已有会话）、SIGNED_IN、SIGNED_OUT。 */
+  var LEGACY_MARK_KEY = 'neon_bookmarks';   /* v4.9.0 之前的本机键（只用于一次性迁移） */
+  var marksLoaded = false;                  /* 是否已从云端取过一次（区分"空"与"还没取"） */
 
-  function readMarks() {
-    try {
-      var raw = localStorage.getItem(MARK_KEY);
-      if (!raw) return [];
-      var arr = JSON.parse(raw);
-      if (!Array.isArray(arr)) return [];
-      /* 清洗：只保留正整数 id，去重，保序 */
-      var seen = {};
-      var out = [];
-      arr.forEach(function (v) {
-        var n = parseInt(v, 10);
-        if (!isFinite(n) || n <= 0) return;
-        if (seen[n]) return;
-        seen[n] = 1;
-        out.push(n);
-      });
-      return out;
-    } catch (e) {
-      return [];   /* 解析失败/隐私模式：当作没有收藏，不抛 */
-    }
+  function isLoggedIn() {
+    return !!(State.session && State.session.user);
   }
 
-  function writeMarks(list) {
-    try {
-      localStorage.setItem(MARK_KEY, JSON.stringify(list.slice(0, MARK_MAX)));
-      return true;
-    } catch (e) {
-      return false;  /* 配额满 / 隐私模式：静默失败，由调用方给 toast */
-    }
+  function markSet() {
+    if (!State.marks) State.marks = new Set();
+    return State.marks;
   }
 
   function isMarked(id) {
-    return readMarks().indexOf(parseInt(id, 10)) !== -1;
+    return markSet().has(parseInt(id, 10));
   }
 
-  /* 切换收藏，返回切换后的状态（true = 已收藏） */
-  function toggleMark(id) {
-    var n = parseInt(id, 10);
-    if (!isFinite(n) || n <= 0) return false;
-    var list = readMarks();
-    var idx = list.indexOf(n);
-    var nowOn;
-    if (idx === -1) {
-      /* 新收容的放最前面 —— 收容所按"最近收容"排序更符合稍后读的直觉 */
-      list.unshift(n);
-      nowOn = true;
-    } else {
-      list.splice(idx, 1);
-      nowOn = false;
+  /* 从云端刷新内存缓存。未登录 → 清空（收藏是账号功能，访客没有收藏）。 */
+  async function refreshMarks() {
+    if (!isLoggedIn()) {
+      State.marks = new Set();
+      marksLoaded = true;
+      return;
     }
-    writeMarks(list);
-    return nowOn;
+    var ids = [];
+    try { ids = await need('Bookmarks').list(); } catch (e) { ids = []; }
+    var set = new Set();
+    (ids || []).forEach(function (n) {
+      var v = parseInt(n, 10);
+      if (isFinite(v) && v > 0) set.add(v);   /* 云端按"最近收藏在前"返回 ⇒ Set 保留该顺序 */
+    });
+    State.marks = set;
+    marksLoaded = true;
   }
 
-  /* 把收藏态盖到一批文章上（渲染前调用，供 postCard 读 _marked） */
+  /* v4.9.0 一次性迁移：把旧版存在本机的收藏并进账号，然后删掉旧键。
+     只在登录后跑一次；单条失败不阻断其余（下次登录还会再试）。
+     ⚠ 旧键里可能有已删除文章的 id —— 云端有外键，插不进去就跳过，不报错。 */
+  async function migrateLegacyMarks() {
+    var raw = null;
+    try { raw = localStorage.getItem(LEGACY_MARK_KEY); } catch (e) { return; }
+    if (!raw) return;
+    var arr = [];
+    try { arr = JSON.parse(raw); } catch (e) { arr = []; }
+    if (!Array.isArray(arr) || !arr.length) {
+      try { localStorage.removeItem(LEGACY_MARK_KEY); } catch (e) {}
+      return;
+    }
+    var B = need('Bookmarks');
+    var ok = 0;
+    for (var i = 0; i < arr.length; i++) {
+      var id = parseInt(arr[i], 10);
+      if (!isFinite(id) || id <= 0) continue;
+      try { await B.add(id); ok++; } catch (e) { /* 文章已删/权限问题：跳过这一条 */ }
+    }
+    try { localStorage.removeItem(LEGACY_MARK_KEY); } catch (e) {}
+    if (ok) toast('已把 ' + ok + ' 条本机收藏并入你的账号', 'ok');
+  }
+
+  /* 把收藏态盖到一批文章上（渲染前调用，供 postCard 读 _marked）
+     v4.9.0：顺带盖上 _markLocked（未登录 → 按钮显示锁定态） */
   function applyMarks(posts) {
-    var list = readMarks();
-    var set = {};
-    list.forEach(function (id) { set[id] = 1; });
+    var set = markSet();
+    var locked = !isLoggedIn();
     (posts || []).forEach(function (p) {
-      if (p && p.id != null) p._marked = !!set[p.id];
+      if (p && p.id != null) {
+        p._marked = set.has(parseInt(p.id, 10));
+        p._markLocked = locked;
+      }
     });
     return posts;
   }
 
+  /* 按状态重画一个收藏按钮（图标 / 类名 / aria / 文案 / title 一处收口）
+     三态：locked（未登录，显示锁）｜on（已收藏）｜off（未收藏） */
+  function paintMark(btn, on, locked) {
+    if (!btn) return;
+    locked = !!locked;
+    var active = !locked && !!on;
+    btn.classList.toggle('is-on', active);
+    btn.classList.toggle('is-locked', locked);
+    btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+    var glyph = btn.querySelector('.mark-glyph');
+    if (glyph) glyph.textContent = locked ? '🔒' : (active ? '◈' : '◇');
+    btn.setAttribute('title', locked ? '登录后可收藏' : (active ? '取消收藏' : '收藏这条信号'));
+    /* 详情页那个是带文字的大按钮，文案要跟着变（只替换尾部文本节点） */
+    if (btn.id === 'post-mark') {
+      btn.childNodes.forEach(function (n) {
+        if (n.nodeType === 3) n.textContent = locked ? '登录后可收藏' : (active ? '已收藏' : '收藏');
+      });
+    }
+  }
+
+  /* 身份变化后就地重画所有可见的收藏按钮。
+     ⚠ 为什么不能只靠重渲染：route() 有「同 hash 不重绘」的短路
+       （State.lastHash 守卫，见 route 开头），登录/退出后停在原页时
+       不会自动重新渲染 —— 按钮会停在旧状态（实测：退出登录后仍亮着）。 */
+  function repaintMarks() {
+    var locked = !isLoggedIn();
+    var set = markSet();
+    var nodes = document.querySelectorAll('[data-mark]');
+    Array.prototype.forEach.call(nodes, function (btn) {
+      paintMark(btn, set.has(parseInt(btn.getAttribute('data-mark'), 10)), locked);
+    });
+  }
+
   /* 委托绑定：卡片与详情页共用一套（.card-mark / #post-mark 都带 data-mark）。
      放在 document 上而非各渲染函数里 —— 因为列表会被 innerHTML 反复重建，
-     逐次绑监听会累积泄漏，委托一次即可。 */
+     逐次绑监听会累积泄漏，委托一次即可。
+
+     ⚠ **必须用捕获阶段（第三参 true）**，这是 v4.9.0 修掉的一个真 bug：
+       卡片的"点整卡进文章"处理器挂在更深的 app 上，冒泡时它**先于** document 跑完，
+       等我们这里 stopPropagation 已经来不及 —— 点一下 ◇ 会顺带跳进文章。
+       捕获阶段从 document 往下走，我们最早拿到事件，才拦得住。
+       （症状实测：点收藏后 location.hash 变成 #/post/N，列表被重建、按钮节点被换掉。） */
   function bindMarkDelegation() {
-    document.addEventListener('click', function (ev) {
+    document.addEventListener('click', async function (ev) {
       var btn = ev.target.closest ? ev.target.closest('[data-mark]') : null;
       if (!btn) return;
-      /* 卡片整卡是 role=link + data-id，点收藏不能顺带跳进文章 */
+      /* 卡片整卡是 role=link + data-id，点收藏绝不能顺带跳进文章 */
       ev.preventDefault();
       ev.stopPropagation();
-      var id = btn.getAttribute('data-mark');
-      var nowOn = toggleMark(id);
-      btn.classList.toggle('is-on', nowOn);
-      btn.setAttribute('aria-pressed', nowOn ? 'true' : 'false');
-      var glyph = btn.querySelector('.mark-glyph');
-      if (glyph) glyph.textContent = nowOn ? '◈' : '◇';
-      /* 详情页那个是带文字的大按钮，文案要跟着变 */
-      if (btn.id === 'post-mark') {
-        /* 保持图标节点不变，只替换尾部文本 */
-        btn.childNodes.forEach(function (n) {
-          if (n.nodeType === 3) n.textContent = nowOn ? '已收容' : '收容信号';
-        });
-        btn.setAttribute('title', nowOn ? '从收容所移除' : '收容这条信号');
-      } else {
-        btn.setAttribute('title', nowOn ? '从收容所移除' : '收容这条信号');
+      var id = parseInt(btn.getAttribute('data-mark'), 10);
+      if (!isFinite(id) || id <= 0) return;
+
+      /* ★★ 门槛：未登录只能浏览（站长规则）。
+         不去静默失败，而是明确告知 + 给入口 —— 与"标签管理""附件下载"同一套处理。 */
+      if (!isLoggedIn()) {
+        State.pendingMark = id;                 /* 记下意图，登录后回来接着收 */
+        toast('收藏需要先登录（ACCESS）', 'warn');
+        location.hash = '#/login';
+        return;
       }
-      toast(nowOn ? '已收容到本地' : '已移出收容所', nowOn ? 'ok' : null);
-      /* 收容所页面里取消收藏 → 该条目应即时消失（否则页面与数据不一致） */
-      if (parseHash().name === 'marks' && !nowOn) {
-        var card = btn.closest('.post-card');
-        if (card) card.remove();
-        var left = document.querySelectorAll('.post-list .post-card').length;
-        if (left === 0) route();
+
+      var wasOn = isMarked(id);
+      paintMark(btn, !wasOn);                   /* 乐观更新：点下去立刻有反馈 */
+      try {
+        if (wasOn) {
+          await need('Bookmarks').remove(id);
+          markSet().delete(id);
+        } else {
+          await need('Bookmarks').add(id);
+          markSet().add(id);
+        }
+        toast(wasOn ? '已取消收藏' : '已收藏（跟随账号）', wasOn ? null : 'ok');
+        /* 收藏页里取消收藏 → 该条目应即时消失（否则页面与数据不一致） */
+        if (parseHash().name === 'marks' && wasOn) {
+          var card = btn.closest('.post-card');
+          if (card) card.remove();
+          var left = document.querySelectorAll('.post-list .post-card').length;
+          if (left === 0) route();
+        }
+      } catch (e) {
+        paintMark(btn, wasOn);                  /* 写失败就回滚，不留假状态 */
+        toast(errMsg(e, '操作失败'), 'error');
       }
-    }, false);
+    }, true);   /* ← 捕获阶段：必须早于卡片自身的跳转处理器（见上方注释） */
   }
 
   /* ============ 工具 ============ */
@@ -1359,19 +1410,38 @@
     scheduleScrollUI();
   }
 
-  /* ============ C19：收容所（本地收藏页） ============
-     数据来源是本地 id 列表 → 再去库层取这些文章的详情。
+  /* ============ C19：收藏页（v4.9.0 起读云端） ============
+     数据来源是**账号的收藏 id 列表**（内存缓存，登录后由 refreshMarks 取回）
+     → 再去库层取这些文章的详情。
+
+     ⚠ 门槛：未登录不渲染列表，改为明确的登录引导 ——
+       与"标签管理"页同一处理（不能渲染一个点了没反应的界面）。
 
      取数策略：并发逐条 get，而不是"拉全量再筛" ——
      因为收藏通常是少数几条，拉全量（上限 200）只为筛出 3 条代价更大。
      用 parallelSafe 保证单条失败不影响其余（收藏的文章可能已被删除，
      这条失败是**正常情况**，必须静默跳过而不是整页报错）。 */
   async function renderMarks() {
-    var state = { loading: true, posts: [] };
+    var state = { loading: true, posts: [], needLogin: false, offline: false };
+
+    if (!isLoggedIn()) {
+      state.loading = false;
+      state.needLogin = true;
+      app.innerHTML = V().marksView(state);
+      bindMarksLogin();
+      window.scrollTo(0, 0);
+      scheduleScrollUI();
+      return;
+    }
+
     app.innerHTML = V().marksView(state);
     window.scrollTo(0, 0);
 
-    var ids = readMarks();
+    if (!marksLoaded) await refreshMarks();
+    /* 云端不可达时 list() 返回空表 —— 与"真的没有收藏"要分开说，
+       否则用户会以为自己 5 条收藏丢了（靠 isSnapshot 判） */
+    state.offline = !markSet().size && need('isSnapshot')();
+    var ids = Array.from(markSet());
     if (!ids.length) {
       state.loading = false;
       app.innerHTML = V().marksView(state);
@@ -1384,11 +1454,18 @@
     var res = await parallelSafe(tasks);
     var posts = [];
     res.forEach(function (r) {
-      /* 只有公开可见的才展示：草稿/已删除在公开语义下等同于"不在"。
-         get() 走 RLS，未登录时草稿拿不到 → 这里自然过滤掉。 */
+      /* 只有公开可见的才展示：草稿/已删除在公开语义下等同于"不在"。 */
       if (r && r.ok && r.value && r.value.status === 'published') posts.push(r.value);
     });
     applyMarks(posts);
+    /* 收藏里有已删除/已下架的文章 → 顺手清掉云端记录，别留僵尸条目 */
+    if (posts.length !== ids.length) {
+      var alive = {};
+      posts.forEach(function (p) { alive[parseInt(p.id, 10)] = 1; });
+      ids.forEach(function (id) {
+        if (!alive[id]) { try { need('Bookmarks').remove(id); markSet().delete(id); } catch (e) {} }
+      });
+    }
     state.posts = posts;
     state.loading = false;
     app.innerHTML = V().marksView(state);
@@ -1397,16 +1474,30 @@
     scheduleScrollUI();
   }
 
+  /* 未登录时的登录入口（收藏页空态里的按钮） */
+  function bindMarksLogin() {
+    var btn = document.getElementById('marks-login');
+    if (!btn) return;
+    btn.addEventListener('click', function () { location.hash = '#/login'; });
+  }
+
   function bindMarksClear() {
     var btn = document.getElementById('marks-clear');
     if (!btn) return;
     btn.addEventListener('click', function () {
-      openModal('清空收容所', '<p>将移除全部本地收容记录（不影响文章本身）。此操作不可撤销。</p>', [
+      openModal('清空收藏', '<p>将移除你账号下的全部收藏记录（不影响文章本身）。此操作不可撤销。</p>', [
         { label: '取消', cls: 'btn-ghost', onClick: closeModal },
-        { label: '确认清空', cls: 'btn-magenta', onClick: function () {
-          writeMarks([]);
+        { label: '确认清空', cls: 'btn-magenta', onClick: async function () {
           closeModal();
-          toast('收容所已清空', 'ok');
+          var ids = Array.from(markSet());
+          var B = need('Bookmarks');
+          var failed = 0;
+          for (var i = 0; i < ids.length; i++) {
+            try { await B.remove(ids[i]); } catch (e) { failed++; }
+          }
+          if (failed) { toast('有 ' + failed + ' 条没删掉，请重试', 'error'); }
+          else { toast('收藏已清空', 'ok'); }
+          await refreshMarks();
           route();
         } }
       ]);
@@ -2186,6 +2277,7 @@
       var pool = (listS.ok && listS.value && listS.value.posts) ? listS.value.posts : [];
       buildTrail(state, post, pool);
       state.marked = isMarked(post.id);
+      state.markLocked = !isLoggedIn();   /* v4.9.0：未登录 → 收藏按钮显示锁定态 */
     }
     app.innerHTML = V().postView(state);
     if (post) hydrateImages(app); /* 详情页：完整图（正文 + 封面） */
@@ -3596,16 +3688,37 @@
       } catch (e) {
         State.session = null; /* 无会话 = 访客模式，正常 */
       }
+      /* v4.9.0：把账号的收藏取回内存（渲染路径靠它保持同步）。
+         顺序要紧：先迁移旧的本机收藏，再刷新 —— 否则迁移进来的那几条不在缓存里。 */
+      try {
+        if (isLoggedIn()) { await migrateLegacyMarks(); }
+        await refreshMarks();
+      } catch (e) { /* 收藏取不回不影响其余功能 */ }
       /* 认证状态监听 */
       try {
         need('Auth').onAuthStateChange(function (event, session) {
           State.session = session || null;
           if (event === 'SIGNED_IN') {
             syncNicknameFromSession(session);
-            location.hash = '#/admin';
+            /* 登录后才谈得上收藏：先迁移旧的、再取回列表，最后决定去哪。
+               ⚠ 若这次登录是"点收藏被拦下来"触发的，就回到收藏页 ——
+                 否则用户会被扔进 CONSOLE，而他只是想收藏一篇文章。 */
+            migrateLegacyMarks().then(refreshMarks).then(function () {
+              var want = State.pendingMark;
+              State.pendingMark = null;
+              repaintMarks();            /* 身份变了：就地重画收藏按钮 */
+              safeRenderNav();
+              safeRoute();
+              location.hash = want ? '#/marks' : '#/admin';
+            }, function () { location.hash = '#/admin'; });
           }
           if (event === 'SIGNED_OUT') {
             State.session = null;
+            /* 收藏是账号数据：退出即清空内存缓存 + 就地重画按钮，
+               别让下一个人在这个页面上看到上一个人的收藏 */
+            State.marks = new Set();
+            marksLoaded = false;
+            repaintMarks();
             if (location.hash === '#/admin' || location.hash.indexOf('#/edit') === 0) location.hash = '#/';
           }
           safeRenderNav();

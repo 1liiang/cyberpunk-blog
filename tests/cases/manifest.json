@@ -304,5 +304,11 @@
     "name": "v4.8 Supabase 适配",
     "blocks": 1,
     "expect": 28
+  },
+  {
+    "file": "53-v4-9-0-bookmarks.js",
+    "name": "v4.9 收藏（账号 + 登录门槛）",
+    "blocks": 1,
+    "expect": 19
   }
 ]

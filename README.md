@@ -27,7 +27,7 @@
 python -m http.server 8898 --bind 127.0.0.1
 # 然后打开 http://127.0.0.1:8898/
 
-# 全量门禁（1136 条断言）
+# 全量门禁（1155 条断言）
 npm run gate
 
 # 生成 RSS
@@ -76,7 +76,7 @@ cyberpunk-blog/
 │   ├── handover-notes/   长期维护的经验沉淀（MEMORY / PROJECT-NOTES / TESTING-NOTES）
 │   └── archive/          历史方案与报告（当时成文的文件，不是当前规范；见其中的 README）
 ├── db/                   后端结构（schema.sql + 建库 SQL 生成器）
-├── tests/                门禁用例（52 个 case，1136 条断言）
+├── tests/                门禁用例（53 个 case，1155 条断言）
 └── tools/                导出 / 构建 / 版本脚本
 ```
 

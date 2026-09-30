@@ -160,77 +160,79 @@ async function run() {
       '三件套用了额外接口');
   }
 
-  /* ================= C19：收容所（本地收藏） ================= */
+  /* ================= C19：收藏（v4.9.0 起跟账号走 + 登录门槛） =================
+     ⚠ v4.9.0 的规则变化：站长的要求是「只有登录了才能收藏，未登录只能浏览」。
+       实现随之从 localStorage 搬到数据库表 bookmarks（跟账号走）。
+       本块断言的是**契约**（数据在哪、门槛在不在、失败怎么办），
+       行为走查在 53 号用例（真启动 + 真点击）。 */
   {
-    T('C19 收容所', 'R122 localStorage 键为 neon_bookmarks（常量单一来源）',
-      /var MARK_KEY = 'neon_bookmarks'/.test(app),
-      '未定义 MARK_KEY');
+    /* 收藏数据在数据库，不在浏览器 */
+    T('C19 收藏', 'R122 收藏落在数据库表 bookmarks（数据层有 Bookmarks 面）',
+      /var Bookmarks = \{/.test(SRC.cloud) && /from\('bookmarks'\)/.test(SRC.cloud),
+      '数据层没有 Bookmarks 面');
 
-    /* 读取必须容错：解析失败/隐私模式返回空数组，绝不抛。
-       注意：catch 里 return 之后常带行尾块注释，
-       stripJsLineComments 只剥双斜线注释、不剥块注释 ——
-       断言须允许 return [] 之后还跟着注释，故用宽松的 [\s\S] 跨行匹配。 */
-    T('C19 收容所', 'R122b 读失败降级为空数组（隐私模式不崩页）',
-      /catch\s*\(e\)\s*\{[\s\S]{0,160}?return\s*\[\]/.test(app),
-      'readMarks 未做容错');
+    /* 旧键只用于一次性迁移 —— 绝不能再往它写 */
+    T('C19 收藏', 'R122b 应用层不再把收藏写进 localStorage（旧键仅用于迁移）',
+      /LEGACY_MARK_KEY = 'neon_bookmarks'/.test(app) && !/localStorage\.setItem\(\s*LEGACY_MARK_KEY/.test(app),
+      '仍在往本地键写收藏');
 
-    /* 清洗：只留正整数 id 并去重 */
-    T('C19 收容所', 'R122c 清洗非法值与去重（只留正整数 id）',
-      /!isFinite\(n\)\s*\|\|\s*n\s*<=\s*0/.test(app) && /seen\[n\]/.test(app),
-      '未清洗/去重');
+    /* ★ 核心需求：未登录只能浏览 */
+    T('C19 收藏', 'R122c ★ 未登录点收藏被拦下：给提示并引导去登录',
+      /if \(!isLoggedIn\(\)\) \{/.test(app) &&
+      /收藏需要先登录/.test(app) &&
+      /location\.hash = '#\/login'/.test(app),
+      '缺少登录门槛');
 
-    /* 新收容的排最前（稍后读直觉） */
-    T('C19 收容所', 'R122d 新收容的排最前（unshift，最近优先）',
-      /list\.unshift\(n\)/.test(app),
-      '未用 unshift');
+    /* 收藏页对访客给引导，而不是渲染一个空列表 */
+    T('C19 收藏', 'R122d 未登录时收藏页显示登录引导（不渲染空列表）',
+      /state\.needLogin = true/.test(app) && /id="marks-login"/.test(views),
+      '收藏页没有登录引导');
 
-    /* 上限保护，防无限膨胀 */
-    T('C19 收容所', 'R122e 有容量上限（防 localStorage 无限膨胀）',
-      /MARK_MAX\s*=\s*500/.test(app) && /slice\(0,\s*MARK_MAX\)/.test(app),
-      '无上限保护');
+    /* 读路径容错：云端不可达 / 快照模式 → 空表，绝不抛（不拖垮整页） */
+    T('C19 收藏', 'R122e 云读失败降级为空表且不抛错（快照模式同理）',
+      /list: async function \(\) \{[\s\S]{0,700}?catch \(e\) \{[\s\S]{0,140}?return \[\];/.test(SRC.cloud),
+      'Bookmarks.list 未做容错');
 
-    /* 委托绑定在 document（列表会被重建，逐次绑会泄漏） */
-    T('C19 收容所', 'R122f 收藏按钮走 document 委托（列表重建不泄漏监听）',
-      /document\.addEventListener\('click'/.test(app) && /closest\('\[data-mark\]'\)/.test(app),
-      '未用委托');
+    /* 写路径失败必须回滚乐观更新 —— 绝不留下"看起来收藏了、其实没存"的假状态 */
+    T('C19 收藏', 'R122f 写失败回滚乐观更新（不留假状态）',
+      /catch \(e\) \{[\s\S]{0,160}?paintMark\(btn, wasOn\)/.test(app),
+      '未回滚乐观更新');
 
-    /* 点收藏不能顺带跳进文章（卡片本身是 role=link） */
-    T('C19 收容所', 'R122g 点收藏阻止冒泡（不触发卡片跳转）',
-      /ev\.preventDefault\(\)/.test(app) && /ev\.stopPropagation\(\)/.test(app),
-      '未阻止冒泡');
+    /* 重复收藏是幂等的（主键去重 + ignore-duplicates），不该报错 */
+    T('C19 收藏', 'R122g 重复收藏幂等（onConflict 主键 + ignoreDuplicates）',
+      /ignoreDuplicates: true/.test(SRC.cloud) && /onConflict: 'owner_id,post_id'/.test(SRC.cloud),
+      '未做幂等');
 
-    /* 委托挂在 boot 里，且必须在 route 之前。
-       ⚠ 不能只 indexOf('bindMarkDelegation()') —— 那会命中
-       `function bindMarkDelegation() {` 的函数定义行，把「定义了但没调用」判成绿。
-       必须钉调用现场：boot 体内的 `try { bindMarkDelegation(); }` 形式。 */
-    const bootIdx = app.indexOf('try { bindMarkDelegation();');
-    const routeIdx = app.indexOf('safeRoute();\n  }', bootIdx);
-    T('C19 收容所', 'R122h 委托在启动时安装（首屏即可用，无窗口期）',
-      bootIdx !== -1 && routeIdx !== -1,
-      bootIdx === -1 ? 'boot 未调用 bindMarkDelegation' : '调用位置异常');
+    /* 账号数据不串号：退出登录必须清空内存缓存 */
+    T('C19 收藏', 'R122h 退出登录清空内存缓存（换人登录不串号）',
+      /SIGNED_OUT[\s\S]{0,240}?State\.marks = new Set\(\)/.test(app),
+      '退出未清缓存');
 
-    /* 卡片用 button 而非 a（卡内已有 a，禁止嵌套） */
-    T('C19 收容所', 'R122i 收藏控件是 <button>（卡内禁 a 嵌套）',
-      /<button type="button" class="card-mark/.test(views),
-      '用了 <a> 或其它标签');
+    /* 登录之后必须把收藏取回来（否则渲染路径拿不到收藏态） */
+    T('C19 收藏', 'R122i 登录后刷新缓存，并把旧版本地收藏并入账号',
+      /migrateLegacyMarks\(\)\.then\(refreshMarks\)/.test(app) && /await refreshMarks\(\)/.test(app),
+      '登录后未刷新/未迁移');
 
-    /* aria-pressed 让读屏知道收藏态 */
-    T('C19 收容所', 'R122j aria-pressed 反映收藏态（无障碍）',
+    /* 委托绑定 + 点收藏不跳文章（列表会被重建，逐次绑会泄漏） */
+    T('C19 收藏', 'R122j 按钮走 document 委托，且点收藏不触发卡片跳转',
+      /document\.addEventListener\('click', async function \(ev\)/.test(app) &&
+      /closest\('\[data-mark\]'\)/.test(app) &&
+      /ev\.stopPropagation\(\)/.test(app),
+      '未用委托/未阻止冒泡');
+
+    /* 无障碍：aria-pressed 反映收藏态；控件是 button（卡内禁 a 嵌套） */
+    T('C19 收藏', 'R122k 收藏控件是无障碍的（button + aria-pressed）',
+      /<button type="button" class="card-mark/.test(views) &&
       /aria-pressed="' \+ \(marked \? 'true' : 'false'\)/.test(views),
-      '缺少 aria-pressed');
+      '缺少 aria-pressed 或用了 <a>');
 
-    /* 边界说明必须写在页面上（不能只写在注释） */
-    T('C19 收容所', 'R122k 页面上说明"本地保存，换设备会丢"（不只写注释）',
-      /保存在本浏览器/.test(views) && /不是云端同步/.test(views),
-      '未向用户说明本地收藏的边界');
-
-    /* 收容所页在取消收藏后要即时移除该条目（页面与数据一致） */
-    T('C19 收容所', 'R122l 取消收藏后即时移除该卡片（页面与数据一致）',
-      /closest\('\.post-card'\)/.test(app) && /card\.remove\(\)/.test(app),
-      '未做即时移除');
+    /* 未登录时按钮显示锁定态（点了仍给引导 —— 不做 disabled，否则问不出为什么） */
+    T('C19 收藏', 'R122l 未登录时按钮显示锁定态且文案说明原因',
+      /is-locked/.test(views) && /登录后可收藏/.test(views),
+      '未做锁定态');
 
     /* 路由已注册 */
-    T('C19 收容所', 'R122m 路由 #/marks 已注册',
+    T('C19 收藏', 'R122m 路由 #/marks 已注册',
       /parts\[0\] === 'marks'/.test(app) && /name === 'marks'/.test(app),
       '未注册路由');
   }

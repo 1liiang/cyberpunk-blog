@@ -699,9 +699,14 @@ async function run() {
       '未按身份过滤播放队列');
 
     /* ⚠ 过滤判据依赖登录态，而启动时会话还没恢复完 ⇒ 身份一变必须重取，
-       否则作者登录后会看不到那条待处理的旧记录（"消失"而不是"可见待删"）。 */
+       否则作者登录后会看不到那条待处理的旧记录（"消失"而不是"可见待删"）。
+
+       ⚠ 判据不能靠"固定字符数"或"第一个 });"定位：v4.9.0 给 SIGNED_IN 分支加了
+         收藏迁移 + 刷新（几十行，内部自带 }); ），这两种写法都假红过一次。
+         改用 boot 里紧跟在注册之后的那条 catch 作为结束锚点。 */
     const authIdx = app.indexOf('onAuthStateChange(function');
-    const authBody = authIdx >= 0 ? app.slice(authIdx, authIdx + 900) : '';
+    const authEnd = authIdx >= 0 ? app.indexOf('} catch (e) { /* 监听失败', authIdx) : -1;
+    const authBody = (authIdx >= 0 && authEnd > authIdx) ? app.slice(authIdx, authEnd) : '';
     T('接线', 'R167b 身份变化后重取曲目（否则作者看不到待处理的旧记录）',
       authBody.length > 0 && /loadRadioTracks\(\)/.test(authBody),
       '登录态变化未重取曲目');
