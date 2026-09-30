@@ -1,0 +1,70 @@
+name: 同步静态快照
+
+# 为什么需要这个 workflow
+# ------------------------------------------------------------
+# GitHub Pages 读的是仓库里的 data/ 静态快照（见 README 的「两套部署」）。
+# 那个快照不会自己变 —— 云端数据库里发了新文章、加了新歌，
+# Pages 上不会知道。本 workflow 就是那座桥。
+#
+# ★ 为什么 GitHub 的服务器能读到云端，而 Pages 网页读不到：
+#   CORS 是**浏览器**才有的限制。云端点按 Origin 白名单放行，浏览器里
+#   跨源请求会被拒（*.github.io → 403）；但本 workflow 跑在 GitHub 的
+#   服务器上，用 Node 直接发起请求 —— 没有 Origin 这个头，也就没有那道闸。
+#   这是"让 Pages 成为对外主站"能成立的关键前提。
+#
+# 触发方式
+#   · schedule          每 6 小时自动跑一次
+#   · workflow_dispatch 手动点（Actions 页面 → Run workflow）—— 发完文想立刻同步时用
+#
+# ⚠ 刻意**不**监听 push：本 workflow 自己会产生推送，
+#   监听 push 会形成"提交→触发→再检查→无变更→结束"的空转环。
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+# 提交需要写权限（默认 token 是只读的）
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-snapshot
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Node（export-static.js 用到全局 fetch，需 18+）
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 从云端导出快照
+        run: node tools/export-static.js
+
+      - name: 有变更才提交
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          # ⚠ 无变更时必须**静默退出**，不能造空提交 ——
+          #    每 6 小时一个空提交会把提交历史刷成噪音。
+          if git diff --cached --quiet; then
+            echo "快照无变更，跳过提交。"
+            exit 0
+          fi
+          git commit -m "chore(快照): 自动同步 $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
+
+      - name: 汇总
+        if: always()
+        run: |
+          echo "### 快照同步结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 文章：$(node -e "console.log(require('./data/posts.json').posts.length)") 篇" >> $GITHUB_STEP_SUMMARY
+          echo "- 图片：$(node -e "console.log(Object.keys(require('./data/posts.json').images).length)") 张" >> $GITHUB_STEP_SUMMARY
+          echo "- 电台：$(node -e "console.log((require('./data/posts.json').radio||[]).length)") 首" >> $GITHUB_STEP_SUMMARY

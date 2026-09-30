@@ -220,11 +220,11 @@ async function run() {
     var handover = '';
     try { handover = fs.readFileSync(path.join(ROOT, 'HANDOVER.md'), 'utf8'); } catch (e) { handover = ''; }
 
-    T(CN, 'R243 HANDOVER 已更新到 4.6.0（版本 / 门禁数 / 新文件树 / 新坑块）',
+    T(CN, 'R243 HANDOVER 已更新到 4.7.0（版本 / 门禁数 / 新文件树 / 新坑块）',
       /* ⚠ 版本号要钉**头部那一行**的格式：文件别处（如第 9/10 节注记）也会有 "v4.x.x"
          字样 —— 只查"全文出现过"会让"头部版本没改"的变异假绿（反向验证实锤）。 */
-      /\*\*版本\*\*：v4\.6\.0/.test(handover) &&
-      /1094\/1094/.test(handover) &&
+      /\*\*版本\*\*：v4\.7\.0/.test(handover) &&
+      /1104\/1104/.test(handover) &&
       /scene\.js/.test(handover) && /console\.js/.test(handover) &&
       /4\.0 时代的新坑/.test(handover),
       handover ? '缺项或头部版本未更新' : 'HANDOVER 缺失');

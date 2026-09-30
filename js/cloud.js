@@ -1118,6 +1118,28 @@
     ready: function () { return !!snapshot; }
   };
 
+  /* v4.7.0：电台回退。
+     云端把音频存成十几 MB 的 base64 data URL（trackData 返回的就是它）；
+     快照里则是**同源文件** `data/radio/<id>.<mp3>`。
+     playUrl 的语义是"给我一个能播的地址"，所以返回文件路径即可 ——
+     播放器不关心它是 data URL 还是路径，只把它交给 <audio>。
+     ⚠ 不再需要把 27MB base64 塞进 JSON：那会让快照本体大到浏览器解析都费劲。 */
+  var StaticRadio = {
+    list: async function () {
+      var snap = await loadSnapshot();
+      return (snap.radio || []).slice();
+    },
+    playUrl: async function (row) {
+      var id = (row && typeof row === 'object') ? row.id : row;
+      var snap = await loadSnapshot();
+      var hit = null;
+      (snap.radio || []).forEach(function (r) { if (String(r.id) === String(id)) hit = r; });
+      if (!hit) throw new Error('该曲目不在快照中');
+      if (!hit.file) throw new Error('该曲目在快照中没有音频数据');
+      return 'data/' + hit.file;
+    }
+  };
+
   /* 把实现在导出边界包一层：先走真身，抛错才落快照。
      snapshotMode 一旦**确认可用**才置位，之后本次会话直连快照 ——
      否则 GitHub Pages 上每次取数都要先挨一次 CSP 拒绝，
@@ -1174,11 +1196,11 @@
     })(),
     /* v4.6.0：是否已落到静态快照模式 —— 应用层据此提示"只读快照" */
     isSnapshot: function () { return snapshotMode; },
-    SNAPSHOT_URL: SNAPSHOT_URL,
-    Errors: Errors,
+    SNAPSHOT_URL: SNAPSHOT_URL,    Errors: Errors,
     Storage: Storage,
     /* v2.9.0：电台数据层（曲目列表 / 音频入库 / 匿名可读播放地址） */
-    Radio: Radio,
+    /* v4.7.0：电台也走同源回退（与 Posts/Images 同一套纪律：只包读路径） */
+    Radio: withFallback(Radio, StaticRadio, ['list', 'playUrl']),
     AUDIO_MAX: AUDIO_MAX,
     /* 库层 CHECK 对应的字符上限（客户端第二道体积关，与库同步） */
     AUDIO_DATA_MAX: AUDIO_DATA_MAX,

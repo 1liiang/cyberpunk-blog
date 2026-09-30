@@ -297,6 +297,6 @@
     "file": "51-v4-6-0-static-fallback.js",
     "name": "v4.6 静态快照：GitHub Pages 同源回退",
     "blocks": 1,
-    "expect": 25
+    "expect": 35
   }
 ]

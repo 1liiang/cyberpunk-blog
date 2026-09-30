@@ -301,6 +301,96 @@ async function run() {
       '触碰快照=' + calledSnapshot + ' 云端返回=' + (cloudListed ? cloudListed.posts.length + ' 篇' : 'null'));
   }
 
+  /* ================= ⑤ v4.7.0：电台纳入快照 + 自动同步 workflow ================= */
+  {
+    const CN = 'v4.7 电台与自动同步';
+    const snap = readSnapshot();
+
+    /* 5.1 快照里有电台，且每条 has_data 的曲目都落成了文件 */
+    const radio = (snap && snap.radio) || [];
+    const missingAudio = [];
+    radio.forEach(function (r) {
+      if (r.has_data && (!r.file || !fs.existsSync(path.join(DATA_DIR, r.file)))) {
+        missingAudio.push('#' + r.id);
+      }
+    });
+    T(CN, 'R253 快照含电台，且标了 has_data 的曲目音频都真的落地了',
+      Array.isArray(radio) && radio.length > 0 && missingAudio.length === 0,
+      '曲目 ' + radio.length + ' 首' + (missingAudio.length ? '，缺音频：' + missingAudio.join(',') : '，音频齐全'));
+
+    /* 5.2 ★ 关键设计守卫：音频**不许**塞进 JSON。
+           云端存的是十几 MB 的 base64；若照搬进快照，posts.json 会变成 30MB，
+           浏览器解析都费劲。这条把"走文件"钉死。 */
+    const jsonBytes = fs.statSync(SNAPSHOT).size;
+    T(CN, 'R253b 快照本体保持轻量（音频走文件，不塞 base64 进 JSON）',
+      jsonBytes < 200 * 1024,
+      (jsonBytes / 1024).toFixed(1) + ' KB（上限 200KB）');
+
+    /* ⚠ R253 只证明**产物**自洽，证明不了**生产者**会写 file 字段。
+       反向验证实锤：把 `item.file = file;` 注释掉，R253 照样绿 ——
+       已生成的文件当然不会变。这是本项目第三次栽在"钉产物不钉生产者"上
+       （前两次：owner_id 裁剪、slimPost 调用点），所以这次一次补齐两层。
+
+       ⚠⚠ 正则必须**锚定行首**：首版写成 /item\.file = file;/（无锚点），
+       于是 `// item.file = file;`（注释掉）照样匹配 —— 反向验证第二次抓出假绿。
+       `^\s*` 保证那行**真的是可执行语句**，不是注释。 */
+    const fileAssign = /^\s*item\.file = file;\s*$/m.test(exp);
+    T(CN, 'R253c 导出脚本为每条有音频的曲目写上 file 引用（钉赋值点，不只钉产物）',
+      fileAssign && /^\s*radioFiles\.push\(\{/m.test(exp),
+      fileAssign ? '赋值点在位' : '⚠ 脚本不写 file，Pages 上电台将播不了');
+
+    /* 5.3 回退覆盖了电台的两条读路径 */
+    T(CN, 'R254 cloud.js 为 Radio 提供同源回退（list + playUrl）',
+      /var StaticRadio = \{/.test(cloud) &&
+      /Radio: withFallback\(Radio, StaticRadio, \['list', 'playUrl'\]\)/.test(cloud),
+      'Radio 回退');
+
+    /* 5.4 行为：云端不可用时，list 出曲目、playUrl 返回同源文件路径 */
+    const ctx = bootDom({ url: 'https://x.test/#/', noSDK: true });
+    ctx.w.fetch = function (url) {
+      if (String(url).indexOf('data/posts.json') === 0) {
+        return Promise.resolve({ ok: true, json: function () { return Promise.resolve(readSnapshot()); } });
+      }
+      return Promise.reject(new Error('CSP 拦截'));
+    };
+    let rows = null, url4 = null, rerr = null;
+    try {
+      rows = await ctx.w.NEON.Radio.list();
+      if (rows && rows.length) url4 = await ctx.w.NEON.Radio.playUrl(rows[0]);
+    } catch (e) { rerr = String(e && e.message || e); }
+    T(CN, 'R254b 云端不可用 → Radio.list() 返回快照曲目',
+      !rerr && Array.isArray(rows) && rows.length > 0,
+      rerr || (rows ? rows.length + ' 首' : 'null'));
+    T(CN, 'R254c 云端不可用 → Radio.playUrl() 返回同源文件路径（不是 data URL）',
+      !rerr && typeof url4 === 'string' && url4.indexOf('data/radio/') === 0,
+      rerr || String(url4));
+
+    /* 5.5 自动同步 workflow：结构三要素 */
+    const wfPath = path.join(ROOT, '.github', 'workflows', 'sync-snapshot.yml');
+    const wf = fs.existsSync(wfPath) ? fs.readFileSync(wfPath, 'utf8') : '';
+    T(CN, 'R255 自动同步 workflow 在位（定时 + 手动触发 + 写权限）',
+      /cron:\s*'0 \*\/6 \* \* \*'/.test(wf) &&
+      /workflow_dispatch:/.test(wf) &&
+      /permissions:\s*\n\s*contents:\s*write/.test(wf),
+      wf ? '结构完整' : 'workflow 缺失');
+
+    /* 5.6 无变更时必须静默退出 —— 每 6 小时一个空提交会把历史刷成噪音 */
+    T(CN, 'R255b 无变更不造空提交（否则每 6 小时污染一次提交历史）',
+      /git diff --cached --quiet/.test(wf) && /exit 0/.test(wf),
+      '空提交保护');
+
+    /* 5.7 不监听 push —— 本 workflow 自己会推送，监听 push 会形成空转环 */
+    T(CN, 'R255c 刻意不监听 push（避免"提交→触发→再提交"空转环）',
+      !/^\s*push:/m.test(wf),
+      /^\s*push:/m.test(wf) ? '⚠ 监听了 push，会空转' : '未监听 push');
+
+    /* 5.8 这个 workflow 的能力前提：服务器端没有 CORS，
+           所以能直接读云端 —— 这正是"Pages 当主站"能成立的关键 */
+    T(CN, 'R255d workflow 直接跑导出脚本（服务器端无 CORS，可读云端）',
+      /run:\s*node tools\/export-static\.js/.test(wf),
+      '导出步骤');
+  }
+
   return { pass: S.results.filter(function (r) { return r.pass; }).length,
           fail: S.results.filter(function (r) { return !r.pass; }).length,
           results: S.results };

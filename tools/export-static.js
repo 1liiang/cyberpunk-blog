@@ -45,6 +45,7 @@ const ROOT = path.join(__dirname, '..');
 const CLOUD_JS = path.join(ROOT, 'js', 'cloud.js');
 const DATA_DIR = path.join(ROOT, 'data');
 const IMG_DIR = path.join(DATA_DIR, 'images');
+const RADIO_DIR = path.join(DATA_DIR, 'radio');
 
 const DRY = process.argv.includes('--dry-run');
 
@@ -90,6 +91,20 @@ function collectImageIds(posts) {
 }
 
 const EXT_BY_MIME = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
+
+/* v4.7.0：电台音频。与图片不同，音频**必须以文件形式落地** ——
+   云端存的是十几 MB 的 base64 data URL，塞进 posts.json 会让快照变成
+   一个 30MB 的 JSON（浏览器解析都费劲）。落成同源文件后，
+   playUrl 直接返回 `data/radio/4.mp3`，播放器照播，快照本体还是几十 KB。 */
+const AUDIO_EXT_BY_MIME = {
+  'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a',
+  'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/opus': 'opus', 'audio/wav': 'wav',
+  'audio/x-wav': 'wav', 'audio/flac': 'flac', 'audio/x-flac': 'flac', 'audio/webm': 'webm'
+};
+
+/* 曲目列表字段（与 js/cloud.js 的 RADIO_FIELDS 同口径，但**不含 data** ——
+   正文级大字段绝不进列表，这是云端版本就定下的纪律） */
+const RADIO_FIELDS = 'id,title,artist,album,mime,duration_sec,size_bytes,sort_order,cover_url,has_data,created_at';
 
 /* 快照里**不该带**的字段：owner_id 只在登录后的编辑鉴权里用
    （app.js 的 "这条信号不属于你" 判断），公开渲染一律走 owner_name。
@@ -153,19 +168,60 @@ async function main() {
       (row.width && row.height ? row.width + 'x' + row.height : '尺寸未知'));
   }
 
-  /* ③ 组装快照 */
+  /* ③ 电台：元数据全量 + 音频本体逐首落地。
+     ⚠ 音频**逐首单独拉**（select 只带 data）—— 一次性 select * 会把
+       27MB 全部读进内存再序列化；逐首拉既能控内存，也方便跳过无数据的旧行。 */
+  const radioRows = await rest('/public_radio?select=' + RADIO_FIELDS +
+    '&order=sort_order.asc,id.asc&limit=200');
+  const radio = [];
+  const radioFiles = [];
+  if (Array.isArray(radioRows) && radioRows.length) {
+    console.log('\n  电台  ' + radioRows.length + ' 首：');
+    for (const row of radioRows) {
+      const item = Object.assign({}, row);
+      if (row.has_data) {
+        const dr = await rest('/public_radio?select=id,data&id=eq.' + row.id + '&limit=1');
+        const drow = Array.isArray(dr) ? dr[0] : null;
+        if (drow && drow.data) {
+          const ext = AUDIO_EXT_BY_MIME[String(row.mime || '').toLowerCase()];
+          if (!ext) {
+            console.warn('        ⚠ #' + row.id + ' MIME 不受支持（' + row.mime + '），只导元数据');
+          } else {
+            const file = 'radio/' + row.id + '.' + ext;
+            const buf = Buffer.from(drow.data, 'base64');
+            item.file = file;
+            radioFiles.push({ path: path.join(DATA_DIR, file), buf: buf });
+            console.log('        #' + String(row.id).padEnd(4) + ' ' + String(row.title).slice(0, 24).padEnd(26) +
+              (buf.length / 1048576).toFixed(1) + ' MB');
+          }
+        } else {
+          console.warn('        ⚠ #' + row.id + ' 标记 has_data 但取不到音频本体');
+        }
+      } else {
+        console.log('        #' + String(row.id).padEnd(4) + ' ' + String(row.title).slice(0, 24).padEnd(26) + '（无音频数据）');
+      }
+      radio.push(item);
+    }
+  } else {
+    console.log('\n  电台  （无曲目）');
+  }
+
+  /* ④ 组装快照 */
   const snapshot = {
     exportedAt: new Date().toISOString(),
     source: ENDPOINT,
     note: '由 tools/export-static.js 生成 —— 供云端不可达时（如 GitHub Pages）同源读取。勿手改。',
     posts: posts.map(slimPost),
-    images: images
+    images: images,
+    radio: radio
   };
   const json = JSON.stringify(snapshot, null, 2);
 
   const totalImg = files.reduce(function (s, f) { return s + f.buf.length; }, 0);
+  const totalAud = radioFiles.reduce(function (s, f) { return s + f.buf.length; }, 0);
   console.log('\n  产出  data/posts.json  ' + (Buffer.byteLength(json) / 1024).toFixed(0) + ' KB');
   console.log('        data/images/     ' + files.length + ' 个文件  ' + (totalImg / 1024).toFixed(0) + ' KB');
+  console.log('        data/radio/      ' + radioFiles.length + ' 个文件  ' + (totalAud / 1048576).toFixed(1) + ' MB');
 
   if (DRY) {
     console.log('\n  --dry-run：未写入任何文件。\n');
@@ -173,6 +229,7 @@ async function main() {
   }
 
   fs.mkdirSync(IMG_DIR, { recursive: true });
+  fs.mkdirSync(RADIO_DIR, { recursive: true });
   /* 先清掉旧图 —— 图片被文章取消引用后，残留文件会一直躺在仓库里 */
   fs.readdirSync(IMG_DIR).forEach(function (f) {
     if (/^\d+\.(png|jpg|gif|webp)$/.test(f)) {
@@ -183,7 +240,19 @@ async function main() {
       }
     }
   });
+  /* 电台同理：曲目被删后，27MB 的音频不该永远留在仓库里。
+     ⚠ 这条比图片更要紧 —— 音频单文件大，残留一个就是十几 MB。 */
+  fs.readdirSync(RADIO_DIR).forEach(function (f) {
+    if (/^\d+\.(mp3|m4a|aac|ogg|opus|wav|flac|webm)$/.test(f)) {
+      const keep = radioFiles.some(function (x) { return path.basename(x.path) === f; });
+      if (!keep) {
+        fs.unlinkSync(path.join(RADIO_DIR, f));
+        console.log('        清理旧曲 ' + f);
+      }
+    }
+  });
   files.forEach(function (f) { fs.writeFileSync(f.path, f.buf); });
+  radioFiles.forEach(function (f) { fs.writeFileSync(f.path, f.buf); });
   fs.writeFileSync(path.join(DATA_DIR, 'posts.json'), json, 'utf8');
 
   console.log('\n✓ 快照已写入 data/\n');

@@ -47,37 +47,37 @@
        必须【同步】加载且排在样式表【之前】—— 否则会先暗后亮闪一帧。
        为什么是外部脚本而非内联：CSP 的 script-src 不含 'unsafe-inline'。
        它零依赖、全程 try/catch，加载失败也只是退回暗色兜底，不影响后续启动。 -->
-  <script src="js/theme-boot.js?v=4.6.0"></script>
+  <script src="js/theme-boot.js?v=4.7.0"></script>
   <!-- 本地资源带版本查询串：每次发布改版本号，CDN 缓存键随之失效，避免旧文件滞留 -->
-  <link rel="stylesheet" href="css/style.css?v=4.6.0">
+  <link rel="stylesheet" href="css/style.css?v=4.7.0">
   <!-- CDN 依赖：锁定精确版本 + SRI 完整性校验（供应链加固，审计 H-1） -->
   <script defer src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" integrity="sha384-/TQbtLCAerC3jgaim+N78RZSDYV7ryeoBCVqTuzRrFec2akfBkHS7ACQ3PQhvMVi" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/dompurify@3.4.16/dist/purify.min.js" integrity="sha384-a7SzOxErzJ3ZpQz0zJ32d67dSitNzPcbfybc/ykU9KJhMgZkwqfSxlhhdJRS+XGL" crossorigin="anonymous"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.12.0/highlight.min.js" integrity="sha384-wjfDDhOPPdjtva8vWBhWeVprSpmxisEu5aYT3q1JyACqXpdKpo3PWZTMVq24MBix" crossorigin="anonymous"></script>
   <!-- WorkBuddy Cloud SDK：本地托管（来源与哈希见 js/vendor/README.md），摆脱 @dev 漂移标签 -->
-  <script defer src="js/vendor/workbuddy-cloud-sdk.js?v=4.6.0"></script>
-  <script defer src="js/version.js?v=4.6.0"></script>
-  <script defer src="js/cloud.js?v=4.6.0"></script>
+  <script defer src="js/vendor/workbuddy-cloud-sdk.js?v=4.7.0"></script>
+  <script defer src="js/version.js?v=4.7.0"></script>
+  <script defer src="js/cloud.js?v=4.7.0"></script>
   <!-- v4.1 B2：霓虹字标的字形路径数据（字体转曲生成物；必须在 views.js 之前，
        views 渲染 Hero 时惰性读取 window.NEONWordmark） -->
-  <script defer src="js/wordmark-paths.js?v=4.6.0"></script>
-  <script defer src="js/views.js?v=4.6.0"></script>
-  <script defer src="js/keys.js?v=4.6.0"></script>
+  <script defer src="js/wordmark-paths.js?v=4.7.0"></script>
+  <script defer src="js/views.js?v=4.7.0"></script>
+  <script defer src="js/keys.js?v=4.7.0"></script>
   <!-- v4.0 B1：场景框架 + 氛围运行时。必须在 app.js 之前 ——
        app.js 的路由会调 NEONScene.apply()；atmo.js 负责数字雨与帧率保底。 -->
-  <script defer src="js/scene.js?v=4.6.0"></script>
-  <script defer src="js/atmo.js?v=4.6.0"></script>
+  <script defer src="js/scene.js?v=4.7.0"></script>
+  <script defer src="js/atmo.js?v=4.7.0"></script>
   <!-- v4.1 B2：开场序列（首访首页播放；依赖 theme-boot 的 .boot-first，
        不依赖 app.js，故放在它之前） -->
-  <script defer src="js/boot.js?v=4.6.0"></script>
+  <script defer src="js/boot.js?v=4.7.0"></script>
   <!-- v2.8.0：电台播放器内核。必须在 app.js 之前 —— app 初始化时要调它。
        纯逻辑无 DOM，界面由 app.js 注入，便于沙箱测试。 -->
-  <script defer src="js/radio.js?v=4.6.0"></script>
-  <script defer src="js/app.js?v=4.6.0"></script>
+  <script defer src="js/radio.js?v=4.7.0"></script>
+  <script defer src="js/app.js?v=4.7.0"></script>
   <!-- v4.3 B4：装置 —— 点击反馈（tap.js）+ 命令终端（console.js，惰性读
        NEONControls / NEONRadio / NEONScene；终端 DOM 首次唤起才建） -->
-  <script defer src="js/tap.js?v=4.6.0"></script>
-  <script defer src="js/console.js?v=4.6.0"></script>
+  <script defer src="js/tap.js?v=4.7.0"></script>
+  <script defer src="js/console.js?v=4.7.0"></script>
 </head>
 <body>
   <!-- C10：跳转到主内容。键盘/读屏用户按 Tab 第一下即可跳过顶栏导航，
