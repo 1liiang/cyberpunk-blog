@@ -293,6 +293,14 @@ git add -A && git commit -m "chore: 刷新静态快照" && git push
 ⚠ 仓库是**公开**的（用户 2026-09-30 确认「全部公开」），所以仓库里的一切
 （含安全审计报告、本交接文档）都对外可见。往里加东西前先想一下这一点。
 
+> ⚠ **一处已知的过时注释（待办）**：`.github/workflows/sync-snapshot.yml` 头部的说明
+> 写的还是迁移前的架构（"Pages 读的是仓库里的 data/ 快照"、"Pages 网页读不到云端"）。
+> **架构以上一节与本文件 §4 为准**：v4.8.1 起 Pages **直连 Supabase**，快照只是云端
+> 不可达时的兜底；那个 workflow 现在的职责是**保持兜底新鲜**（行为一字未变，只是说明过时）。
+> 更新那段注释需要 token 具备 **Workflows: Read and write** 权限 —— 只有 Contents 权限时，
+> GitHub 会以 403 `Resource not accessible by personal access token` 拦下，
+> **Git Data API 与 Contents API 都一样**（两条通道都实测过），或在 GitHub 网页上直接编辑该文件。
+
 >
 > **v4.5.0 出厂色相改为紫（285）**：站长在配色面板挑中「紫」并拍板定为全站出厂色相。
 > ⚠ 手上有这个项目的人必须知道的**唯一**要点：改默认值 ≠ 改了所有人的观感 ——
