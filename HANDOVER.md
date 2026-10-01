@@ -533,6 +533,53 @@ git add -A && git commit -m "chore: 刷新静态快照" && git push
 > ⚠ 该脚本已改为读 Supabase（PostgREST），并带**音频增量拉取**（本地同尺寸就跳过下载）——
 > 否则每 6 小时全量拉一次音频会把免费档 5GB/月的额度吃光。
 
+### v5.7.2 追加：仓库布局与发布流程（**今后照这个做，别再借道克隆**）
+
+⚠ 先说清一件容易搞混的事：**本仓库（工作区）与 GitHub 远端（站点本体）不是同一层。**
+
+| | 内容 |
+|---|---|
+| 本地仓库 `F:\个人网站` | **整个工作区**：`app/`（站点本体）+ `db/` `docs/` `dev.cmd` `接手报告.md` … |
+| 远端 `1liiang/cyberpunk-blog` | **只有站点本体**：根就是 `index.html` / `js/` / `css/` / `data/` … |
+| 对应关系 | 远端根 == 本地 `app/` 的内容（**一一对应，只差路径前缀**；实测唯一差异是一个文件的行尾 CRLF↔LF） |
+
+所以远端**不能**直接收本地主线的合并 —— 那会让远端根同时出现 `js/` 和 `app/`，
+线上多出一棵重复的站点树，还会把 `接手报告.md`、`db/seed/` 等工作区资料推到公开仓库。
+
+**正解：`deploy` 分支。** 它的历史接在本地主线之后，但**根树直接取 `main:app` 的子树对象**
+（不复制、不重写任何文件）：
+
+```bash
+# 发布（改完 app/ 并 bump 之后）
+git update-ref refs/heads/deploy \
+  "$(git commit-tree $(git rev-parse main:app) -p $(git rev-parse main) -m 'deploy: 发布基线')"
+git push origin deploy:main
+```
+
+> 若 `deploy` 的父提交与远端 main 无共同祖先，push 会被拒（non-fast-forward）。
+> 此时**不要强推** —— 造一个合并提交，让远端历史作为祖先保留、树取 deploy：
+> `git commit-tree <deploy^{tree}> -p <origin/main> -p <deploy> -F msg` 再 `git push origin <sha>:refs/heads/main`。
+
+**标签**（在远端）：`v5.7.1` / `v5.7.2` / `perf-hardening` / **`pre-trim`**。
+`pre-trim` 是**裁剪前的完整门禁**（56 个 case / 1111 断言 + 完整电台功能），
+取回被删用例只需：`git checkout pre-trim -- app/tests`。
+
+### v5.7.2：电台彻底下线 + 门禁裁剪到核心
+
+- **电台功能整体删除**（用户要求「旧电台也全删了」）：`cloud.js` 的 Radio 数据面与
+  `RADIO_*` 常量、`views.js` 的 `radioView`、`app.js` 的常驻控制台与条目代理、
+  `index.html` 的 `#radio-stage`、`css` 的复古收音机样式、快照与导出器的 `radio` 段，
+  以及**为电台 iframe 放宽的 CSP `frame-src music.163.com`**（顺带收紧了安全面）。
+  ⚠ 保住了 `SIGNED_TTL_*` 与 `clampTtl` —— 它们物理上夹在电台段中间，但属于**附件下载**。
+- **门禁裁剪**：54 → **18 个核心 case**，断言 1031 → **298**，门禁 **343/343**。
+  保留：主流程三件、供应链、版本一致、CSP、快照回退、Supabase 适配、配色与对比度、
+  减少动效、收藏、氛围契约、终端设备契约、结构终审，以及 P0/P1/P2 三个硬化用例。
+  ⚠ 被删的用例里有若干守的是**活功能**（键盘可达、折叠、阅读进度、编辑器文本、
+  图片收口、草稿、OG 卡片…）—— 删它们是为了缩小门禁规模，不是"它们没用了"。
+- **三次踩坑（都记在 §5）**：删 CSS 时把 `*/` 删掉却留着 `/*` → 未闭合注释吞掉后面
+  2000+ 行（而括号配平仍显示 0，因为扫描器也跳过了注释）；删 `@media print` 里的
+  `.radio-console,` 时连坐后面的选择器；切测试块时吃掉块的 `{` 留下孤立 `}`。
+
 ⚠ 仓库是**公开**的（用户 2026-09-30 确认「全部公开」），所以仓库里的一切
 （含本交接文档）都对外可见。往里加东西前先想一下这一点。（历史审计报告已于 v5.6.3 清理。）
 
