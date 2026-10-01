@@ -1647,6 +1647,16 @@
             cell('uptime-min', 'MIN / 分', pad(mins), '分') +
             cell('uptime-sec', 'SEC / 秒', pad(secs), '秒') +
           '</div>' +
+          /* v5.5.0：花样区（雷达扫掠 + 信号频谱）—— 技法来源见 style.css 的 .holo-radar 注释 */
+          '<div class="holo-gauge">' +
+            '<div class="holo-radar" aria-hidden="true"><i></i><i></i><i></i></div>' +
+            '<div class="holo-gauge-text">' +
+              '扫描频段 <b>SECTOR 07</b><br>' +
+              '链路状态 <b>ENCRYPTED</b><br>' +
+              '遥测 <b>NOMINAL</b>' +
+            '</div>' +
+          '</div>' +
+          '<div class="holo-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>' +
           '<p class="uptime-foot">信号自 ' + esc(bootDate) + ' 起持续广播 · 每一秒都在变长</p>' +
         '</section>' +
         '<div class="holo-card" data-holo-card>' +

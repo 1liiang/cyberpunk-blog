@@ -5700,6 +5700,10 @@ body:not(.linenum-off) .md-body > pre::before {
      ⚠ 必须显式归零：@keyframes lk-scan 是**无限循环**动画，
        不像进场动画那样跑一次就停，漏掉这条会一直闪。
      与本站既有做法一致（见 .wordmark-glyph 的同处处理）。 */
+  /* v5.5.0：左半侧雷达扫掠 / 回波闪烁 / 频谱跳动一律归零 */
+  .holo-radar::after, .holo-radar i, .holo-bars i { animation: none !important; }
+  .holo-radar i { opacity: .6 !important; }
+  .holo-bars i { height: 40% !important; }
   /* v5.4.0：首页全息面板的扫描线 / 故障字错位 / 呼吸灯一律归零 */
   .holo-panel::after, .holo-uptime.glitch::before, .holo-uptime.glitch::after, .holo-live i { animation: none !important; }
   .holo-card { transform: none !important; }
@@ -5846,4 +5850,74 @@ body:not(.linenum-off) .md-body > pre::before {
 .holo-now-label { font: 10px/1 var(--mono); letter-spacing: 2px; color: #8d86b8; }
 .holo-now-title { margin-top: 6px; font-size: 13px; color: #dfe7ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .holo-now-sub { font: 10px/1.5 var(--mono); color: #7e78a8; }
+
+
+/* ---------- v5.5.0：左半侧花样（雷达扫掠 / 信号频谱） ----------
+   技法来源（开源，就地署名）：
+     · 雷达扫掠 = fwdtools「Radar Sweep Scan Loader」与 CSDN「纯 CSS 雷达扫描动画」的
+       conic-gradient 扇形扫掠技法，这里改成"盘 + 一圈刻度 + 扫掠扇 + 回波点"
+     · 霓虹切角与配色 = sebyx07/cybercore-css（纯 CSS 赛博朋克框架）的霓虹美学
+   颜色按站长新规自由取（紫青 + 洋红 + 琥珀），不强行挂主题变量。
+   ⚠ 动效仅三处（扫掠 / 回波闪烁 / 频谱跳动），全部在 reduce 块归零。 */
+.holo-radar {
+  position: relative;
+  width: 108px; height: 108px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid rgba(122, 92, 255, .45);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, .10), transparent 62%),
+    #07070f;
+  box-shadow: inset 0 0 18px rgba(122, 92, 255, .25);
+  overflow: hidden;
+}
+/* 一圈刻度：repeating-conic-gradient 只画扇区线，比 SVG 便宜 */
+.holo-radar::before {
+  content: '';
+  position: absolute; inset: 6px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(140, 120, 255, .55) 0 .6deg, transparent .6deg 30deg);
+  -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
+          mask: radial-gradient(circle, transparent 62%, #000 63%);
+}
+/* 扫掠扇：conic-gradient 扇形 + rotate 动画 */
+.holo-radar::after {
+  content: '';
+  position: absolute; inset: 6px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(0, 240, 255, .55) 0deg, rgba(0, 240, 255, .12) 34deg, transparent 60deg, transparent 360deg);
+  animation: holo-sweep 4.6s linear infinite;
+}
+@keyframes holo-sweep { to { transform: rotate(360deg); } }
+/* 回波点：三个固定坐标的亮点，错峰闪烁 */
+.holo-radar i {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: #6ef0ff; box-shadow: 0 0 8px #6ef0ff;
+  animation: holo-echo 3.2s ease-in-out infinite;
+}
+.holo-radar i:nth-child(1) { left: 66%; top: 34%; animation-delay: .2s; }
+.holo-radar i:nth-child(2) { left: 38%; top: 62%; animation-delay: 1.1s; background: #ff6ea8; box-shadow: 0 0 8px #ff6ea8; }
+.holo-radar i:nth-child(3) { left: 72%; top: 70%; animation-delay: 2.0s; }
+@keyframes holo-echo { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* 信号频谱：一排高低不一的柱子（纯 CSS，装饰用） */
+.holo-bars { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin-top: 12px; }
+.holo-bars i {
+  flex: 1 1 0; min-width: 2px;
+  background: linear-gradient(180deg, #6ef0ff, rgba(122, 92, 255, .35));
+  height: 30%;
+  animation: holo-bar 1.9s ease-in-out infinite;
+}
+.holo-bars i:nth-child(3n) { background: linear-gradient(180deg, #ff6ea8, rgba(122, 92, 255, .35)); }
+.holo-bars i:nth-child(1) { animation-delay: .05s; } .holo-bars i:nth-child(2) { animation-delay: .18s; }
+.holo-bars i:nth-child(3) { animation-delay: .31s; } .holo-bars i:nth-child(4) { animation-delay: .44s; }
+.holo-bars i:nth-child(5) { animation-delay: .57s; } .holo-bars i:nth-child(6) { animation-delay: .70s; }
+.holo-bars i:nth-child(7) { animation-delay: .83s; } .holo-bars i:nth-child(8) { animation-delay: .96s; }
+.holo-bars i:nth-child(9) { animation-delay: 1.09s; } .holo-bars i:nth-child(10) { animation-delay: 1.22s; }
+.holo-bars i:nth-child(11) { animation-delay: 1.35s; } .holo-bars i:nth-child(12) { animation-delay: 1.48s; }
+@keyframes holo-bar { 0%, 100% { height: 22%; } 50% { height: 100%; } }
+/* 左半侧的"仪表行"：雷达 + 说明文字并排 */
+.holo-gauge { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.holo-gauge-text { font: 11px/1.7 var(--mono); color: #8d86b8; letter-spacing: 1px; min-width: 0; }
+.holo-gauge-text b { color: #cbb8ff; font-weight: 400; }
 

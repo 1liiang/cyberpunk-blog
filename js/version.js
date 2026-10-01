@@ -15,17 +15,28 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '5.4.3',
+    BUILD: '5.5.0',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20261001T2043+0800-buildvwq5',
+    BUILD_ID: '20261001T2049+0800-buildjv6g',
 
     /* 构建日期（随版本一起更新） */
     BUILT_AT: '2026-10-01',
 
     /* 工程日志：最新的一条放最前面 */
     LOG: [
+      {
+        version: '5.5.0',
+        date: '2026-10-01',
+        title: '左半侧加花样：雷达扫掠 + 信号频谱',
+        items: [
+          '照抄开源技法（站长新规：开源即可照抄，只需告知）：雷达扫掠取 fwdtools 的纯 CSS radar sweep 片段与 CSDN「纯 CSS 雷达扫描动画」的 conic-gradient 扇形技法；霓虹切角与配色参考 sebyx07/cybercore-css（纯 CSS 赛博朋克框架）',
+          '雷达盘 = 一圈刻度（repeating-conic-gradient + mask 挖空圆心）+ 扫掠扇（conic-gradient + rotate）+ 三颗错峰回波点；频谱 = 12 根高低跳动的柱子（量子化 delay）',
+          '两者都是纯 CSS、零外部脚本；动效三处全部进 reduce 块归零（扫掠/回波/频谱）',
+          '左半侧另加一行仪表文字（扫描频段 / 链路状态 / 遥测）'
+        ]
+      },
       {
         version: '5.4.3',
         date: '2026-10-01',
