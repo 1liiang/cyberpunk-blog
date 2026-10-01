@@ -2,7 +2,8 @@
 /* ============================================================
    tests/cases/37-v2-9-5-uiverse-b.js — v2.9.5 Uiverse 借法第二批
 
-   三项（同样只借技法，不搬组件）：
+   三项（当时按"只借技法，不搬组件"做的 —— ⚠ 该约定已于 2026-10-01 取消，
+   改为"要搬组件先报备、经站长同意后再落地"，见 HANDOVER §5）：
      ① 双色内发光卡片   · AnthonyPreite/tiny-shrimp-10 → .post-card:hover
      ② 旋转光晕搜索框   · Lakshay-art/curvy-earwig-22  → .search-field::before
      ③ 扫描线霓虹输入框 · MijailVillegas/grumpy-horse-85 → #ed-title 等

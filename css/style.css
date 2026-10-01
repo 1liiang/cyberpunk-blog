@@ -3890,7 +3890,8 @@ a:focus-visible { text-decoration: underline; }
    为什么换掉 emoji：emoji 是**彩色位图字体**，颜色不跟 CSS 变量走、各平台字形还不同
    （Windows 是黄色挂锁、macOS 是灰锁），在这个全站由 --hue 驱动的配色体系里像贴纸。
 
-   ⚠ 借法自（只借技法，不搬组件 —— 与 v2.9.4/v2.9.5 借 Uiverse 时的规矩一致）：
+   ⚠ 借法自（"只借技法、不搬组件"这条旧约定已于 2026-10-01 被站长取消，
+     改为"要搬先报备、同意后再落地"，见 HANDOVER §5；这一处仍是自绘、无第三方代码）：
      · React Bits「Electric Border」—— 通电边缘的辉光层次（这里落在锁梁的发光上）
      · React Bits「Target Cursor」—— "四角闭合/锁定"的意象（本站用切角锁体承接）
      · Uiverse 静态素材的纯 CSS 描边 + 扫描线技法
