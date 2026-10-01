@@ -9,3 +9,9 @@ desktop.ini
 .vscode/
 .idea/
 *.swp
+
+# 临时脚本（我自己跑一次性补丁/探针用的，不该进仓库 —— 首版漏挡，误收了 _p1_log.py）
+_tmp-*
+_tmp_*
+_*.py
+_*.js
