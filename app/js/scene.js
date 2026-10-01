@@ -91,11 +91,34 @@
     return def.atmo.slice();
   }
 
+  /* v5.7.0（P2）：低端设备开局少开最重的三层。
+     ⚠ 顺序必须与 atmo.js 的 DOWNGRADE_ORDER 开头一致（rain > stardust > signs）：
+       theme-boot.js 首绘前砍谁、atmo 运行时先摘谁，必须是同一批，
+       否则会出现"探针以为开着、其实没渲染"的错判。57 号用例钉着这条。
+     ⚠ 只在**自动**模式下生效 —— 用户手动勾选的层集不降级。 */
+  var LOW_END_DROP = ['rain', 'stardust', 'signs'];
+  function lowEndTier() {
+    try {
+      if (document.documentElement.getAttribute('data-tier') === 'low') return true;
+      /* theme-boot.js 若因异常没跑到，这里补判一次（两个脚本可能各自被缓存击穿） */
+      if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+      var mem = Number(navigator.deviceMemory);
+      if (isFinite(mem) && mem > 0 && mem <= 4) return true;
+      var cpu = Number(navigator.hardwareConcurrency);
+      if (isFinite(cpu) && cpu > 0 && cpu <= 4) return true;
+    } catch (e) { /* 忽略 */ }
+    return false;
+  }
+  function trimForTier(list) {
+    if (!lowEndTier()) return list;
+    return list.filter(function (id) { return LOW_END_DROP.indexOf(id) === -1; });
+  }
+
   /* 该场景应生效的层集：手动列表优先；否则「模式 × 场景」的自动温差 */
   function effectiveLayers(scene) {
     var manual = readManual();
-    if (manual) return manual;
-    return layersFor(scene, readMode());
+    if (manual) return manual;                 /* 手动：尊重用户，不降级 */
+    return trimForTier(layersFor(scene, readMode()));
   }
 
   /* 把层集写进 DOM 并通知氛围运行时（惰性取用 + 降级 ——

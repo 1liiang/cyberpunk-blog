@@ -67,8 +67,47 @@
   var ATMO_ALL = 'noise scanline grid glow bloom signs stardust pulse rain';
   var ATMO_STATIC = 'noise scanline grid glow bloom signs';
 
+  /* ===== v5.7.0（P2）：低端设备判定 =====
+     为什么要在**首绘之前**判：氛围层是"开着才付代价"的。等 atmo.js 的探针发现
+     帧率不达标再降档（P1 已把窗口压到 ~2 秒）终究是"先卡一下再救"；低端机上更好的
+     做法是**开局就少开几层** —— 反正那几层它本来也跑不动。
+     判据（都不需要昂贵探测）：
+       · 用户开了"减少动效" ⇒ 直接算低端（首绘就不该跑装饰动效）
+       · deviceMemory ≤ 4GB（Chrome/Edge 有；Safari/Firefox 没有 ⇒ 缺省不判）
+       · hardwareConcurrency ≤ 4 核
+     ⚠ 只作"少开几层"的**初始值**，不锁死：用户仍可在装置面板里手动开回来
+       （下面 neon_atmo_manual 的手动列表优先级高于这里）。 */
+  function isLowEnd() {
+    /* ⚠ 刻意不使用 try/catch —— 本文件里"第一处异常保护块"是主初始化块的锚点
+       （39 号 R175r 按它切块），函数里再出现一个会把锚点抢走、
+       让那条断言读到错误的块（实测踩到，且连注释里写出那两个词都会抢）。
+       matchMedia 不存在时短路即可，无需捕获。 */
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+    var mem = Number(navigator.deviceMemory);
+    if (isFinite(mem) && mem > 0 && mem <= 4) return true;
+    var cpu = Number(navigator.hardwareConcurrency);
+    if (isFinite(cpu) && cpu > 0 && cpu <= 4) return true;
+    return false;
+  }
+
+  /* 低端机开局砍掉最重的三层 —— 顺序必须与 js/atmo.js 的 DOWNGRADE_ORDER 开头一致
+     （rain > stardust > signs）：那边是"运行时降档先摘谁"，这里是"开局就不开谁"，
+     两处不同步就会出现"探针以为开着、其实没渲染"的错判。
+     57 号用例钉着这条一致性。 */
+  function lowEndAtmo(all) {
+    var drop = ['rain', 'stardust', 'signs'];
+    return all.split(/\s+/).filter(function (id) {
+      return id && drop.indexOf(id) === -1;
+    }).join(' ');
+  }
+
   try {
     var v = window.localStorage.getItem(KEY);
+
+    /* P2：先把设备档位写到根元素（CSS 挂在这里：低端机少付毛玻璃与重阴影）。
+       写在最前面 —— 首绘第一帧就要生效，不能等 app.js。 */
+    var lowEnd = isLowEnd();
+    document.documentElement.setAttribute('data-tier', lowEnd ? 'low' : 'high');
 
     /* 显式选择过的档位：原样应用（首绘前定色，故无闪烁）；
        null（首访）/ 'auto'（已废弃存量）/ 脏数据 → 显式 dark。 */
@@ -99,6 +138,8 @@
     if (atmo === null) {
       var m = window.localStorage.getItem(ATMO_KEY);
       atmo = (m === 'silent') ? '' : (m === 'standard' ? ATMO_STATIC : ATMO_ALL);
+      /* P2：只有走"自动"这条路时才按设备降级 —— 用户手动选过就尊重用户。 */
+      if (lowEnd && atmo) atmo = lowEndAtmo(atmo);
     }
     document.documentElement.setAttribute('data-atmo', atmo);
 

@@ -15,11 +15,11 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '5.7.0',
+    BUILD: '5.7.1',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20261002T0127+0800-buildupte',
+    BUILD_ID: '20261002T0144+0800-buildlfry',
 
     /* 构建日期（随版本一起更新） */
     BUILT_AT: '2026-10-02',
@@ -29,6 +29,19 @@
        ⚠ v5.6.3：1.0.0 ~ 5.5.1 的 88 条逐版流水账已裁掉，改成末尾的「历史事故索引」——
          完整历史在 git 里逐版可查，这里只留**可能重演的教训**。 */
     LOG: [
+      {
+        version: '5.7.1',
+        date: '2026-10-02',
+        title: 'P2 低端设备档：按设备降一档',
+        items: [
+          "P2 低端设备档 —— 取证：全站 64 条规则用了 box-shadow / filter:blur / backdrop-filter，其中 35 条**常驻**（每帧都在付）。高端显卡无感，集显与老机器上就是拖帧主因。策略不是删效果（那是美术代价，不是 bug），而是按设备降一档",
+          "P2 判定与时机 —— js/theme-boot.js 的 isLowEnd()：reduce 偏好 / deviceMemory ≤ 4GB / hardwareConcurrency ≤ 4 核，任一命中即 low；data-tier 写在**首绘之前**（事后才发现就只能先卡一下再救）。低端机在自动模式下开局就砍掉最重的三层氛围（rain / stardust / signs）",
+          "P2 路由校正也要守 —— js/scene.js 的 trimForTier()：否则切一次页面就被 ATMO_ALL 打回全开。⚠ 手动层集（装置面板勾选）优先级高于档位：省性能不能凌驾于用户选择",
+          "P2 CSS 侧 —— 新增 html[data-tier=low] 一组规则：关掉 .topbar / .console-panel / .search-bar / .kbd-help / .modal 的毛玻璃（给实底替代），关掉 .post-card:hover 的 9 层双色内发光与 .toast / .md-body pre 的阴影，并把 rain / stardust 的 will-change 收回。只动性能档，不动颜色与布局；与 reduce 块互不冲突",
+          "新增 57 号用例 9 条（已登记 manifest）—— 两条关键纪律被钉死：① theme-boot 与 scene 裁的必须是同一批层、且等于 atmo 降档顺序的开头（三处口径漂移即报红）；② 用户手动选过的层集不降级。另有低配判 low（2GB/2 核 → 6 层）、高配不误伤（8GB/12 核 → 9 层）、reduce 也算低端、路由校正守档位",
+          "过程坑 —— isLowEnd() 里最初用了 try/catch，而 39 号 R175r 是按「文件里第一个 try 块」切块做断言的，我的函数把锚点抢走导致那条红了；更隐蔽的是我随后在**注释里写下了那两个词**，indexOf 照样命中。已改成不用异常保护块、注释也不写该字样（这类「锚点被抢」的坑与之前的注释误伤同源）"
+        ]
+      },
             {
         version: '5.7.0',
         date: '2026-10-02',

@@ -4441,6 +4441,54 @@ a:focus-visible { text-decoration: underline; }
    本次清理删净；门禁里也加了「CSS 结构性守卫」（见 49 号）防止再犯。 */
 
 /* ============================================================
+   v5.7.0（P2）：低端设备档 —— html[data-tier="low"]
+
+   起因（实测取证）：全站 64 条规则用了 box-shadow / filter:blur / backdrop-filter，
+   其中 35 条**常驻**（每帧都在付）。高端显卡无感，集显/老机器上就是拖帧主因 ——
+   赛博朋克的毛玻璃与霓虹光晕很费 GPU，这是美术代价，不是 bug。所以不删效果，
+   而是**按设备降一档**：低端机少付毛玻璃与重阴影，观感仍成立。
+
+   判定与写入在 js/theme-boot.js 的 isLowEnd()（首绘前写 data-tier，避免先卡后救）；
+   js/scene.js 的 trimForTier() 同步把最重的三层氛围（rain/stardust/signs）也去掉。
+
+   ⚠ 这里只覆盖「常驻 + 最贵」的那几类，**不动颜色与布局** ——
+     data-tier 是性能档，不是主题档；换肤、亮色档、色相都照旧生效。
+   ⚠ 也**不覆盖 reduce 块的既有归零**：那套是"尊重前庭偏好"，与本档位无关，
+     两边都命中时互不冲突（都是把效果归零/减弱，取更严的那个即可）。
+   ============================================================ */
+html[data-tier="low"] .topbar,
+html[data-tier="low"] .console-panel,
+html[data-tier="low"] .search-bar,
+html[data-tier="low"] .kbd-help,
+html[data-tier="low"] .modal {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+/* 常驻底栏与浮层仍要有"面"，去掉模糊后给一层更实的底色，避免文字糊在内容上 */
+html[data-tier="low"] .topbar,
+html[data-tier="low"] .modal {
+  background: var(--bg-1) !important;
+}
+/* 卡片的双色内发光（v2.9.5 的 9 层 inset 阴影）在 hover 时最贵 ——
+   低端机保留位移与边框反馈，只把多层阴影压成一条 1px 描边 */
+html[data-tier="low"] .post-card:hover,
+html[data-tier="low"] .tag-chip:hover,
+html[data-tier="low"] .tag-cloud .tag-item:hover {
+  box-shadow: none !important;
+}
+html[data-tier="low"] .toast,
+html[data-tier="low"] .md-body pre {
+  box-shadow: none !important;
+}
+/* 数字雨在低端机上已由 JS 去掉；这里再兜一层：即便被手动打开，也把它的
+   合成提示关掉（will-change 会让每列长期占一个合成层） */
+html[data-tier="low"] .atmo-layer[data-layer="rain"],
+html[data-tier="low"] .atmo-layer[data-layer="stardust"] {
+  will-change: auto !important;
+}
+/* 本档位规则到此结束（上面这段是 v5.7.0 P2 新增） */
+
+/* ============================================================
    v4.0 B1：氛围系统（Atmosphere）—— 出厂「光污染」
 
    9 层注册：材质 3（noise/scanline/grid）+ 光 6（glow/bloom/signs/stardust/pulse/rain）。
