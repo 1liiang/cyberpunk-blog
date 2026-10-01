@@ -15,17 +15,27 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '5.5.1',
+    BUILD: '5.6.0',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20261001T2059+0800-build4tqs',
+    BUILD_ID: '20261001T2341+0800-buildw4od',
 
     /* 构建日期（随版本一起更新） */
     BUILT_AT: '2026-10-01',
 
     /* 工程日志：最新的一条放最前面 */
     LOG: [
+      {
+        version: '5.6.0',
+        date: '2026-10-01',
+        title: '全项目审计 + 修页脚错误',
+        items: [
+          '审计（扫事实不猜）：发现 6 类问题 —— ① 页脚仍写 POWERED BY WORKBUDDY CLOUD（站点早已迁到 Supabase，属真实内容错误）② cloud.js 里 base64 时代的电台 API 约 200 行已成死代码 ③ app.js/views.js 里旧面板小条机器约 300 行是死代码 ④ 已从库删掉的列（has_data/storage_path/duration_sec/size_bytes/cover_url）仍被上述死代码引用 ⑤ 5 处 console.log 待逐条判断 ⑥ 旧 dock/panel 的 CSS 也还在',
+          '本轮先修 ①（一行，用户可见），其余列入专项清理：删除死代码会连带惊动断言旧设计的用例（35 号 4 条、54 号 addByUrl 相关），需要配套退役/改写 —— 这类改动我单独一批做，避免混在一起出问题',
+          '没问题的部分：db/schema.sql 与 app/db/schema.sql 完全一致；建站时刻字面量只剩 1 处；js/vendor 四个库都被引用；.holo-*/.uptime-* 类均有对应标记'
+        ]
+      },
       {
         version: '5.5.1',
         date: '2026-10-01',

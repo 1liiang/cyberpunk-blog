@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v5.5.1（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v5.6.0（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -345,6 +345,22 @@ cyberpunk-blog/
 3. 断点块不得新增 → 窄屏堆叠规则并进既有 `@media (max-width: 768px)` 块
 4. 动效（glitch / 扫描线 / 倾斜）必须在 reduce 块里显式归零
 5. 首页断言很多（45/46/48 号等）→ 改版后按"先取原文件、再最小范围改"的方式更新，**不要全局替换**
+
+### 全项目审计结论（v5.6.0，待专项清理）
+
+扫描脚本：`_push/tools/audit-all.js`（扫事实，不猜）。**已修**：页脚 POWERED BY WORKBUDDY CLOUD → SUPABASE。
+**待清理**（按顺序，每条都要配套改用例）：
+
+| 项 | 证据 | 处理要点 |
+|---|---|---|
+| ① cloud.js 死 API | readAudio / probeDuration / trackData / create / addTrack / probeSourceUrl / neteaseEmbedUrl / isEmbedUrl / addByUrl / playUrl / RADIO_DATA_FIELDS / radioCache×15 / RADIO_VIEW_ONLY / RADIO_WRITE_FIELDS —— **外部零调用** | 删除后，**35 号用例有 4 条断言要退役**（R140c/R141d/R142b/R143，测的是已废弃的 base64 管道）、**54 号有 2 条要改用 `add`**（addByUrl 已不存在） |
+| ② app.js/views.js 死面板机器 | paintDock×8 / paintPanel×12 / RadioUI×22 / loadRadioTracks×8 / submitAddTrack / showAddForm / formDraft / askRemoveTrack / moveTrack / restoreFormDraft / radioDockView（views.js×4） | 约 300 行；容器早已删除，函数体也已是空实现 |
+| ③ 已删列的残留引用 | has_data / storage_path / duration_sec / size_bytes / cover_url | ⚠ 它们**全都藏在 ① ② 的死代码里** —— 死代码删净即自动消失；但要**先确认**没有活路径引用 |
+| ④ 旧 dock/panel CSS | .radio-dock* / .radio-panel* / .radio-track* / .radio-form* | ⚠ 别误删在用的：.radio-board / .radio-compose / .radio-field / .radio-select 是**新电台页**在用的 |
+| ⑤ console.log | 5 处 | 逐条判断（多为 [NEON] 诊断） |
+
+⚠ **过程教训（本轮实锤）**：用"括号配平"批量退役断言时，**遇到内部含分号/嵌套括号的断言会配平失败**（本轮 2 条失败并连带把 54 号改出运行时错）。
+正解：断言退役要**一条一条**做，或者改用"整文件从远端取回 + 精确最小替换"的方式 —— 不要写通用批处理去啃它们。
 
 ## 7. 未完成 / 待决定
 
