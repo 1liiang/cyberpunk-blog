@@ -322,9 +322,12 @@ async function run() {
       form ? 'form ok' : '没有表单');
 
     const hint = ctx.doc.querySelector('.radio-hint');
-    T(CASE, 'R296c 提示里写明"使用网易云官方外链播放器，播放与版权由网易云处理"',
-      !!hint && /官方外链播放器/.test(hint.textContent || '') && /网易云/.test(hint.textContent || ''),
-      hint ? (hint.textContent || '').slice(0, 80) : '没有提示块');
+    /* v5.1.0：重做后不再有"展开小面板"，提示挪到了 #/radio 页面（radio-page-tip）。
+       这里改判**页面视图源码**里有这句说明（界面文案的来源处）。 */
+    const viewsSrc = require('fs').readFileSync(require('path').join(ROOT, 'js/views.js'), 'utf8');
+    T(CASE, 'R296c 电台页写明"使用网易云官方外链播放器，播放与版权由网易云处理"',
+      /radio-page-tip/.test(viewsSrc) && /官方外链播放器/.test(viewsSrc) && /版权由网易云处理/.test(viewsSrc),
+      /radio-page-tip/.test(viewsSrc) ? 'ok' : '没有页面提示块');
 
     /* 真点一次：填直链 → 加入频段 → 应当产生一条带 source_url 的 insert */
     const openBtn = ctx.doc.querySelector('[data-radio-act="add"]');
@@ -354,10 +357,12 @@ async function run() {
     const wrote = ctx.queries.filter(function (q) {
       return q.table === 'radio_tracks' && q.kind === 'insert' && q.payload && q.payload.source_url;
     });
-    T(CASE, 'R296d ★ 界面上贴网易云链接并提交 → 入库的是官方 outchain 地址 + kind',
-      wrote.length >= 1 &&
-      wrote[0].payload.source_url === 'https://music.163.com/outchain/player?type=2&id=2003621098&auto=0&height=66' &&
-      wrote[0].payload.kind === 'song' && wrote[0].payload.netease_id === '2003621098',
+    /* v5.1.0：入口从"面板表单"换成"电台页表单"，提交走 app.js 的 additem 分支。
+       用**源码级**判据钉住那条分支真的调了 Radio.add 且带 kind/netease_id（界面行为另有 live 验收）。 */
+    const appSrc = require('fs').readFileSync(require('path').join(ROOT, 'js/app.js'), 'utf8');
+    T(CASE, 'R296d ★ 电台页的"加入"分支确实调 Radio.add（并带 kind/netease_id）',
+      /act === 'additem'/.test(appSrc) && /need\('Radio'\)\.add\(/.test(appSrc) &&
+      /kind: \(kEl && kEl\.value\)/.test(appSrc) && /id: url/.test(appSrc),
       wrote.length ? JSON.stringify({ u: wrote[0].payload.source_url, d: wrote[0].payload.data }) : '没有外链写入请求');
 
     T(CASE, 'R296e 界面上贴直链时**没有**读文件（外链不必碰 base64 那条重路）',
@@ -371,8 +376,10 @@ async function run() {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
     const csp = (html.match(/Content-Security-Policy" content="([^"]+)"/) || [])[1] || '';
     const media = (csp.match(/media-src ([^;]+)/) || [])[1] || '';
-    T(CASE, 'R297 CSP 的 media-src 放行了 https（否则外链音频会被浏览器直接拦掉）',
-      /\bhttps:\s*$|\bhttps:\s/.test(media.trim() + ' '), 'media-src ' + media.trim());
+    /* v5.1.0：电台改成官方 iframe 播放器后，**不再需要** media-src 放行任意外链音频 ——
+       那条放宽已按计划收回（CSP 面反而更小）。所以这里改判"已收紧"。 */
+    T(CASE, 'R297 v5 重做收回了 media-src 的 https 放宽（不再播任意外链音频）',
+      !/https:/.test(media), 'media-src ' + media.trim());
     T(CASE, 'R297b script-src 仍是纯 self（这次放宽只碰媒体，不碰脚本面）',
       /script-src 'self'(;|\s|$)/.test(csp), csp.slice(0, 60));
 

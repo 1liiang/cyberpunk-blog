@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v5.0.0（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v5.1.0（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -159,6 +159,17 @@ cyberpunk-blog/
   （`paintDock → paintPanelProgress` 直接读 document），那是**测试环境产物**，不是线上缺陷。
 - ⚠ **`create or replace view` 不能改列序**：给视图加列必须追加到 SELECT 末尾，
   否则 `42P16: cannot change name of view column …`（实测踩到）。
+
+### v5.1.0：电台的常驻控制台（切页面不断歌的关键）
+
+- 官方播放器 iframe 挂在 **#app 之外**（index.html 的 `#radio-stage`）。这是唯一要点：
+  iframe 一旦位于会被路由重绘的区域里，切页面就重载、歌就断（参考博客专门写过这个坑）。
+- `paintStage()` **只在目标地址变化时**重建 iframe；地址不变则什么都不做（否则等于手动断歌）。
+- `data-mode` 由路由在 `mini`（右下小条）/ `full`（电台页大控制台）间切换 —— 同一台机器、两种体型，
+  **不搬动 DOM**（搬动 iframe 有重载风险）。
+- ⚠ 三个坑：① 本项目**没有 askConfirm**，确认框是 `openModal(title, html, actions)`；
+  ② 启动调用必须放在所有 var 赋值之后（var 提升会给你 undefined，启动直接 TypeError）；
+  ③ 降级用例会跑在**没有 document** 的环境里 —— 电台相关函数一律加 `typeof document === 'undefined'` 守卫。
 
 ### v5.0.0：电台重做（网易云条目）
 
