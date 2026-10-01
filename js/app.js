@@ -1726,7 +1726,12 @@ function route() {
   }
 
   /* 渲染迷你条（只在状态变化时调用，不整页重绘） */
+  /* v5.2.0：旧小条已移除。保留空实现是为了不动那 6 处调用点
+     （删函数会连锁 ReferenceError；清空实现更安全，也让旧入口彻底失效）。
+     ⚠ 真正的播放界面是 #app 之外的 #radio-stage（见 paintStage）。 */
   function paintDock() {
+    return;
+    /* eslint-disable no-unreachable */
     if (!radioDockEl) return;
     var st = window.NEONRadio ? window.NEONRadio.state() : null;
     if (!st) return;
@@ -1814,6 +1819,10 @@ function route() {
        list() 3s 不返回，面板死活打不开）。
        正解：同步渲染骨架（loading 态）→ 立刻 bind → 后台补数据再重绘。 */
   function openRadioPanel() {
+    /* v5.2.0：旧面板已废弃 —— 任何想"打开面板"的调用统一改成进电台页 */
+    location.hash = '#/radio';
+    return;
+    /* eslint-disable no-unreachable */
     RadioUI.panelOpen = true;
     paintPanel();      /* 先出面板（此刻 RadioUI.rows 可能是旧值/空，先给骨架） */
     paintDock();
@@ -1876,6 +1885,8 @@ function route() {
 
   /* ---------- 事件绑定（代理，绑一次） ---------- */
   function bindRadioDock() {
+    return;   /* v5.2.0：旧小条已移除（理由见 paintDock） */
+    /* eslint-disable no-unreachable */
     if (!radioDockEl || radioDockEl._radioBound) return;
     radioDockEl._radioBound = true;
 

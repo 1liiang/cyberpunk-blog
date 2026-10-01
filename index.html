@@ -107,7 +107,8 @@
   <script defer src="js/boot.js?v=5.1.2"></script>
   <!-- v2.8.0：电台播放器内核。必须在 app.js 之前 —— app 初始化时要调它。
        纯逻辑无 DOM，界面由 app.js 注入，便于沙箱测试。 -->
-  <script defer src="js/radio.js?v=5.1.2"></script>
+  <!-- v5.2.0：js/radio.js（<audio> 播放内核）已随旧小条一并撤下。
+     新电台用**网易云官方 iframe 播放器**，不再需要自建内核。 -->
   <script defer src="js/app.js?v=5.1.2"></script>
   <!-- v4.3 B4：装置 —— 点击反馈（tap.js）+ 命令终端（console.js，惰性读
        NEONControls / NEONRadio / NEONScene；终端 DOM 首次唤起才建） -->
@@ -164,7 +165,8 @@
   <!-- v2.8.0：电台迷你播放器。固定在页面左上角（topbar 之下），
        同样挂在 #app 之外 —— 它是常驻件，路由切换不能重建它，
        否则音频会被打断。内容由 app.js 注入（CSP 禁内联脚本）。 -->
-  <div class="radio-dock" id="radio-dock" hidden></div>
+  <!-- v5.2.0：旧电台小条（#radio-dock）已移除 —— 新的常驻控制台（#radio-stage）接管播放，
+       留着它会出现两个电台入口，且点它展开的是已废弃的旧面板。 -->
 
   <header class="topbar">
     <div class="topbar-inner">
@@ -176,7 +178,31 @@
     </div>
   </header>
 
-  <main class="wrap" id="app" tabindex="-1">
+    <!-- v5.1.0：电台常驻控制台。**挂在 #app 之外**是刻意的 ——
+       官方播放器 iframe 一旦待在会被路由重绘的区域里，切页面就会重载、歌就断了
+       （参考博客里专门写过这个坑）。放这里则切页面不断歌。
+       data-mode 由路由切换：mini（右下角小条）/ full（电台页的大控制台）。 -->
+  <section id="radio-stage" class="radio-console" data-mode="mini" hidden aria-label="电台">
+    <div class="rc-case">
+      <div class="rc-tune">
+        <span class="rc-tune-scale" aria-hidden="true"></span>
+        <span class="rc-tune-needle" aria-hidden="true"></span>
+        <span class="rc-freq" data-rc-freq>--</span>
+      </div>
+      <div class="rc-body">
+        <div class="rc-grille" aria-hidden="true"></div>
+        <div class="rc-slot" data-rc-slot></div>
+        <div class="rc-side">
+          <span class="rc-vu" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          <div class="rc-title" data-rc-title>电台待命</div>
+          <div class="rc-sub" data-rc-sub>网易云官方外链播放器</div>
+          <button type="button" class="rc-knob" data-radio-act="tune" aria-label="打开电台页" title="打开电台页"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+<main class="wrap" id="app" tabindex="-1">
     <div class="empty-state"><span class="empty-glyph">▚</span><span class="empty-hint type-cursor">正在启动终端</span></div>
   </main>
 
@@ -220,29 +246,7 @@
        按"后退"会退回同一页而不是上一页。aria-label 给读屏一句人话。 -->
   <button type="button" class="to-top" id="to-top" aria-label="回到页面顶部" data-visible="0" title="回到顶部">▲</button>
 
-  <!-- v5.1.0：电台常驻控制台。**挂在 #app 之外**是刻意的 ——
-       官方播放器 iframe 一旦待在会被路由重绘的区域里，切页面就会重载、歌就断了
-       （参考博客里专门写过这个坑）。放这里则切页面不断歌。
-       data-mode 由路由切换：mini（右下角小条）/ full（电台页的大控制台）。 -->
-  <section id="radio-stage" class="radio-console" data-mode="mini" hidden aria-label="电台">
-    <div class="rc-case">
-      <div class="rc-tune">
-        <span class="rc-tune-scale" aria-hidden="true"></span>
-        <span class="rc-tune-needle" aria-hidden="true"></span>
-        <span class="rc-freq" data-rc-freq>--</span>
-      </div>
-      <div class="rc-body">
-        <div class="rc-grille" aria-hidden="true"></div>
-        <div class="rc-slot" data-rc-slot></div>
-        <div class="rc-side">
-          <span class="rc-vu" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-          <div class="rc-title" data-rc-title>电台待命</div>
-          <div class="rc-sub" data-rc-sub>网易云官方外链播放器</div>
-          <button type="button" class="rc-knob" data-radio-act="tune" aria-label="打开电台页" title="打开电台页"></button>
-        </div>
-      </div>
-    </div>
-  </section>
+
 
   <div id="toast-wrap" aria-live="polite"></div>
 </body>

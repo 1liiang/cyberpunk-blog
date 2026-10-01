@@ -4167,6 +4167,8 @@ a:focus-visible { text-decoration: underline; }
   .grid-bg, .scanlines, .bg-noise,
   /* v4.9.3：搜索页的背景插画也不进纸 —— 深色霓虹图打印出来是一片灰污，
      而且它只是装饰（文字在 .search-hero-inner 里，照常打印）。 */
+  /* v5.2.0：常驻电台控制台也不进纸（它是屏幕专属的实体机器造型）。 */
+  .radio-console,
   .search-hero::before, .search-hero::after,
   html, body {
     background: #fff !important;

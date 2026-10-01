@@ -305,13 +305,14 @@ async function run() {
        不装桩的话校验会（正确地）拦下提交，R296d 就测不到入库分支了。 */
     stubAudio(ctx.w, 'ok');
 
-    const dock = ctx.doc.getElementById('radio-dock');
-    if (dock) dock.dispatchEvent(new ctx.w.MouseEvent('click', { bubbles: true, cancelable: true }));
+    /* v5.2.0：旧小条已移除 —— 现在直接进电台页（表单在页面里，仅站长可见）。 */
+    ctx.w.location.hash = '#/radio';
+    await waitFor(function () { return !!ctx.doc.querySelector('[data-radio-compose]'); }, 4000);
 
     const ok = await waitFor(function () {
       return !!ctx.doc.querySelector('[data-radio-field="url"]');
     }, 4000);
-    T(CASE, 'R296 站长面板里出现"https 直链"输入框（能力真的摆在界面上）',
+    T(CASE, 'R296 站长在电台页能看到条目表单（能力真的摆在界面上）',
       ok, ok ? '' : (dock ? '点了 dock 仍没渲染表单' : '没有 #radio-dock'));
 
     const form = ctx.doc.querySelector('[data-radio-form]');

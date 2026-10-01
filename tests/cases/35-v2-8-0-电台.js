@@ -649,8 +649,8 @@ async function run() {
 
     /* 挂载点必须在 #app 之外 —— 否则路由重写会打断播放 */
     const bodyStart = html.indexOf('<main class="wrap"');
-    const dockIdx = html.indexOf('id="radio-dock"');
-    T('界面 · 挂载', 'R150 播放器容器挂在 #app 之外（路由重写不打断播放）',
+    const dockIdx = html.indexOf('id="radio-stage"');
+    T('界面 · 挂载', 'R150 ★ 播放器容器（#radio-stage）挂在 #app 之外（路由重写不打断播放；v5.2.0 起旧 dock 已移除）',
       dockIdx > 0 && dockIdx < bodyStart,
       'dock 位置 idx=' + dockIdx + '，main idx=' + bodyStart);
 
