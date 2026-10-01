@@ -4612,6 +4612,19 @@ body.has-radio .wrap { padding-top: 84px; }
   gap: 9px;
 }
 .radio-form[hidden] { display: none; }
+/* v4.9.9：网易云官方外链播放器（iframe）。它自带完整控件与品牌，
+   所以这里只负责"摆正、给个说明" —— 不加滤镜、不改它的颜色，
+   那是人家的播放器（改样式既做不到，也不合适）。 */
+.radio-embed { margin: 10px 0 4px; }
+.radio-embed-hint {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+.radio-embed-frame { display: block; border: 1px solid var(--line); background: #000; max-width: 100%; }
+
 .radio-field { display: flex; flex-direction: column; gap: 4px; }
 /* v4.9.5：音源二选一的分隔小标题（外链/内链）。做成一条带左侧色标的窄行，
    让"从这里开始是音源"在视觉上切开，不至于被当成又一个普通字段。 */

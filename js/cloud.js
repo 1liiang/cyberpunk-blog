@@ -809,6 +809,14 @@
   var RADIO_WRITE_FIELDS = RADIO_FIELDS.split(',').filter(function (c) {
     return RADIO_VIEW_ONLY.indexOf(c) < 0;
   }).join(',');
+  /* ---------- v4.9.9：网易云官方外链播放器 ----------
+     它不是"一条音频地址"，而是**一整个官方播放器**（iframe）。所以：
+       · 入库前不做音频校验（<audio> 当然加载不了它，会被误判为坏链接）
+       · 播放时不走 <audio>，由界面渲染 iframe（见 radio.js / views.js）
+     地址一律**规范化成 outchain 形式**后再存 —— 库里只有一种形态，判断逻辑才简单。 */
+  var NETEASE_EMBED_BASE = 'https://music.163.com/outchain/player?type=2&id=';
+  var NETEASE_EMBED_TAIL = '&auto=0&height=66';
+
   /* 单曲音频数据的读取字段（与上互斥，只给 playUrl 用） */
   var RADIO_DATA_FIELDS = 'id,data,mime';
   /* 已取回的 data URL 缓存：重播 / 上下一首来回切换不必重下整首。
@@ -1037,6 +1045,29 @@
       });
     },
 
+    /* 从用户贴的任何形式里认出网易云歌曲 id 并换成官方外链播放器地址：
+         · https://music.163.com/#/song?id=2003621098
+         · https://music.163.com/song/2003621098
+         · https://music.163.com/#/outchain/2/2003621098/m/use/html   ← 站长给的这种
+         · 2003621098（裸 id）
+       认不出返回 ''。**不联网、不猜**：只做本地字符串解析。 */
+    neteaseEmbedUrl: function (input) {
+      var s = String(input == null ? '' : input).trim();
+      if (!s) return '';
+      if (/^\d{4,}$/.test(s)) return NETEASE_EMBED_BASE + s + NETEASE_EMBED_TAIL;
+      if (!/music\.163\.com/i.test(s)) return '';
+      var m = /[?&]id=(\d{4,})/.exec(s) ||
+              /\/song\/(\d{4,})/.exec(s) ||
+              /\/outchain\/\d+\/(\d{4,})/.exec(s) ||
+              /\/song\?id=(\d{4,})/.exec(s);
+      return m ? (NETEASE_EMBED_BASE + m[1] + NETEASE_EMBED_TAIL) : '';
+    },
+
+    /* 这条地址是不是"官方外链播放器"（而不是音频文件） */
+    isEmbedUrl: function (url) {
+      return /^https:\/\/music\.163\.com\/outchain\/player/i.test(String(url || ''));
+    },
+
     /* 入库**前**先问浏览器一句："这个地址你到底能不能当音频加载？"
        v4.9.6 新增：站长第一次贴的是 B 站**网页地址**，库里存得好好的、
        播放时才报 "no supported sources" —— 句子里既像网络故障又像文件损坏，
@@ -1050,6 +1081,11 @@
        返回 { ok:true, duration } 或 { ok:false, reason }；**永不抛错**（调用方按 ok 分支）。 */
     probeSourceUrl: function (url) {
       return new Promise(function (resolve) {
+        /* ⚠ 官方外链（网易云 outchain）不是音频地址，**必须先于一切判断**直接放行：
+           <audio> 当然加载不了它，若走到音频校验就会被误判成坏链接，功能直接不可用。
+           （第一版把它插在"取 Audio"之后，于是"没有 Audio 的环境"先返回了降级原因 —— 测试抓住。） */
+        if (Radio.isEmbedUrl(url)) { resolve({ ok: true, embed: true, duration: null }); return; }
+        var A = (typeof window !== 'undefined') ? window.Audio : null;
         var A = (typeof window !== 'undefined') ? window.Audio : null;
         if (!A) { resolve({ ok: false, reason: '当前环境无法试听校验，请自行确认地址可用' }); return; }
         var audio = null, timer = null, done = false;

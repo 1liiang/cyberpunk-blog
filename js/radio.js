@@ -89,6 +89,10 @@
   var listeners = {};
   var urlFetcher = null;      /* function(row) -> Promise<string | {url, ttl}> */
   var errStreak = 0;          /* 连续加载失败计数（防"整队列都是坏文件"时无限重试） */
+  /* v4.9.9：当前曲目若是「官方外链播放器」（网易云 outchain），这里是它的地址，否则空。
+     ⚠ 必须显式声明：本文件是 'use strict'，给未声明的变量赋值会直接抛 ReferenceError，
+       而且只在"切到那首歌"的瞬间才炸 —— 语法检查与静态断言都看不出来。 */
+  var embedUrl = '';
 
   /* ---------- 事件 ---------- */
   function emit(evt, payload) {
@@ -158,6 +162,22 @@
          「库内 data URL」（v2.9.0），内核不该知道存储细节，只管把行交给数据层。 */
       var got = normalizeSource(await urlFetcher(row));
       if (!got || !got.url) throw new Error('无法获取播放地址');
+
+      /* v4.9.9：网易云官方外链播放器 —— 它不是给 <audio> 的地址，而是"一整个官方 iframe"。
+         所以这里**不碰 audio**（设了 src 只会得到一句"无法播放"），
+         只把地址交给状态，由界面渲染 iframe；本站自己的播放/进度对它无意义。 */
+      if (/^https:\/\/music\.163\.com\/outchain\/player/i.test(got.url)) {
+        try { audio.pause(); } catch (e) {}
+        try { audio.removeAttribute('src'); } catch (e2) {}
+        embedUrl = got.url;
+        curTime = 0;
+        playing = false;
+        loading = false;
+        errText = '';
+        pushState();
+        return;
+      }
+      embedUrl = '';   /* 换回普通曲目：清掉外链态（否则界面会一直挂着上一个 iframe） */
       signTtlSec = got.ttl;
       signAt = Date.now();
 
@@ -231,6 +251,8 @@
 
   async function doPlay() {
     if (!audio) return false;
+    /* 外链曲目由官方播放器自己发声，本站的 play() 无事可做（也不该报错） */
+    if (embedUrl) { pushState(); return false; }
     if (pos < 0) {
       if (!order.length) return false;
       pos = 0;

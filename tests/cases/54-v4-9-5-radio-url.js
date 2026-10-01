@@ -255,6 +255,42 @@ async function run() {
       r3 && r3.ok === false && /无法试听校验/.test(String(r3.reason)), JSON.stringify(r3));
   }
 
+
+  /* ================= ④c 网易云官方外链播放器（v4.9.9）================= */
+  {
+    const c = bootCloud();
+    const N = c.NEON;
+    const WANT = 'https://music.163.com/outchain/player?type=2&id=2003621098&auto=0&height=66';
+
+    /* 站长给的就是 outchain 页那种形式；三种常见形式 + 裸 id 都要认 */
+    T(CASE, 'R299 认得出 outchain 页（站长截图里那种 /#/outchain/2/<id>/m/use/html）',
+      N.Radio.neteaseEmbedUrl('https://music.163.com/#/outchain/2/2003621098/m/use/html') === WANT,
+      N.Radio.neteaseEmbedUrl('https://music.163.com/#/outchain/2/2003621098/m/use/html'));
+    T(CASE, 'R299b 认得出歌曲页 /#/song?id=… 与 /song/…',
+      N.Radio.neteaseEmbedUrl('https://music.163.com/#/song?id=2003621098') === WANT &&
+      N.Radio.neteaseEmbedUrl('https://music.163.com/song/2003621098') === WANT);
+    T(CASE, 'R299c 裸歌曲 id 也认（最省事的一种贴法）',
+      N.Radio.neteaseEmbedUrl('2003621098') === WANT);
+    T(CASE, 'R299d 无关链接一律不认（不能把普通音频地址误判成网易云外链）',
+      N.Radio.neteaseEmbedUrl('https://cdn.test/a.mp3') === '' &&
+      N.Radio.neteaseEmbedUrl('') === '' && N.Radio.neteaseEmbedUrl('https://example.com/song/1') === '');
+
+    T(CASE, 'R299e isEmbedUrl 只认官方播放器地址',
+      N.Radio.isEmbedUrl(WANT) === true && N.Radio.isEmbedUrl('https://cdn.test/a.mp3') === false);
+
+    /* ⚠ 关键：外链**不能**去做音频校验 —— <audio> 当然加载不了 iframe 播放器，
+       不特判的话它会被当成坏链接拒掉，功能直接不可用。 */
+    const noAudio = bootCloud();
+    noAudio.w.Audio = undefined;              /* 连 Audio 都没有：能过 = 确实没走音频校验 */
+    const pr = await noAudio.NEON.Radio.probeSourceUrl(WANT);
+    T(CASE, 'R299f ★ 官方外链跳过音频校验直接放行（不特判就会被误判成坏链接）',
+      pr && pr.ok === true && pr.embed === true, JSON.stringify(pr));
+
+    /* 库里存的形态必须统一（只有一种形态，判断逻辑才简单） */
+    T(CASE, 'R299g 入库的是规范化后的 outchain 地址（不是用户贴的原始页地址）',
+      N.Radio.neteaseEmbedUrl('https://music.163.com/#/song?id=2003621098') === WANT);
+  }
+
   /* ================= ⑤ 界面：那条分支真的会调 addByUrl ================= */
   {
     /* ⚠ 必须显式 radio: true —— bootDom 默认**不装载** radio.js（见 common.js 的说明），
@@ -333,6 +369,25 @@ async function run() {
       /\bhttps:\s*$|\bhttps:\s/.test(media.trim() + ' '), 'media-src ' + media.trim());
     T(CASE, 'R297b script-src 仍是纯 self（这次放宽只碰媒体，不碰脚本面）',
       /script-src 'self'(;|\s|$)/.test(csp), csp.slice(0, 60));
+
+    T(CASE, 'R300 CSP 的 frame-src 放行了 music.163.com（否则官方播放器被浏览器拦掉）',
+      /frame-src[^;]*music\.163\.com/.test(csp), (csp.match(/frame-src[^;]*/) || ['(无 frame-src)'])[0]);
+    T(CASE, 'R300b script-src 仍是纯 self（两次 CSP 放宽都没碰脚本面）',
+      /script-src 'self'(;|\s|$)/.test(csp));
+
+  }
+
+
+  /* ================= ⑦ 内核：外链曲目不碰 <audio> ================= */
+  {
+    const radioSrc = require('fs').readFileSync(require('path').join(ROOT, 'js/radio.js'), 'utf8');
+    T(CASE, 'R301 内核认得出官方外链并转入 embed 态（不设 audio.src）',
+      /* ⚠ 别去匹配源码里的转义（radio.js 里写的是 music\.163\.com / outchain\/player），
+         只钉不带转义的确定事实 —— 少一次自找麻烦。 */
+      /outchain/.test(radioSrc) && /embedUrl = got\.url/.test(radioSrc) &&
+      /embedUrl = ''/.test(radioSrc), 'source 里查不到 embed 分支');
+    T(CASE, 'R301b 转 embed 态时先 pause 并清掉 audio.src（否则 <audio> 会去加载 iframe 地址而报错）',
+      /try \{ audio\.pause\(\); \} catch \(e\) \{\}[\s\S]{0,120}removeAttribute\('src'\)/.test(radioSrc));
   }
 
   return { pass: S.results.filter(function (r) { return r.pass; }).length,

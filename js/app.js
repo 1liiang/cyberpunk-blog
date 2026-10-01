@@ -1897,6 +1897,9 @@
            于是顺利入库，直到播放时才报一句 "no supported sources" —— 用户根本看不出
            是自己贴错了。校验放在入库前，这类错就进不了库。 */
       if (url) {
+        /* v4.9.9：网易云 —— 歌曲页 / outchain 页 / 裸 id 都认，统一换成官方外链播放器地址 */
+        var embed = need('Radio').neteaseEmbedUrl(url);
+        if (embed) { url = embed; if (urlEl) urlEl.value = embed; }
         var probe = await need('Radio').probeSourceUrl(url);
         if (probe && probe.ok === false) {
           formMsg(probe.reason || '这个地址无法播放，请换一条音频直链', 'err');

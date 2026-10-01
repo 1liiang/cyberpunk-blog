@@ -1438,6 +1438,17 @@
           '<button type="button" class="radio-btn" data-radio-act="close" aria-label="收起">✕</button>' +
         '</div>' +
 
+        /* v4.9.9：当前曲目是网易云外链 → 直接摆官方播放器（在它自己的界面上点播放）。
+           ⚠ 不用 auto=1 自动播放：浏览器会自动播放策略会拦，且访客可能被吓一跳。
+           ⚠ 不放进 dock：那条横条只有几十像素高，塞一个 iframe 只会两边都难用。 */
+        (st.embedUrl
+          ? '<div class="radio-embed">' +
+              '<div class="radio-embed-hint">网易云音乐 · 官方外链播放器（在播放器里点播放）</div>' +
+              '<iframe class="radio-embed-frame" src="' + esc(st.embedUrl) + '"' +
+                ' width="330" height="66" frameborder="0" allow="autoplay" loading="lazy"' +
+                ' title="网易云音乐外链播放器"></iframe>' +
+            '</div>'
+          : '') +
         '<div class="radio-now">' +
           '<div class="radio-now-cover' + (cur && cur.cover_url ? ' has-img' : '') + '"' +
             (cur && cur.cover_url ? ' style="background-image:url(' + esc(cur.cover_url) + ')"' : '') + '>' +

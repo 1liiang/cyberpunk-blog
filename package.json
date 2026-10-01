@@ -1,6 +1,6 @@
 {
   "name": "neon-diary",
-  "version": "4.9.8",
+  "version": "4.9.9",
   "private": true,
   "description": "NEON://DIARY — 赛博朋克个人博客（纯静态 + 云服务）",
   "type": "commonjs",
