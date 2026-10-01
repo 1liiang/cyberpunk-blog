@@ -30,7 +30,7 @@ async function run() {
     ];
     const readmeSrc = fs.existsSync(SRC.vendorReadme) ? fs.readFileSync(SRC.vendorReadme, 'utf8') : '';
     LIBS.forEach(function (lib) {
-      const localTag = new RegExp('<script[^>]*src="' + lib.file.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + '\\?v=[0-9.]+"').test(html);
+      const localTag = new RegExp('(?:<script[^>]*src|<link[^>]*href)="' + lib.file.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&') + '\\?v=[0-9.]+"').test(html);
       T('E 供应链', 'R16 ' + lib.name + ' 本地托管（js/vendor/ 带版本查询串）', localTag,
         localTag ? lib.file : '未引用本地文件');
 

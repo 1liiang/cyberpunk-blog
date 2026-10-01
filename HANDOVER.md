@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v5.2.0（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v5.3.0（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -159,6 +159,17 @@ cyberpunk-blog/
   （`paintDock → paintPanelProgress` 直接读 document），那是**测试环境产物**，不是线上缺陷。
 - ⚠ **`create or replace view` 不能改列序**：给视图加列必须追加到 SELECT 末尾，
   否则 `42P16: cannot change name of view column …`（实测踩到）。
+
+### v5.3.0：启动加速（把"详情页才需要的库"移出关键路径）
+
+- ⚠ **defer 的隐藏代价**：defer 脚本**全部执行完**才触发 DOMContentLoaded，而本站启动挂在那个事件上。
+  于是"只有文章详情才需要的 43KB 代码高亮库"会把**首页首绘**一起拖住（冷启动实测该请求 19 秒）。
+- 改法：marked / DOMPurify / highlight 三个库**按需注入**（`loadVendors()`），加载完自动重渲染；
+  另加三条 `rel="prefetch"` 空闲预取（同时让供应链断言 R16 继续成立 —— 它的引用形式判据已放宽为 script 或 link）。
+- 电台条目改为 `requestIdleCallback` 之后拉（访客多半没开电台，不该为首屏多等一次跨区往返）。
+- `preconnect` 到 Supabase 用 **// 形式**：R36 会把 index.html 里每个 `https://` 域名当成"被引用"并要求 CSP 逐字包含它。
+- ⚠ `bump.js` 失败时**只在末尾回显一行"改号"帮助**，很容易被当成成功 —— 判据永远是：看
+  `js/version.js` 的 BUILD、`index.html` 的 `?v=` 分布、`package.json` 三者是否同值。
 
 ### v5.2.0：旧小条已拆 + 一条改测试的教训
 

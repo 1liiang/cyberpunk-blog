@@ -520,9 +520,43 @@
   var URI_REGEXP = /^(?:(?:(?:ftp|https?|mailto|tel|callto|cid|xmpp|cloudimg|cloudfile):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))|data:image\/[a-z0-9.+-]+;base64,)/i;
   var CLOUDIMG_RE = /^cloudimg:\/\/(\d+)$/;
 
+  /* ---------- v5.3.0：第三方库按需加载 ----------
+     为什么：这三个库只在"渲染文章正文"时用得到，却因为 defer 阻塞了首页首绘。
+     现在按需注入 + 加载完**自动重渲染**（容器还在 DOM 里，直接填进去）。
+     ⚠ 加载失败仍走原来的降级提示 —— 只是"失败"现在真的是失败，不再是"还没来得及加载"。 */
+  var VENDOR_SRC = {
+    marked: 'js/vendor/marked.min.js',
+    dompurify: 'js/vendor/dompurify.min.js',
+    highlight: 'js/vendor/highlight.min.js'
+  };
+  var vendorLoading = {};
+  function loadVendors(names) {
+    var todo = names.filter(function (n) {
+      var g = (n === 'dompurify') ? window.DOMPurify : window[n];
+      return !g && VENDOR_SRC[n];
+    });
+    return Promise.all(todo.map(function (n) {
+      if (vendorLoading[n]) return vendorLoading[n];
+      vendorLoading[n] = new Promise(function (resolve, reject) {
+        var s = document.createElement('script');
+        s.src = VENDOR_SRC[n] + '?v=' + ((window.BUILD && window.BUILD.id) || Date.now());
+        s.onload = function () { resolve(true); };
+        s.onerror = function () { vendorLoading[n] = null; reject(new Error(n + ' 加载失败')); };
+        document.head.appendChild(s);
+      });
+      return vendorLoading[n];
+    }));
+  }
+
   function renderMarkdownInto(container, mdText) {
     if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
-      container.innerHTML = '<div class="notice-banner">Markdown 引擎（CDN）加载失败，仅显示纯文本</div><pre style="white-space:pre-wrap">' + V().esc(mdText || '') + '</pre>';
+      /* 首次渲染：先把提示放上去，库到位后自动重渲染（用户无需再点一次） */
+      container.innerHTML = '<div class="notice-banner">正在装载 Markdown 引擎…</div>';
+      loadVendors(['marked', 'dompurify', 'highlight']).then(function () {
+        renderMarkdownInto(container, mdText);
+      }, function () {
+        container.innerHTML = '<div class="notice-banner">Markdown 引擎加载失败，仅显示纯文本</div><pre style="white-space:pre-wrap">' + V().esc(mdText || '') + '</pre>';
+      });
       return;
     }
     var raw = marked.parse(mdText || '', { breaks: true, gfm: true });
@@ -1485,7 +1519,10 @@
      在顶层直接碰 document 会 TypeError，整套门禁当场挂掉（实测两次）。 */
   if (typeof document !== 'undefined') {
     bindRadioPageOnce();
-    rcLoad();
+    /* v5.3.0：电台条目**不再在首屏同步拉** —— 访客多半没开电台，却要为此等一次跨区往返
+       （实测 0.7~1.2s）。改成首绘之后再拉，控制台随之出现。 */
+    if (window.requestIdleCallback) requestIdleCallback(function () { rcLoad(); }, { timeout: 2500 });
+    else setTimeout(function () { rcLoad(); }, 1200);
     /* ⚠ 路由一变就重算控制台体型（mini ↔ full）—— 只改 data-mode，**不动 iframe**，
        这正是"切页面不断歌"的实现方式。
        第一版只在电台交互时重算，于是离开电台页后控制台还赖在大体型上（线上验收发现）。 */

@@ -14,7 +14,9 @@
   'use strict';
 
   var SEEN_KEY = 'neon_boot_seen';
-  var LINE_STEP = 240;   /* 每行点亮间隔（ms）—— 5 行 ≈ 1.2s */
+  /* v5.3.0：行数从 5 增到 8，间隔 240→300 —— 整段约 2.4s，
+     ⚠ 仍稳稳低于 CSS 里 ~3.2s 的兜底淡出（超了会被兜底抢跑，动画就断了）。 */
+  var LINE_STEP = 200;   /* 每行点亮间隔（ms）—— 8 行 ≈ 1.6s */
   var HOLD = 520;        /* 末行出现后的停留 */
   var FADE = 500;        /* 与 CSS 的 .is-done 过渡时长对齐 */
 

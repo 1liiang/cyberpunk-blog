@@ -116,9 +116,9 @@ async function run() {
     /* index.html：容器/行/进度条/跳过提示齐备且 aria-hidden。
        ⚠ 数行时要带边界：`class="boot-line` 的前缀会误匹配容器的 `class="boot-lines"`，
        故正则要求紧跟 `"` 或空格（实测第一版就数成了 6）。 */
-    T(CN, 'R216d 容器静态就位（5 行自检 + 进度条 + 跳过提示，aria-hidden）',
+    T(CN, 'R216d 容器静态就位（自检行 + 进度条 + 跳过提示，aria-hidden）',
       /class="boot-screen" id="boot-screen" aria-hidden="true"/.test(SRC.html) &&
-      (SRC.html.match(/class="boot-line[" ]/g) || []).length === 5 &&
+      (SRC.html.match(/class="boot-line[" ]/g) || []).length >= 5 &&   /* v5.3.0：动画加料到 8 行，判据改成"不少于 5" */
       /id="boot-bar-fill"/.test(SRC.html) &&
       /boot-skip/.test(SRC.html),
       '开机屏容器不完整');
