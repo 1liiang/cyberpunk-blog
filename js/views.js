@@ -1615,8 +1615,9 @@
   /* ---------- v5.4.0：首页两栏（左·全息读数 / 右·身份卡） ----------
      只产出标记；数据与事件在 app.js（injectHoloHero）。
      ⚠ 左侧**刻意沿用** class="uptime-hud" data-born="…" 与既有 id（uptime-days…）：
-       "建站时间单一来源"那条用例与每秒 ticker 因此都不用改 —— 只是它现在长在首页。
-     技法出处见 style.css 的 .uptime-hud / .holo-* 块（故障字、霓虹切角、全息倾斜，均开源实现）。 */
+       "建站时间单一来源"那条契约与每秒 ticker 因此都不用改 —— 只是它现在长在首页。
+     ⚠ 大读数那格带 data-holo-uptime + data-text：故障字需要 data-text 复制两层。
+     技法出处见 style.css（故障字 alddesign/cyberpunk-css；全息倾斜 DevCard 3D 思路）。 */
   function holoHero(state) {
     state = state || {};
     var days = state.days || 0, hours = state.hours || 0, mins = state.mins || 0, secs = state.secs || 0;
@@ -1625,13 +1626,28 @@
     var tags = state.tags || ['站长', '作者'];
     var nowPlaying = state.nowPlaying || null;
     function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function cell(id, label, value, unit) {
+      return '<div class="uptime-cell"><span class="uptime-label">' + label + '</span>' +
+        '<span class="uptime-num"><b id="' + id + '">' + value + '</b><i>' + unit + '</i></span></div>';
+    }
     return '' +
       '<div class="holo-hero">' +
-        /* v5.4.0：原 STATION UPTIME HUD 已**迁到首页左半侧**（站长选 B：同一信息不做两处两种长相）。
-           这里保留一个**隐藏的兼容节点**：看不见，只为承接 data-born 与 uptime-* 这几个 id ——
-           "建站时间单一来源"那条用例与每秒 ticker 因此都不必改。 */
-        '<section class="uptime-hud" data-born="' + SITE_BORN + '" hidden aria-hidden="true">' +
-          '<b id="uptime-days">—</b><b id="uptime-hours">—</b><b id="uptime-min">—</b><b id="uptime-sec">—</b>' +
+        '<section class="uptime-hud holo-readout" data-born="' + SITE_BORN + '" aria-label="站点在线时长">' +
+          '<div class="uptime-head">' +
+            '<span class="uptime-tag">STATION UPTIME</span>' +
+            '<span class="uptime-live"><i aria-hidden="true"></i>LIVE</span>' +
+          '</div>' +
+          '<div class="holo-uptime glitch" data-holo-uptime data-text="' + esc(String(state.uptimeText || '----')) + '">' +
+            esc(String(state.uptimeText || '----')) + '</div>' +
+          '<div class="uptime-grid">' +
+            '<div class="uptime-cell"><span class="uptime-label">BOOT DATE / 建站</span>' +
+              '<span class="uptime-num">' + esc(bootDate) + '</span></div>' +
+            cell('uptime-days', 'DAYS / 天', days, '天') +
+            cell('uptime-hours', 'HOURS / 时', pad(hours), '时') +
+            cell('uptime-min', 'MIN / 分', pad(mins), '分') +
+            cell('uptime-sec', 'SEC / 秒', pad(secs), '秒') +
+          '</div>' +
+          '<p class="uptime-foot">信号自 ' + esc(bootDate) + ' 起持续广播 · 每一秒都在变长</p>' +
         '</section>' +
         '<div class="holo-card" data-holo-card>' +
           '<div class="holo-id-top">' +
@@ -1650,6 +1666,7 @@
         '</div>' +
       '</div>';
   }
+
 
   /* ---------- 导出 ---------- */
   window.NEONViews = {
