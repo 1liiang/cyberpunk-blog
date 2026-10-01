@@ -1323,63 +1323,6 @@
      播放器本体**不在这里** —— 它在 #app 之外的 #radio-stage（常驻控制台），
      所以这一页只负责：说明 + 条目列表 + 管理入口。
      这样从别的页面切回电台，歌不会断（iframe 从未被销毁）。 */
-  function radioView(state) {
-    state = state || {};
-    var items = state.items || [];
-    var curId = state.curId;
-    var canManage = !!state.canManage;
-
-    var html = '<div class="page-head">' + pageNo('10') + '<h1>电台 / RADIO</h1>' +
-      '<div class="crumb">网易云官方外链播放器 · 共 <b>' + items.length + '</b> 条' +
-        (state.error ? ' · <b class="is-bad">' + esc(state.error) + '</b>' : '') +
-      '</div></div>';
-
-    html += '<div class="radio-page-tip">' +
-      '<span aria-hidden="true">◉</span> 播放器在下方<b>常驻控制台</b>里（切页面不断歌）；' +
-      '单曲摆 66px 官方条，歌单摆 430px 完整官方播放器。播放与版权由网易云处理。' +
-      (canManage ? ' <b>你是站长</b>：可在此增删与排序。' : '') +
-      '</div>';
-
-    if (!items.length) {
-      html += '<div class="empty-state"><span class="empty-glyph">◉</span><span class="empty-code">NO SIGNAL</span>' +
-        '<span class="empty-hint">还没有条目' + (canManage ? ' —— 贴一个网易云链接就能开播' : '') + '</span></div>';
-    } else {
-      html += '<ul class="radio-board">' + items.map(function (it) {
-        var isCur = String(it.id) === String(curId);
-        var tag = it.kind === 'playlist' ? '歌单' : '单曲';
-        return '<li class="radio-card' + (isCur ? ' is-current' : '') + '" data-rc-id="' + it.id + '">' +
-          '<button type="button" class="radio-card-play" data-radio-act="playitem" data-id="' + it.id + '"' +
-            ' aria-label="播放 ' + esc(it.title || '') + '"><span aria-hidden="true">' + (isCur ? '◉' : '▶') + '</span></button>' +
-          '<span class="radio-card-meta">' +
-            '<span class="radio-card-title">' + esc(it.title || '未命名') + '</span>' +
-            (it.artist ? '<span class="radio-card-artist">' + esc(it.artist) + '</span>' : '') +
-            '<span class="radio-card-id">' + tag + ' · ' + esc(String(it.netease_id || '')) + '</span>' +
-          '</span>' +
-          (canManage ? '<span class="radio-card-ops">' +
-            '<button type="button" class="radio-op" data-radio-act="up" data-id="' + it.id + '" aria-label="上移" title="上移">▲</button>' +
-            '<button type="button" class="radio-op" data-radio-act="down" data-id="' + it.id + '" aria-label="下移" title="下移">▼</button>' +
-            '<button type="button" class="radio-op radio-op-del" data-radio-act="del" data-id="' + it.id + '" aria-label="删除" title="删除">✕</button>' +
-          '</span>' : '') +
-        '</li>';
-      }).join('') + '</ul>';
-    }
-
-    if (canManage) {
-      html += '<div class="radio-compose" data-radio-compose>' +
-        '<div class="radio-src-head">新增条目（<b>贴链接或填 id</b>）</div>' +
-        '<label class="radio-field"><span>名称 *</span><input type="text" data-radio-field="title" maxlength="200" placeholder="单曲名 / 歌单名"></label>' +
-        '<label class="radio-field"><span>备注</span><input type="text" data-radio-field="artist" maxlength="200" placeholder="歌手 / 一句话说明，可留空"></label>' +
-        '<label class="radio-field"><span>网易云链接或 id *</span><input type="text" data-radio-field="url" inputmode="url" spellcheck="false" placeholder="歌曲页 / 歌单页 / outchain 页 / 裸 id"></label>' +
-        '<label class="radio-field"><span>类型</span><select data-radio-field="kind" class="radio-select">' +
-          '<option value="auto">自动识别（推荐）</option><option value="song">单曲</option><option value="playlist">歌单</option>' +
-        '</select></label>' +
-        '<div class="radio-form-ops"><button type="button" class="btn btn-sm btn-cyan" data-radio-act="additem">加入电台</button></div>' +
-        '<div class="radio-form-msg" data-radio-msg hidden></div>' +
-      '</div>';
-    }
-    return html;
-  }
-
 
   /* ---------- v5.4.0：首页两栏（左·全息读数 / 右·身份卡） ----------
      只产出标记；数据与事件在 app.js（injectHoloHero）。
@@ -1393,7 +1336,6 @@
     var bootDate = state.bootDate || '----------';
     var nickname = state.nickname || '漓光';
     var tags = state.tags || ['站长', '作者'];
-    var nowPlaying = state.nowPlaying || null;
     function pad(n) { return (n < 10 ? '0' : '') + n; }
     function cell(id, label, value, unit) {
       return '<div class="uptime-cell"><span class="uptime-label">' + label + '</span>' +
@@ -1436,12 +1378,6 @@
               '<span class="holo-tags">' + tags.map(function (x) { return '<span class="holo-tag">' + esc(x) + '</span>'; }).join('') + '</span>' +
             '</span>' +
           '</div>' +
-          '<div class="holo-now">' +
-            '<span class="holo-now-label">NOW · 当前条目</span>' +
-            '<div class="holo-now-title" data-holo-now>' + (nowPlaying ? esc(nowPlaying.title || '未命名') : '电台待命') + '</div>' +
-            '<div class="holo-now-sub" data-holo-now-sub>' +
-              (nowPlaying ? esc(nowPlaying.artist || '') : '还没有条目') + '</div>' +
-          '</div>' +
         '</div>' +
       '</div>';
   }
@@ -1469,7 +1405,6 @@
     marksView: marksView,
     holoHero: holoHero,
     SITE_BORN: SITE_BORN,
-    radioView: radioView,
     tagAdminView: tagAdminView,
     aboutView: aboutView,
     loginView: loginView,

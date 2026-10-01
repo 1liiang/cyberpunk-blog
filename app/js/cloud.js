@@ -792,34 +792,6 @@
     }
   };
 
-  /* ============================================================
-     v2.9.0 起的电台（RADIO）数据层
-     ------------------------------------------------------------
-     表 radio_tracks（RLS：读全开，增/改/删仅本人）：
-       id / title / artist / kind / netease_id / source_url
-       / sort_order / owner_id / created_at
-     读取视图 public_radio。
-
-     v5.6.1 清理：base64 时代（v2.9.0~v4.9.x）的那套 API 已成死代码，
-     按 HANDOVER §6 审计清单 ① 删除 —— readAudio / probeDuration / trackData /
-     create / addTrack / probeSourceUrl / neteaseEmbedUrl / isEmbedUrl /
-     addByUrl / playUrl，以及只为它们存在的 AUDIO_* 常量与音频 LRU 缓存。
-     ⚠ 历史教训仍要留在这里，别删：
-       ⚠⚠ 为什么音频不能放云存储（2026-09-29 真实故障，血泪）：
-          云存储**只服务登录用户**（官方文档原文：
-            「Storage is for signed-in users. Public Bucket/public URL access
-              is not exposed.」）
-          ⇒ 未登录访客调 createSignedUrl 直接 `MISSING_CREDENTIALS`。
-          而电台的需求是「**所有人**可听」—— 两者互斥，无解。
-       ⚠ 为什么 list() **绝不带 data**：否则开一次面板等于下整个曲库
-          （单行 base64 最坏 33.55M 字符）。
-     ⚠ v4.9.5 的外链音源时代还留过一条教训：官方外链播放器是**一整个 iframe**，
-       不是"一条音频地址" —— 入库前**不能**拿 <audio> 去校验它（必然误判成坏链接），
-       播放也**不得**走 <audio>。现在整条电台就是网易云条目，这两条由
-       buildEmbedUrl + 界面 iframe 天然满足。
-     ⚠ owner_id 是 **text** 不是 uuid —— 与 posts.owner_id 保持一致，
-       RLS 里 auth.uid() 返回 text，类型不匹配会报 42883。
-     ============================================================ */
   /* ⚠⚠ 签名 URL 有效期有**平台硬上限 3600 秒**（1 小时）—— SDK 源码里
      `validateSignedURLTTL` 对越界直接抛
      "Signed URL expiry must be an integer between 1 and 3600 seconds."
@@ -839,112 +811,7 @@
     if (t > SIGNED_TTL_MAX) t = SIGNED_TTL_MAX;
     return t;
   }
-  /* 读取侧视图：**数据就在同一个库**，所以匿名可读 = 所有人可听 */
-  var RADIO_READ_TABLE = 'public_radio';
-  var RADIO_WRITE_TABLE = 'radio_tracks';
-  /* ⚠ 白名单**故意不含 data** —— 列表只取展示必需字段。
-     带上 data 会让「打开列表」变成「下载整个曲库」，是致命的性能陷阱。
-     ⚠ 完整的 base64 退场纪要见本模块顶部注释（v5.6.1 清理）。 */
-  /* v5.0.0：电台改为「网易云条目」——只有单曲与歌单两种，不再有 base64 音频。
-     字段就这八个，列表请求因此极轻（旧版里 data 一列单行可达 36MB 字符）。 */
-  var RADIO_FIELDS = 'id,title,artist,kind,netease_id,source_url,sort_order,created_at';
 
-
-  var Radio = {
-    /* 曲目列表（匿名可读，按 sort_order 再按 id 升序 —— 稳定不跳动）
-       ⚠ 查的是**视图 public_radio** 且**不含 data** —— 见 RADIO_FIELDS 注释。 */
-    list: async function () {
-      var res = await ensure().database.from(RADIO_READ_TABLE)
-        .select(RADIO_FIELDS)
-        .order('sort_order', { ascending: true })
-        .order('id', { ascending: true });
-      if (res.error) throw new Error(errMsg(res.error, '曲目列表加载失败'));
-      return res.data || [];
-    },
-
-    /* ---------- v5.0.0：电台 = 网易云条目（单曲 / 歌单） ---------- */
-
-    /* 解析用户贴的任何形式，返回 { kind: 'song'|'playlist', id } 或 null。
-       认这些写法（**不联网、不猜**，纯本地解析）：
-         · https://music.163.com/#/song?id=2003621098          → song
-         · https://music.163.com/song/2003621098               → song
-         · https://music.163.com/#/outchain/2/2003621098/m/…   → song（type=2）
-         · https://music.163.com/#/playlist?id=2867512990      → playlist
-         · https://music.163.com/playlist/2867512990           → playlist
-         · https://music.163.com/#/outchain/0/2867512990/m/…   → playlist（type=0）
-         · 2003621098（裸 id）→ 默认按**单曲**处理（界面上的"类型"可显式指定） */
-    parseNetease: function (input) {
-      var s = String(input == null ? '' : input).trim();
-      if (!s) return null;
-      if (/^\d{4,}$/.test(s)) return { kind: 'song', id: s };
-
-      /* outchain 形式里 type 直接说明类型（2=单曲 0=歌单） */
-      var oc = /outchain\/player\?[^#]*type=(\d)[^#]*id=(\d{4,})/.exec(s) ||
-               /outchain\/(\d)\/(\d{4,})/.exec(s);
-      if (oc) return { kind: (oc[1] === '0' ? 'playlist' : 'song'), id: oc[2] };
-      if (!/music\.163\.com/i.test(s)) return null;
-
-      var pl = /playlist\?id=(\d{4,})/.exec(s) || /\/playlist\/(\d{4,})/.exec(s);
-      if (pl) return { kind: 'playlist', id: pl[1] };
-      var sg = /[?&]id=(\d{4,})/.exec(s) || /\/song\/(\d{4,})/.exec(s);
-      if (sg) return { kind: 'song', id: sg[1] };
-      return null;
-    },
-
-    /* 由 kind + id 组装官方外链播放器地址。
-       ⚠ 高度随类型走：单曲 66（官方条），歌单 430（完整歌单播放器）。
-         官方文档给的正是这两个值（type=2&height=66 / type=0&height=430）。 */
-    buildEmbedUrl: function (kind, id) {
-      var t = (kind === 'playlist') ? '0' : '2';
-      var h = (kind === 'playlist') ? '430' : '66';
-      return 'https://music.163.com/outchain/player?type=' + t + '&id=' + id + '&auto=0&height=' + h;
-    },
-
-    /* v5 的写入口：一条网易云条目。kind 为空时按单曲处理。 */
-    add: async function (input, meta, uid) {
-      meta = meta || {};
-      var parsed = Radio.parseNetease(meta.id || input);
-      if (!parsed) throw new Error('认不出这条网易云链接（歌曲页 / 歌单页 / outchain 页 / 裸 id 都行）');
-      var kind = (meta.kind === 'song' || meta.kind === 'playlist') ? meta.kind : parsed.kind;
-      var title = String(meta.title || '').trim();
-      if (!title) throw new Error('请填写条目名称（单曲名或歌单名）');
-      if (title.length > 200) throw new Error('名称不能超过 200 字');
-      var row = {
-        title: title,
-        artist: meta.artist ? String(meta.artist).trim().slice(0, 200) : null,
-        kind: kind,
-        netease_id: parsed.id,
-        source_url: Radio.buildEmbedUrl(kind, parsed.id),
-        sort_order: (typeof meta.sort_order === 'number') ? Math.round(meta.sort_order) : 0,
-        owner_id: uid
-      };
-      var res = await ensure().database.from(RADIO_WRITE_TABLE).insert(row).select(RADIO_FIELDS);
-      if (res.error) throw new Error(errMsg(res.error, '条目入库失败'));
-      var saved = (res.data && res.data[0]) || null;
-      return saved;
-    },
-
-    /* 删除条目：只删库记录 —— 音乐本体在网易云，删这条记录不动对方任何内容
-       （不再有独立的存储对象，因此也没有「文件删不掉」的中间态）。 */
-    removeTrack: async function (row) {
-      if (!row || !row.id) throw new Error('缺少曲目标识');
-      var res = await ensure().database.from(RADIO_WRITE_TABLE).delete().eq('id', row.id);
-      if (res.error) throw new Error(errMsg(res.error, '曲目删除失败'));
-      return true;
-    },
-
-    /* 批量重排：rows 为 [{id, sort_order}] */
-    reorder: async function (rows) {
-      if (!rows || !rows.length) return true;
-      for (var i = 0; i < rows.length; i++) {
-        var res = await ensure().database.from(RADIO_WRITE_TABLE)
-          .update({ sort_order: rows[i].sort_order })
-          .eq('id', rows[i].id);
-        if (res.error) throw new Error(errMsg(res.error, '排序保存失败'));
-      }
-      return true;
-    }
-  };
 
   /* ---------- 图片尺寸标准（v2.2.1 统一封面清晰度） ----------
      ⚠ 改动这两个常量前，先算一遍「展示尺寸 → 源图需求」，别拍脑袋调。
@@ -1185,17 +1052,6 @@
     ready: function () { return !!snapshot; }
   };
 
-  /* v4.7.0：电台回退。
-     快照里的电台条目与云端**同形**（id/title/artist/kind/netease_id/source_url）——
-     播放地址就在行里（source_url 是网易云官方播放器地址），所以回退只需 list。
-     ⚠ v5.6.1 清理：base64 时代的 StaticRadio.playUrl（把 data/radio/<id>.mp3
-       当成地址返回）随 ① 一并删除 —— 音频本体早已退役，快照的 radio 恒为空数组。 */
-  var StaticRadio = {
-    list: async function () {
-      var snap = await loadSnapshot();
-      return (snap.radio || []).slice();
-    }
-  };
 
   /* 把实现在导出边界包一层：先走真身，抛错才落快照。
      snapshotMode 一旦**确认可用**才置位，之后本次会话直连快照 ——
@@ -1286,14 +1142,6 @@
     isSnapshot: function () { return snapshotMode; },
     SNAPSHOT_URL: SNAPSHOT_URL,    Errors: Errors,
     Storage: Storage,
-    /* v2.9.0：电台数据层（条目列表 / 网易云条目入库 / 排序 / 删除） */
-    /* v4.7.0：电台也走同源回退（与 Posts/Images 同一套纪律：只包读路径）
-       ⚠ v5.6.1：回退键只剩 list —— 条目自带 source_url，播放在界面侧渲染 iframe */
-    Radio: withFallback(Radio, StaticRadio, ['list']),
-    RADIO_READ_TABLE: RADIO_READ_TABLE,
-    RADIO_WRITE_TABLE: RADIO_WRITE_TABLE,
-    /* 读/写两套字段清单（测试用来守住「列表绝不带 data」这条性能红线） */
-    RADIO_FIELDS: RADIO_FIELDS,
     /* ⚠ 签名 URL 有效期的平台硬边界（1~3600），对外暴露给测试钉住。
        电台已不再走签名（改读库），这套留给附件下载等场景。 */
     SIGNED_TTL_MAX: SIGNED_TTL_MAX,

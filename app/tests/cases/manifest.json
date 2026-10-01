@@ -198,12 +198,6 @@
     "expect": 66
   },
   {
-    "file": "35-v2-8-0-电台.js",
-    "name": "v2.8.0 电台",
-    "blocks": 1,
-    "expect": 49
-  },
-  {
     "file": "36-v2-9-4-uiverse.js",
     "name": "v2.9.4 Uiverse 借法",
     "blocks": 1,
@@ -297,7 +291,7 @@
     "file": "51-v4-6-0-static-fallback.js",
     "name": "v4.6 静态快照：GitHub Pages 同源回退",
     "blocks": 1,
-    "expect": 36
+    "expect": 31
   },
   {
     "file": "52-v4-8-0-supabase-adapter.js",
@@ -310,12 +304,6 @@
     "name": "v4.9 收藏（账号 + 登录门槛）",
     "blocks": 1,
     "expect": 19
-  },
-  {
-    "file": "54-v4-9-5-radio-url.js",
-    "name": "v5.0.0 电台：网易云条目（v5.6.1 重写）",
-    "blocks": 1,
-    "expect": 26
   },
   {
     "file": "55-v5-7-0-超时硬化.js",

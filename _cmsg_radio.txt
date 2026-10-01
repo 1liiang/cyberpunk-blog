@@ -1,0 +1,35 @@
+chore: 彻底删除电台功能（数据层+视图+控制台+样式+CSP+快照段+两个用例）
+
+用户明确要求「旧电台也全删了」。这是 v5.6.1 那次"删旧内核"的续篇 ——
+上一轮保留了 v5 的网易云条目能力，这一轮连它一起下线。
+
+【删除范围（逐文件）】
+- js/cloud.js：Radio 数据面（list/add/removeTrack/reorder）、StaticRadio 回退、
+  RADIO_READ_TABLE/RADIO_WRITE_TABLE/RADIO_FIELDS 常量、parseNetease/buildEmbedUrl、
+  四个导出项。
+  ⚠ 谨慎保住了 SIGNED_TTL_MAX/MIN/DEFAULT 与 clampTtl —— 它们物理上夹在电台段
+    中间，但属于**附件下载**的签名夹取，与电台无关（第一次误删导致整套门禁崩，
+    已恢复重做）。
+- js/views.js：radioView（整函数，57 行）、身份卡里的 holo-now 电台块、导出项。
+- js/app.js：RC_STATE/rcCurrentId/rcSetCurrent/rcCurrent、paintStage、rcLoad、
+  renderRadio、bindRadioPageOnce/bindRadioPage、canManageRadio、holoNowPaint、
+  parseHash 的 radio 分支、路由分派、启动钩子、身份变更重取块（-220 行）。
+- index.html：#radio-stage 常驻控制台整块（1060 字符）、开机序列的 RADIO 行、
+  四段电台注释、**CSP 里为电台 iframe 放宽的 frame-src music.163.com**。
+- css/style.css：.radio-console / .rc-* 复古收音机全套、.radio-page-tip /
+  .radio-board / .radio-card* / .radio-op* / .radio-compose / .radio-select /
+  .radio-field / .radio-form* / .radio-src-head、打印块与 reduce 块里的电台项（-155 行）。
+  ⚠ 过程踩坑：前两版删除把 @media print 里 `.radio-console,` 与后续选择器一起删掉、
+  又留下从 L3035 开始的未闭合注释（吞掉后面 2000+ 行）；最终版先扫描全文件标注
+  "是否在注释内"，只删注释外的完整规则块，删后断言注释开闭相等。
+- js/console.js：两处过时注释更新。
+- tests：删除 35（电台 49 条）与 54（网易云外链 26 条）两个用例；
+  51 号切掉 ⑤ 里的电台断言块（R253/R253c/R254/R254b 共 5 条），
+  保留与之无关的「自动同步 workflow」三名（R255/R255b/R255c）。
+
+【验证】
+- 三个 JS 文件 node --check 通过；CSS 括号配平 0、注释 406/406 闭合
+- 门禁 1076/1076 全绿（断言 1156 → 1031 条 + 27 故障 + 18 沙箱）
+- 删除前已打标签 pre-trim（含完整电台功能）可整体回退
+
+下一步：按用户要求把 tests 裁到只留核心。

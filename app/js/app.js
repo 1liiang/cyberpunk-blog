@@ -32,7 +32,7 @@
   var REQUIRED_VIEW_FNS = [
     'esc', 'fmtDate', 'homeView', 'postView', 'tagsView', 'searchView',
     'archiveView', 'aboutView', 'loginView', 'adminView', 'editView',
-    'marksView', 'tagAdminView', 'postTrail', 'readingLabel', 'radioView'
+    'marksView', 'tagAdminView', 'postTrail', 'readingLabel'
   ];
 
   function viewsUsable(real) {
@@ -65,7 +65,7 @@
       homeView: noop, tagsView: noop, searchView: noop, archiveView: noop,
       postView: noop, aboutView: noop,
       loginView: noop, adminView: noop, editView: noop,
-      marksView: noop, tagAdminView: noop, radioView: noop,
+      marksView: noop, tagAdminView: noop,
       __isFallback: true
     };
   }
@@ -1340,7 +1340,6 @@
     if (parts[0] === 'archive') return { name: 'archive' };
     if (parts[0] === 'tag' && parts[1]) return { name: 'home', tag: parts[1] };
     if (parts[0] === 'marks') return { name: 'marks' };
-  if (parts[0] === 'radio') return { name: 'radio' };
     if (parts[0] === 'tagadmin') return { name: 'tagadmin' };
     if (parts[0] === 'about') return { name: 'about' };
     if (parts[0] === 'login') return { name: 'login' };
@@ -1389,27 +1388,17 @@
     var big = document.querySelector('[data-holo-uptime]');
     if (big) { var txt = holoText(p); big.textContent = txt; big.setAttribute('data-text', txt); }
   }
-  function holoNowPaint() {
-    var cur = null;
-    try { cur = rcCurrent(); } catch (e) { cur = null; }
-    var tEl = document.querySelector('[data-holo-now]');
-    var sEl = document.querySelector('[data-holo-now-sub]');
-    /* ⚠ 站长选了"诚实版"：网易云是跨域 iframe，真实播放态**读不到**（同源策略所限）——
-       所以这里只说"当前条目"，绝不写"正在播放"。 */
-    if (tEl) tEl.textContent = cur ? (cur.title || '未命名') : '电台待命';
-    if (sEl) sEl.textContent = cur ? ((cur.artist || '') + (cur.kind === 'playlist' ? ' · 歌单' : ' · 单曲') + ' · 当前条目') : '还没有条目';
-  }
   function injectHoloHero() {
     if (typeof document === 'undefined') return;
     var app = document.getElementById('app');
     if (!app || !V().holoHero) return;
-    if (app.querySelector('.holo-hero')) { holoPaint(); holoNowPaint(); return; }
+    if (app.querySelector('.holo-hero')) { holoPaint(); return; }
     var p = holoParts();
     app.insertAdjacentHTML('afterbegin', V().holoHero({
       days: p.days, hours: p.hours, mins: p.mins, secs: p.secs, bootDate: p.date,
       uptimeText: holoText(p), nickname: State.nickname || '漓光', tags: ['站长', '作者']
     }));
-    holoPaint(); holoNowPaint();
+    holoPaint();
     bindHoloTilt();   /* v5.4.2：卡片挂上全息倾斜 */
     if (holoTickTimer) clearInterval(holoTickTimer);
     holoTickTimer = setInterval(function () {
@@ -1448,188 +1437,6 @@
     card.addEventListener('pointercancel', reset);
   }
 
-  /* ---------- v5.1.0：电台页与常驻控制台 ---------- */
-  var RC_KEY = 'neon_radio_current';   /* 当前选中条目（本机记住，切页面不丢） */
-  var RC_STATE = { items: [], curId: '', error: '', loaded: false, mounted: '' };
-
-  function rcCurrentId() {
-    if (RC_STATE.curId) return String(RC_STATE.curId);
-    var v = '';
-    try { v = localStorage.getItem(RC_KEY) || ''; } catch (e) { v = ''; }
-    return v;
-  }
-
-  function rcSetCurrent(id) {
-    RC_STATE.curId = id ? String(id) : '';
-    try { if (RC_STATE.curId) localStorage.setItem(RC_KEY, RC_STATE.curId); } catch (e) {}
-    if (typeof holoNowPaint === 'function') holoNowPaint();   /* v5.4.2：选中变了，卡片跟着变 */
-  }
-
-  function rcCurrent() {
-    var id = rcCurrentId();
-    for (var i = 0; i < RC_STATE.items.length; i++) {
-      if (String(RC_STATE.items[i].id) === id) return RC_STATE.items[i];
-    }
-    return null;
-  }
-
-  /* 把官方播放器挂进常驻控制台。
-     ⚠ **只在目标地址变化时重建 iframe** —— 重建 = 重新加载 = 歌断掉。
-       所以这一步绝不能在路由切换时无条件调用（这是整个重做的核心）。 */
-  function paintStage() {
-    if (typeof document === 'undefined') return;   /* 降级环境没有 DOM：直接退出（实测踩到） */
-    var stage = document.getElementById('radio-stage');
-    if (!stage) return;
-    var host = stage.querySelector('[data-rc-slot]');
-    var titleEl = stage.querySelector('[data-rc-title]');
-    var subEl = stage.querySelector('[data-rc-sub]');
-    var freqEl = stage.querySelector('[data-rc-freq]');
-    var cur = rcCurrent();
-    var url = cur ? cur.source_url : '';
-    var isFull = (location.hash.replace(/^#\/?/, '').split('/')[0] || '') === 'radio';
-    stage.hidden = !url;                       /* 没条目就整块隐藏（访客也不该看到空壳） */
-    stage.setAttribute('data-mode', isFull ? 'full' : 'mini');
-    if (titleEl) titleEl.textContent = cur ? (cur.title || '未命名') : '电台待命';
-    if (subEl) subEl.textContent = cur ? ((cur.artist || '') + (cur.kind === 'playlist' ? ' · 歌单' : ' · 单曲')) : '网易云官方外链播放器';
-    if (freqEl) freqEl.textContent = cur && cur.netease_id ? String(cur.netease_id).slice(0, 7) : '--';
-    if (!host || !url) { if (host) host.innerHTML = ''; RC_STATE.mounted = ''; return; }
-    if (RC_STATE.mounted === url) return;      /* 同一个地址：什么都不做（歌继续放） */
-    host.innerHTML = '<iframe class="rc-frame" src="' + V().esc(url) + '" width="330" height="' +
-      (/type=0/.test(url) ? '430' : '66') + '" frameborder="0" allow="autoplay" title="网易云音乐外链播放器"></iframe>' +
-      '<a class="rc-fallback" href="' + V().esc(url) + '" target="_blank" rel="noopener noreferrer">播放器加载不出来？在新窗口打开 ↗</a>';
-    RC_STATE.mounted = url;
-  }
-
-  async function rcLoad() {
-    if (typeof document === 'undefined') { RC_STATE.loaded = true; return; }
-    try {
-      var rows = await need('Radio').list();
-      RC_STATE.items = rows || [];
-      RC_STATE.error = '';
-      /* 没有选中过 / 选中的已被删 → 落到第一条 */
-      if (!rcCurrent()) rcSetCurrent(RC_STATE.items.length ? RC_STATE.items[0].id : '');
-    } catch (e) {
-      RC_STATE.items = [];
-      RC_STATE.error = errMsg(e, '条目读取失败');
-    }
-    RC_STATE.loaded = true;
-    paintStage();
-    /* v5.4.2：电台列表到货 → 身份卡同步"当前条目"
-       （之前卡片在列表回来**之前**就画好了，之后没人通知它重画，于是一直显示"电台待命"） */
-    if (typeof holoNowPaint === 'function') holoNowPaint();
-  }
-
-  function renderRadio() {
-    if (typeof document === 'undefined') return;
-    var app = document.getElementById('app');
-    if (!app) return;
-    app.innerHTML = V().radioView({ items: RC_STATE.items, curId: rcCurrentId(), canManage: canManageRadio(), error: RC_STATE.error });
-    paintStage();
-    if (!RC_STATE.loaded) rcLoad().then(function () {
-      /* 数据回来重绘列表（当前页已是电台时才重绘，避免白跑） */
-      if ((location.hash.replace(/^#\/?/, '').split('/')[0] || '') === 'radio') renderRadio();
-    }, function () {});
-  }
-
-  /* 电台页的点击代理（播放 / 删除 / 上下移 / 新增）—— 只绑一次 */
-  var rcPageBound = false;
-  function bindRadioPageOnce() {
-    if (rcPageBound) return;
-    rcPageBound = true;
-    bindRadioPage();
-  }
-
-  function bindRadioPage() {
-    if (typeof document === 'undefined') return;
-    document.addEventListener('click', function (ev) {
-      var el = ev.target.closest ? ev.target.closest('[data-radio-act]') : null;
-      if (!el) return;
-      var act = el.getAttribute('data-radio-act');
-      var id = el.getAttribute('data-id');
-      if (act === 'tune') { location.hash = '#/radio'; ev.preventDefault(); return; }
-      if (act === 'playitem') {
-        rcSetCurrent(id);
-        paintStage();
-        if ((location.hash.replace(/^#\/?/, '').split('/')[0] || '') !== 'radio') location.hash = '#/radio';
-        else renderRadio();
-        ev.preventDefault();
-        return;
-      }
-      if (act === 'del') {
-        /* ⚠ 项目里没有 askConfirm 这个助手（第一版我凭印象写了，会直接抛错）。
-           现成的确认框是 openModal(title, html, actions)。 */
-        openModal('删除条目', '<p>从电台移除这条记录。<b>不影响网易云上的内容</b>，随时可以再加回来。</p>', [
-          { label: '取消', cls: 'btn-ghost', onClick: closeModal },
-          { label: '确认删除', cls: 'btn-magenta', onClick: async function () {
-            closeModal();
-            try { await need('Radio').remove({ id: Number(id) }); await rcLoad(); renderRadio(); toast('已删除', 'ok'); }
-            catch (e2) { toast(errMsg(e2, '删除失败'), 'error'); }
-          } }
-        ]);
-        ev.preventDefault();
-        return;
-      }
-      if (act === 'up' || act === 'down') {
-        (async function () {
-          var list = RC_STATE.items.slice();
-          var i = list.findIndex(function (r) { return String(r.id) === String(id); });
-          var j = act === 'up' ? i - 1 : i + 1;
-          if (i < 0 || j < 0 || j >= list.length) return;
-          var tmp = list[i]; list[i] = list[j]; list[j] = tmp;
-          try {
-            await need('Radio').reorder(list.map(function (r, k) { return { id: r.id, sort_order: k }; }));
-            await rcLoad(); renderRadio();
-          } catch (e2) { toast(errMsg(e2, '排序失败'), 'error'); }
-        })();
-        ev.preventDefault();
-        return;
-      }
-      if (act === 'additem') {
-        var box = document.querySelector('[data-radio-compose]');
-        if (!box) return;
-        var tEl = box.querySelector('[data-radio-field="title"]');
-        var aEl = box.querySelector('[data-radio-field="artist"]');
-        var uEl = box.querySelector('[data-radio-field="url"]');
-        var kEl = box.querySelector('[data-radio-field="kind"]');
-        var msg = box.querySelector('[data-radio-msg]');
-        function say(s, kind) { if (msg) { msg.hidden = false; msg.textContent = s; msg.className = 'radio-form-msg' + (kind ? ' is-' + kind : ''); } }
-        var uid = State.session && State.session.user && State.session.user.id;
-        if (!uid) { say('请先登录', 'err'); return; }
-        var url = (uEl && uEl.value || '').trim();
-        var title = (tEl && tEl.value || '').trim();
-        if (!url || !title) { say('名称与链接都要填', 'err'); return; }
-        (async function () {
-          try {
-            say('正在写入…');
-            var row = await need('Radio').add(url, { title: title, artist: (aEl && aEl.value || '').trim(), kind: (kEl && kEl.value) || 'auto', id: url }, uid);
-            rcSetCurrent(row && row.id ? row.id : rcCurrentId());
-            await rcLoad();
-            renderRadio();
-            toast('已加入电台：' + title, 'ok');
-          } catch (e2) { say(errMsg(e2, '加入失败'), 'err'); }
-        })();
-        ev.preventDefault();
-        return;
-      }
-    }, true);
-  }
-
-  /* 启动即拉一次条目并绑好代理：控制台要据此决定显不显示、摆哪一条。
-     ⚠ 必须放在**所有 var 赋值之后** —— 第一版插在 RC_STATE = {...} 之前，
-       var 提升给了 undefined，启动直接 TypeError（实测）。 */
-  /* ⚠ 必须有守卫：某个降级用例跑在没有 document 的环境里 ——
-     在顶层直接碰 document 会 TypeError，整套门禁当场挂掉（实测两次）。 */
-  if (typeof document !== 'undefined') {
-    bindRadioPageOnce();
-    /* v5.3.0：电台条目**不再在首屏同步拉** —— 访客多半没开电台，却要为此等一次跨区往返
-       （实测 0.7~1.2s）。改成首绘之后再拉，控制台随之出现。 */
-    if (window.requestIdleCallback) requestIdleCallback(function () { rcLoad(); }, { timeout: 2500 });
-    else setTimeout(function () { rcLoad(); }, 1200);
-    /* ⚠ 路由一变就重算控制台体型（mini ↔ full）—— 只改 data-mode，**不动 iframe**，
-       这正是"切页面不断歌"的实现方式。
-       第一版只在电台交互时重算，于是离开电台页后控制台还赖在大体型上（线上验收发现）。 */
-    window.addEventListener('hashchange', function () { paintStage(); });
-  }
 
 function route() {
     var h = location.hash || '#/';
@@ -1661,7 +1468,6 @@ function route() {
     if (r.name === 'search') return renderSearch(r.q || '');
     if (r.name === 'archive') return renderArchive();
     if (r.name === 'marks') return renderMarks();
-  if (r.name === 'radio') return renderRadio();
     if (r.name === 'tagadmin') return renderTagAdmin();
     if (r.name === 'about') {
       app.innerHTML = V().aboutView();
@@ -1843,24 +1649,6 @@ function route() {
     });
   }
 
-  /* ============ 电台（RADIO）：权限判据 ============
-     ⚠ v5.6.1：v2.8.0 那套「迷你条 dock + 弹出面板」的接线（约 20 个函数／
-     一个 RadioUI 状态对象）随 HANDOVER §6 审计清单 ② 整体删除 ——
-     容器（#radio-dock / #radio-panel-host）在 v5.2.0 就没了，
-     函数体也早已是空实现或不可达代码。完整名单见 version.js 的 v5.6.1 条目。
-     ⚠ 本注释刻意**不逐一点名**那些已删标识符：audit-all.js 的 ② 项是
-       原文扫描（不剥注释），点名会让审计一直报"还残留"（实测踩到）。
-
-     现在的电台是一条**更短**的路（全部仍在本文件里，且是活的）：
-       · 常驻控制台 #radio-stage  → paintStage()（v5.1.0，切页面不断歌）
-       · 电台页 #/radio            → renderRadio() + bindRadioPage()（v5.0.0/5.1.0）
-       · 条目读写                   → need('Radio') 的 list / add / remove / reorder
-     ⚠ 这三条路都靠下面这一个权限判据，所以它必须留着。 */
-
-  /* 是否具备管理权限（作者本人）。未登录或非作者 → 只读收听 */
-  function canManageRadio() {
-    return !!(State.session && State.session.user);
-  }
 
   /* ============ C16：标签管理（重命名 / 合并） ============
      与标签总览页的区别：这里是**写操作入口**，只对已登录作者开放。
@@ -3620,18 +3408,6 @@ function route() {
           }
           safeRenderNav();
           safeRoute();
-          /* 电台条目按身份渲染（未登录访客没有"增删排序"入口）⇒ 身份一变必须重取。
-             ⚠ v5.6.1：这里原先调的是旧面板的 loadRadioTracks()/paintDock()/paintPanel()，
-             随审计清单 ② 换成现在这条真路 —— rcLoad() 重取条目并重绘常驻控制台，
-             电台页正开着时再补一次 renderRadio()。
-             失败不影响主流程：下次切到电台页 rcLoad 会自行重试。 */
-          try {
-            if (!RC_STATE.loaded || (location.hash.replace(/^#\/?/, '').split('/')[0] || '') === 'radio') {
-              rcLoad().then(function () {
-                if ((location.hash.replace(/^#\/?/, '').split('/')[0] || '') === 'radio') renderRadio();
-              }, function () {});
-            }
-          } catch (e) { /* 忽略 */ }
         });
       } catch (e) { /* 监听失败不影响主流程 */ }
     }
