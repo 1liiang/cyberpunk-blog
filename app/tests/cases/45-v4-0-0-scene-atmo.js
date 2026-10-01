@@ -138,10 +138,18 @@ async function run() {
     const CN = 'v4.0 B1 地基重铸';
     const order = (/DOWNGRADE_ORDER\s*=\s*\[([^\]]*)\]/.exec(atmoSrc) || [, ''])[1]
       .split(',').map(function (s) { return s.trim().replace(/['"]/g, ''); }).filter(Boolean);
-    T(CN, 'R211f 降档顺序：雨最先、静态纹理最后；阈值 45fps / 连续 4 个坏样本',
+    /* ⚠ v5.7.0（P1）：阈值仍是 45fps，但"几个坏样本才降档"从 4 收紧到 2，
+       采样从 3s 收紧到 1s —— 原组合等于"连续 12 秒不达标才降一层"，
+       而 downgrade() 一次只摘一层 ⇒ 最坏 100+ 秒才关到不卡（实测体感：先卡十几秒，
+       机器才开始自救，且远远跟不上）。降档**顺序**这条契约没变，仍然钉死。
+       触发窗口/连降/冷却的**行为**判据在 56 号用例里（那里把探针真跑起来）。 */
+    const badLimit = (/BAD_LIMIT\s*=\s*(\d+)/.exec(atmoSrc) || [, '?'])[1];
+    const sampleMs = (/SAMPLE_MS\s*=\s*(\d+)/.exec(atmoSrc) || [, '?'])[1];
+    T(CN, 'R211f 降档顺序：雨最先、静态纹理最后；阈值 45fps，触发窗口 ≤3s',
       order.length === 9 && order[0] === 'rain' && order.indexOf('noise') === order.length - 1 &&
-      /FPS_MIN\s*=\s*45/.test(atmoSrc) && /BAD_LIMIT\s*=\s*4/.test(atmoSrc),
-      order.join('>') + ' | 45fps/' + (/BAD_LIMIT\s*=\s*(\d+)/.exec(atmoSrc) || [, '?'])[1]);
+      /FPS_MIN\s*=\s*45/.test(atmoSrc) &&
+      Number(badLimit) >= 1 && Number(sampleMs) * Number(badLimit) <= 3000,
+      order.join('>') + ' | 45fps / ' + sampleMs + 'ms×' + badLimit + '=' + (Number(sampleMs) * Number(badLimit)) + 'ms');
 
     T(CN, 'R211g 运行时的三层防御：reduce 直通 / 层缺失静默跳过 / 用户锁定不降档',
       /prefers-reduced-motion: reduce/.test(atmoSrc) &&
