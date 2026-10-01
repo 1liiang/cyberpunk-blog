@@ -214,6 +214,21 @@
   }
 
   /* ---------- 播放控制 ---------- */
+  /* 把 MediaError 码翻成**能指导下一步**的中文（v4.9.6）。
+     ⚠ 为什么必须抽成一个函数、两处都用：实测踩到过 —— audio 的 error 事件里我写好了
+       中文分档，但 `play()` 的 Promise 随后又 reject（同一个故障的第二条上报路径），
+       于是把那句英文原文（"Failed to load because no supported source was found."）
+       覆盖了上去，用户在界面上看到的还是英文。两处共用同一个映射才不会再打架。 */
+  function mediaErrText(code) {
+    if (code === 4 /* MEDIA_ERR_SRC_NOT_SUPPORTED */) {
+      return '音源无法播放：这个地址不是可直接播放的音频文件（可能是网页链接 / 需要登录 / 防盗链）';
+    }
+    if (code === 3 /* MEDIA_ERR_DECODE */) return '音频解码失败：文件可能已损坏，或浏览器不支持这种编码';
+    if (code === 2 /* MEDIA_ERR_NETWORK */) return '网络中断：音频没下完，检查网络或换个更稳的源';
+    if (code === 1 /* MEDIA_ERR_ABORTED */) return '播放被中断（多为切换曲目或源地址失效）';
+    return '音频加载失败（文件可能缺失或已损坏）';
+  }
+
   async function doPlay() {
     if (!audio) return false;
     if (pos < 0) {
@@ -240,6 +255,10 @@
       var name = e && e.name;
       if (name === 'NotAllowedError') {
         errText = '浏览器拦截了自动播放，请点一下播放键';
+      } else if (audio.error && audio.error.code) {
+        /* ⚠ 走媒体错误码那一套：这里 reject 的往往是"同一个故障的第二条上报路径"，
+           直接取 e.message 会得到浏览器原文英文（实测踩到）。 */
+        errText = mediaErrText(audio.error.code);
       } else {
         errText = (e && e.message) ? e.message : '播放失败';
       }
@@ -464,17 +483,7 @@
          那句话既像网络问题又像文件坏了，实际含义是"这压根不是音频文件"。
          ⚠ CSP 拦截与地址不可播会给出**同一句**浏览器文案，所以这里点名两种可能。 */
       var code = (audio.error && audio.error.code) || 0;
-      if (code === 4 /* MEDIA_ERR_SRC_NOT_SUPPORTED */) {
-        errText = '音源无法播放：这个地址不是可直接播放的音频文件（可能是网页链接 / 需要登录 / 防盗链）';
-      } else if (code === 3 /* MEDIA_ERR_DECODE */) {
-        errText = '音频解码失败：文件可能已损坏，或浏览器不支持这种编码';
-      } else if (code === 2 /* MEDIA_ERR_NETWORK */) {
-        errText = '网络中断：音频没下完，检查网络或换个更稳的源';
-      } else if (code === 1 /* MEDIA_ERR_ABORTED */) {
-        errText = '播放被中断（多为切换曲目或源地址失效）';
-      } else {
-        errText = '音频加载失败（文件可能缺失或已损坏）';
-      }
+      errText = mediaErrText(code);
       emit('error', { message: errText, index: pos });
       pushState();
     });
