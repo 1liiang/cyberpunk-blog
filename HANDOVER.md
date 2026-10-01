@@ -560,6 +560,47 @@ git push origin deploy:main
 > 此时**不要强推** —— 造一个合并提交，让远端历史作为祖先保留、树取 deploy：
 > `git commit-tree <deploy^{tree}> -p <origin/main> -p <deploy> -F msg` 再 `git push origin <sha>:refs/heads/main`。
 
+#### ⚠ 行尾事故：`.gitattributes` 是必需的，别删
+
+**症状**：本地门禁 5 项红 —— `R16c`（三处 vendor sha384）、`R18`、`R19` 全都报
+「档案哈希不符」。文件明明没改过。
+
+**根因**：仓库里曾有带 CRLF 的脚本，而 `.gitattributes` **不存在**，于是 Git 把
+`js/vendor/*.min.js` 当**文本**处理，`checkout` 时把 LF 换成 CRLF —— 字节变了
+（highlight 多出 1261 字节 = 1261 个 CRLF），记录在 `js/vendor/README.md` 的 sha384 自然对不上。
+
+**关键判断：线上没受影响。** 已从线上逐文件取字节核对：四个 vendor 文件都是
+**纯 LF、CRLF 计数 0**，sha384 与档案逐字符一致。因为发布走 `robocopy` 复制**原始字节**，
+不经过 Git 的换行转换。（教训：**别只看本地门禁红就以为线上坏了** —— 先分别验字节。）
+
+**修法**（已在仓库生效）：
+- `.gitattributes`：`js/vendor/** -text`（发布物即其字节，禁一切转换）；
+  图片/字体/压缩包 `binary`；`*.js/css/html/json/md/yml/sql` 统一 `eol=lf`；
+  `*.cmd` `*.bat` 保持 `eol=crlf`（Batch 对 LF 兼容性不佳）
+- 仓库级 `core.autocrlf=false` / `core.eol=lf`
+- 工作区一次性规范化：16 个 CRLF 文件转 LF（15 转换 + `dev.cmd` 按规则跳过）
+
+`R175t「源文件行尾统一为 LF」` 只覆盖 `app/js/*.js` 与 `app/css/*.css` ——
+**Windows 批处理（`dev.cmd`）不在其列**，那里保持 CRLF 是刻意的。
+
+#### 发布三步（照抄即可）
+
+```bash
+# ① 改完 app/ 并 bump + 跑门禁（必须 343/343）
+cd app && node tools/bump.js <新版本> --title="…" --item="…" --yes && node tests/run-all.js
+
+# ② 更新 deploy 分支（根 = main:app 的扁平内容；不碰工作区）
+cd .. && git update-ref refs/heads/deploy \
+  "$(git commit-tree $(git rev-parse main:app) -p $(git rev-parse main) -m 'deploy: 同步')"
+
+# ③ 推 —— 若被拒（deploy 与远端 main 无共同祖先），改用合并提交：
+#    tree 取 deploy，父 = [origin/main, deploy]，然后 push origin <sha>:refs/heads/main
+git push origin deploy:main
+```
+
+⚠ **不要对远端强推**：远端 main 是 Pages 的发布源，强推会重写公开历史。
+正确的做法始终是"造一个祖先包含 origin/main 的提交"（上面 ③ 的备注）。
+
 **标签**（在远端）：`v5.7.1` / `v5.7.2` / `perf-hardening` / **`pre-trim`**。
 `pre-trim` 是**裁剪前的完整门禁**（56 个 case / 1111 断言 + 完整电台功能），
 取回被删用例只需：`git checkout pre-trim -- app/tests`。
