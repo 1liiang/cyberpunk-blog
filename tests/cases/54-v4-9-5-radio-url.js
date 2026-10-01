@@ -78,6 +78,31 @@ function bootCloud() {
   return { w: w, NEON: w.NEON, log: log };
 }
 
+/* ---------- Audio 桩：让 probeSourceUrl 在 jsdom 里也有确定行为 ----------
+   jsdom 没有媒体解码能力（Audio 是 undefined），所以"能不能播"必须靠桩来演。
+   ⚠ 桩只模拟两条路：loadedmetadata（能播）与 error code 4（不是音频）。
+   这正好覆盖实测踩到的两种真实结局。 */
+function stubAudio(w, mode) {
+  w.Audio = function () {
+    const listeners = {};
+    const self = {
+      duration: mode === 'ok' ? 42 : NaN,
+      error: mode === 'ok' ? null : { code: 4 },
+      preload: '',
+      src: '',
+      addEventListener: function (t, f) { listeners[t] = f; },
+      removeAttribute: function () { self.src = ''; },
+      load: function () {
+        setTimeout(function () {
+          const fn = listeners[mode === 'ok' ? 'loadedmetadata' : 'error'];
+          if (fn) fn();
+        }, 0);
+      }
+    };
+    return self;
+  };
+}
+
 /* 取"关于某张表的、带某种操作的"请求 */
 function reqs(log, table, op) {
   return log.filter(function (s) {
@@ -202,6 +227,34 @@ async function run() {
       !/(^|,)data(,|$)/.test(sel), sel.slice(0, 120));
   }
 
+  /* ================= ④b 入库前试听校验（v4.9.6）================= */
+  {
+    /* 能播 → ok + 时长 */
+    const okC = bootCloud();
+    stubAudio(okC.w, 'ok');
+    const r1 = await okC.NEON.Radio.probeSourceUrl(URL_OK);
+    T(CASE, 'R298 试听校验：能播的地址返回 ok + 时长',
+      r1.ok === true && r1.duration === 42, JSON.stringify(r1));
+
+    /* 不能播（实测：站长贴的是一条 B 站**网页地址**）→ ok:false + 人话原因 */
+    const badC = bootCloud();
+    stubAudio(badC.w, 'bad');
+    const r2 = await badC.NEON.Radio.probeSourceUrl('https://www.bilibili.com/video/BV1FN411n7FT/');
+    T(CASE, 'R298b ★ 网页地址被识破（URL 合法但根本不是音频）—— ok:false',
+      r2.ok === false, JSON.stringify(r2));
+    T(CASE, 'R298c 且给出人话原因（点名"网页链接 / 需要登录 / 防盗链"，不是甩一句英文）',
+      /不是可直接播放的音频文件/.test(String(r2.reason)) && /网页链接/.test(String(r2.reason)),
+      String(r2.reason));
+
+    /* 没有 Audio 的环境（显式抹掉；jsdom 其实**有** Audio 对象、只是不会解码 ——
+       第一版按"jsdom 没有 Audio"写，结果走的是 8 秒超时路径，红得冤枉） */
+    const noAudio = bootCloud();
+    noAudio.w.Audio = undefined;
+    const r3 = await noAudio.NEON.Radio.probeSourceUrl(URL_OK);
+    T(CASE, 'R298d 环境不支持试听时不抛错（降级为"请自行确认"，不阻断入库）',
+      r3 && r3.ok === false && /无法试听校验/.test(String(r3.reason)), JSON.stringify(r3));
+  }
+
   /* ================= ⑤ 界面：那条分支真的会调 addByUrl ================= */
   {
     /* ⚠ 必须显式 radio: true —— bootDom 默认**不装载** radio.js（见 common.js 的说明），
@@ -212,6 +265,10 @@ async function run() {
     /* ⚠ 面板默认**不渲染**（RadioUI.panelOpen 才画），所以要像真人一样先点开 dock。
        第一版没点，于是 4 条界面断言全红 —— 红得对：证明的是"没打开就没有表单"，
        而不是"功能不在"。 */
+    /* v4.9.6：界面提交现在会先试听校验 —— jsdom 里没有 Audio，
+       不装桩的话校验会（正确地）拦下提交，R296d 就测不到入库分支了。 */
+    stubAudio(ctx.w, 'ok');
+
     const dock = ctx.doc.getElementById('radio-dock');
     if (dock) dock.dispatchEvent(new ctx.w.MouseEvent('click', { bubbles: true, cancelable: true }));
 

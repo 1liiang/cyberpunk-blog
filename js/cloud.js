@@ -1037,6 +1037,57 @@
       });
     },
 
+    /* 入库**前**先问浏览器一句："这个地址你到底能不能当音频加载？"
+       v4.9.6 新增：站长第一次贴的是 B 站**网页地址**，库里存得好好的、
+       播放时才报 "no supported sources" —— 句子里既像网络故障又像文件损坏，
+       谁也不知道是自己贴错了。入口拦一次，这类错就再也进不了库。
+
+       ⚠ 为什么用 <audio> 而不是 fetch 看 Content-Type：
+         · 同源策略/防盗链会让 fetch 拿到与 <audio> **不同**的结果；
+         · .m3u8 / 无扩展名的音频流 Content-Type 常是 text/plain，但照样能播；
+         · 最终"能不能播"本来就由 <audio> 说了算 —— 那就直接问它。
+       ⚠ 不需要 CORS：媒体元素播放是"不透明"加载（只有 Web Audio 分析才要 CORS）。
+       返回 { ok:true, duration } 或 { ok:false, reason }；**永不抛错**（调用方按 ok 分支）。 */
+    probeSourceUrl: function (url) {
+      return new Promise(function (resolve) {
+        var A = (typeof window !== 'undefined') ? window.Audio : null;
+        if (!A) { resolve({ ok: false, reason: '当前环境无法试听校验，请自行确认地址可用' }); return; }
+        var audio = null, timer = null, done = false;
+        function finish(r) {
+          if (done) return;
+          done = true;
+          if (timer) { clearTimeout(timer); timer = null; }
+          if (audio) { try { audio.removeAttribute('src'); audio.load(); } catch (e) {} }
+          resolve(r);
+        }
+        try {
+          audio = new A();
+          audio.preload = 'metadata';
+          audio.addEventListener('loadedmetadata', function () {
+            var d = audio.duration;
+            finish({ ok: true, duration: (isFinite(d) && d > 0) ? Math.round(d) : null });
+          });
+          audio.addEventListener('error', function () {
+            var code = (audio.error && audio.error.code) || 0;
+            finish({
+              ok: false,
+              code: code,
+              /* code 4 = 不是可播放的音频（网页链接/需登录/防盗链都会落到这里） */
+              reason: code === 4
+                ? '这个地址不是可直接播放的音频文件（可能是网页链接、需要登录，或开了防盗链）'
+                : '这个地址无法作为音频加载（网络/格式问题）'
+            });
+          });
+          /* 超时兜底：个别源既不报错也不给元数据（一直转圈）——不能让表单卡死 */
+          timer = setTimeout(function () { finish({ ok: false, reason: '试听超时：地址无响应或太慢' }); }, 8000);
+          audio.src = url;
+          audio.load();
+        } catch (e) {
+          finish({ ok: false, reason: '试听校验失败：' + ((e && e.message) || '未知原因') });
+        }
+      });
+    },
+
     /* 读文件 + 取时长 + 入库，一步到位（供 UI 调用）。
        ⚠ 没有「回删已上传文件」这一步了 —— 音频不再有独立的存储对象，
          入库失败就是整条失败，不会留孤儿（原 storage 方案的孤儿问题天然消失）。 */

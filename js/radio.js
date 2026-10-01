@@ -458,7 +458,23 @@
     audio.addEventListener('error', function () {
       /* src 为空时的 error 是换源的正常噪声，忽略 */
       if (!audio.src || loading) return;
-      errText = '音频加载失败（文件可能缺失或已损坏）';
+      /* v4.9.6：按 MediaError 码分档给**能指导下一步**的中文，而不是一句笼统的
+         "文件可能缺失或已损坏"。最要紧的是 code 4 —— 实测站长第一次贴的是一条
+         B 站**网页地址**，浏览器只会说 "The element has no supported sources."，
+         那句话既像网络问题又像文件坏了，实际含义是"这压根不是音频文件"。
+         ⚠ CSP 拦截与地址不可播会给出**同一句**浏览器文案，所以这里点名两种可能。 */
+      var code = (audio.error && audio.error.code) || 0;
+      if (code === 4 /* MEDIA_ERR_SRC_NOT_SUPPORTED */) {
+        errText = '音源无法播放：这个地址不是可直接播放的音频文件（可能是网页链接 / 需要登录 / 防盗链）';
+      } else if (code === 3 /* MEDIA_ERR_DECODE */) {
+        errText = '音频解码失败：文件可能已损坏，或浏览器不支持这种编码';
+      } else if (code === 2 /* MEDIA_ERR_NETWORK */) {
+        errText = '网络中断：音频没下完，检查网络或换个更稳的源';
+      } else if (code === 1 /* MEDIA_ERR_ABORTED */) {
+        errText = '播放被中断（多为切换曲目或源地址失效）';
+      } else {
+        errText = '音频加载失败（文件可能缺失或已损坏）';
+      }
       emit('error', { message: errText, index: pos });
       pushState();
     });

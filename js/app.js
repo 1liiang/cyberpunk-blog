@@ -1889,9 +1889,22 @@
     if (!uid) { formMsg('请先登录', 'err'); return; }
 
     RadioUI.busy = true;
-    formMsg(url ? '正在写入外链…' : '正在上传并写入云端库…（大文件需要一点时间）');
+    formMsg(url ? '正在试听校验这条直链…' : '正在上传并写入云端库…（大文件需要一点时间）');
 
     try {
+      /* v4.9.6：外链**先试听校验再入库**。
+         ⚠ 教训实锤：站长第一次贴的是 B 站**网页地址**，它 https 合法、URL 结构也合法，
+           于是顺利入库，直到播放时才报一句 "no supported sources" —— 用户根本看不出
+           是自己贴错了。校验放在入库前，这类错就进不了库。 */
+      if (url) {
+        var probe = await need('Radio').probeSourceUrl(url);
+        if (probe && probe.ok === false) {
+          formMsg(probe.reason || '这个地址无法播放，请换一条音频直链', 'err');
+          RadioUI.busy = false;
+          return;
+        }
+      }
+
       /* v4.9.5：两条路 —— 直链只存地址（秒完成、不占库容）；文件走原来的 base64 入库。
          返回对象的形状两者一致（都有 has_data），所以下面的收尾代码共用。 */
       var row = url

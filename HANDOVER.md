@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v4.9.5（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v4.9.6（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -159,6 +159,18 @@ cyberpunk-blog/
   （`paintDock → paintPanelProgress` 直接读 document），那是**测试环境产物**，不是线上缺陷。
 - ⚠ **`create or replace view` 不能改列序**：给视图加列必须追加到 SELECT 末尾，
   否则 `42P16: cannot change name of view column …`（实测踩到）。
+
+### 音频播放失败怎么查（v4.9.6 实锤）
+
+- ⚠ **CSP 拦截**与**地址本身不可播**会给浏览器**同一句**文案（"The element has no supported sources."）——
+  别猜，分开取证：① 页面里听 `securitypolicyviolation`（有 = CSP 拦的）
+  ② 直连那条 URL 看 `Content-Type`（`text/html` = 贴的是网页而不是音频文件）。
+- ⚠ **网页地址能顺利入库**（https 合法、URL 结构也合法），直到播放才炸 ——
+  所以外链入库前必须用 `probeSourceUrl` 试听校验一次（用 `<audio>` 亲口问，不用 fetch：
+  防盗链与同源策略会让 fetch 拿到不同结果，`.m3u8` 之类又常是 text/plain 却照样能播）。
+- ⚠ 用 CDP 驱动 Edge 验真实播放很有效：`--remote-debugging-port` + `Runtime.evaluate`
+  可在**线上站的真实 CSP 下**跑 `new Audio()` 探针，比 file:// 页面可靠得多
+  （本机 headless 对 file:// 返回空 DOM）。
 
 ### 引入第三方素材 / 组件的规矩（2026-10-01 站长更新）
 
