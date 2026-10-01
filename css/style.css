@@ -4613,6 +4613,18 @@ body.has-radio .wrap { padding-top: 84px; }
 }
 .radio-form[hidden] { display: none; }
 .radio-field { display: flex; flex-direction: column; gap: 4px; }
+/* v4.9.5：音源二选一的分隔小标题（外链/内链）。做成一条带左侧色标的窄行，
+   让"从这里开始是音源"在视觉上切开，不至于被当成又一个普通字段。 */
+.radio-src-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  border-left: 2px solid var(--cyan);
+  padding-left: 7px;
+  margin-top: 2px;
+}
+.radio-src-head b { color: var(--magenta); font-weight: 400; }
 .radio-field > span {
   font-family: var(--mono);
   font-size: 10px;

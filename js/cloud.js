@@ -793,10 +793,13 @@
   var RADIO_READ_TABLE = 'public_radio';
   var RADIO_WRITE_TABLE = 'radio_tracks';
   /* ⚠ 白名单**故意不含 data** —— 列表只取展示必需字段。
-     带上 data 会让「打开面板」变成「下载整个曲库」，是致命的性能陷阱。 */
-  var RADIO_FIELDS = 'id,title,artist,album,mime,duration_sec,size_bytes,sort_order,cover_url,has_data,created_at';
+     带上 data 会让「打开面板」变成「下载整个曲库」，是致命的性能陷阱。
+     v4.9.5：带上 source_url（外链音源）—— 它只是一条几十字符的 URL，
+     与 data 完全不同量级；列表靠它区分"内链 / 外链"，也给 playUrl 走捷径。 */
+  var RADIO_FIELDS = 'id,title,artist,album,mime,duration_sec,size_bytes,sort_order,cover_url,has_data,source_url,created_at';
   /* ⚠⚠ 视图**算出来**的列（基表没有），只在读视图时可用。
-     has_data = (data IS NOT NULL)，是为了让列表能判断"能不能播"而不必拉 data。
+     has_data = (data IS NOT NULL OR source_url IS NOT NULL)，是为了让列表能判断
+     "能不能播"而不必拉 data（v4.9.5 起把外链也算作可播）。
      把它混进基表（写路径）会让 PostgREST 生成
      `INSERT ... RETURNING …, has_data` → 42703：
      「column radio_tracks.has_data does not exist」——上传直接失败。 */
@@ -955,13 +958,18 @@
     },
 
     /* 入库一条曲目记录。⚠ 音频本体走 meta.data（data URL），不再有 storage_path。 */
+    /* 入库一条曲目。**两种音源二选一**（v4.9.5 起）：
+         · meta.source_url —— 外链音源（https 直链，库里只存这一条 URL）
+         · meta.data       —— 内链音源（base64 data URL 全文，兼容既有记录）
+       ⚠ 两者都没有 = 一条"看着能播、点了没声"的记录，必须在入口就挡住。 */
     create: async function (meta) {
       meta = meta || {};
       var title = String(meta.title || '').trim();
       if (!title) throw new Error('请填写曲目名称');
       if (title.length > 200) throw new Error('曲目名称不能超过 200 字');
-      if (!meta.data) throw new Error('缺少音频数据');
-      if (String(meta.data).length > AUDIO_DATA_MAX) {
+      var srcUrl = Radio.normalizeSourceUrl(meta.source_url);
+      if (!srcUrl && !meta.data) throw new Error('缺少音源：请上传音频文件，或填写 https 直链');
+      if (meta.data && !srcUrl && String(meta.data).length > AUDIO_DATA_MAX) {
         throw new Error('音频体积超出库上限，请压缩后重试');
       }
 
@@ -969,9 +977,10 @@
         title: title,
         artist: meta.artist ? String(meta.artist).trim().slice(0, 200) : null,
         album: meta.album ? String(meta.album).trim().slice(0, 200) : null,
-        /* 音频本体。storage_path 置 null（列已可空）—— 让「旧记录」与
-           「新记录」在库层面就能一眼区分，不会留下指向空文件的孤儿路径。 */
-        data: String(meta.data),
+        /* 音源二选一：外链走 source_url（data 留 null），内链走 data。
+           storage_path 一律 null（旧云存储方案遗留，让新旧记录在库层面一眼可分）。 */
+        data: srcUrl ? null : String(meta.data),
+        source_url: srcUrl,
         storage_path: null,
         duration_sec: (typeof meta.duration_sec === 'number' && meta.duration_sec >= 0)
           ? Math.round(meta.duration_sec) : null,
@@ -990,12 +999,42 @@
       if (res.error) throw new Error(errMsg(res.error, '曲目入库失败'));
       var saved = (res.data && res.data[0]) || null;
       if (saved) {
-        /* 刚入库的行必然有音频本体 → 补上视图才有的 has_data，
+        /* 刚入库的行必然有音源 → 补上视图才有的 has_data，
            让返回对象与 list() 的行**同形**（调用方不必按来源分支判断）。 */
         saved.has_data = true;
         radioCacheDrop(saved.id);   /* 同 id 重传时清掉旧缓存 */
       }
       return saved;
+    },
+
+    /* 规范化外链音源。返回 '' 表示"没填"；填了但不合法则**抛错**（不静默丢弃 ——
+       静默会变成"看着加成功了、点了没声"，比报错难查得多）。
+       ⚠ 与库层的 CHECK 同规则（只放行 https）：http 会被浏览器当混合内容拦掉，
+         javascript:/data:text/html 之类更不该进这条管道。 */
+    normalizeSourceUrl: function (raw) {
+      var s = String(raw == null ? '' : raw).trim();
+      if (!s) return '';
+      if (s.length > 2000) throw new Error('音频直链过长（上限 2000 字符）');
+      if (!/^https:\/\//i.test(s)) throw new Error('音频直链必须以 https:// 开头');
+      /* 只做结构性校验，不"猜"合法性：能不能播最终由 <audio> 说了算 */
+      try { new URL(s); } catch (e) { throw new Error('音频直链格式不正确'); }
+      return s;
+    },
+
+    /* 只凭一个外链入库（供 UI 的"贴链接"入口调用）。
+       与 addTrack 并列：那个走文件（读 base64 + 探时长），这个不碰文件。
+       ⚠ 时长/体积都留空 —— 外链不必下载就能播，播放时由 <audio> 自己得出时长。 */
+    addByUrl: async function (url, meta, uid) {
+      return await Radio.create({
+        title: (meta && meta.title) || '',
+        artist: meta && meta.artist,
+        album: meta && meta.album,
+        cover_url: meta && meta.cover_url,
+        sort_order: meta && meta.sort_order,
+        source_url: url,
+        mime: meta && meta.mime,
+        owner_id: uid
+      });
     },
 
     /* 读文件 + 取时长 + 入库，一步到位（供 UI 调用）。
@@ -1028,13 +1067,22 @@
       return true;
     },
 
-    /* 取可播放地址。入参兼容「整行」与「id」，返回 **data URL**（永久有效）。
-       ⚠ 不带过期时间 ⇒ 播放内核无需续签（radio.js 已按「返回字符串 = 永久」处理）。
-       ⚠ 带 LRU 缓存：上下一首来回切、播完重播都不会重新拉十几 MB。 */
+    /* 取可播放地址。入参兼容「整行」与「id」，返回一个**可直接交给 <audio> 的地址**：
+         · 有 source_url（外链音源）→ 直接返回它，**不碰 base64**（v4.9.5 起）
+         · 否则 → 取库里的 data URL（内链，永久有效）
+       ⚠ 两种来源对播放内核完全一样（它只认"一个地址"），所以 radio.js 一行都不用改。
+       ⚠ 不带过期时间 ⇒ 无需续签（radio.js 已按「返回字符串 = 永久」处理）。
+       ⚠ 带 LRU 缓存：上下一首来回切、播完重播都不会重新拉十几 MB。
+         外链也进缓存（几十字符，代价可忽略），语义上更一致。 */
     playUrl: async function (row) {
       var id = (row && typeof row === 'object') ? row.id : row;
       var hit = radioCacheGet(id);
       if (hit) return hit;
+      var direct = (row && typeof row === 'object') ? row.source_url : null;
+      if (direct) {
+        radioCachePut(id, direct);
+        return direct;
+      }
       var url = await Radio.trackData(id);
       radioCachePut(id, url);
       return url;

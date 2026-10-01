@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v4.9.4（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v4.9.5（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -145,6 +145,20 @@ cyberpunk-blog/
 - ⚠ **发布后验证必须用 GET**（禁用 `curl -I`），并带 `--compressed`；`verified: true` ≠ 已传播，
   **必须核对 `?v=` 与 BUILD_ID**。
 - ⚠ 发布返回的 `shareLink` 是**根路径的遗留快照**，不要原样转给用户 —— 正确地址永远带 `/cyberpunk-blog/`。
+
+### 电台「外链音源」与它的两个坑（v4.9.5）
+
+- **能力**：曲目音源二选一 —— `data`（base64 内链）或 `source_url`（https 直链外链）。
+  `playUrl` 遇到外链直接返回地址、**不碰 base64**；没有外链时仍走原路（老曲目不受影响）。
+- ⚠ **CSP 是有意放宽的**：`media-src` 加了 `https:` —— 不加的话浏览器会直接拦掉外链音频。
+  它只管 `<audio>/<video>`，不涉及脚本与样式。想收紧就把 `https:` 换成你固定的域名。
+- ⚠ **测试脚手架曾经漏装 `radio.js`**：真实 `index.html` 有它，`bootDom` 却一直没求值，
+  于是 `window.NEONRadio` 恒为 undefined、电台面板在测试里永远画不出来 ——
+  任何"电台界面"的行为断言都写不了。现在改成 `bootDom({ radio: true })` 按需装载。
+  为什么不做成默认：默认开启会踩到降级用例里"没有 document"的路径
+  （`paintDock → paintPanelProgress` 直接读 document），那是**测试环境产物**，不是线上缺陷。
+- ⚠ **`create or replace view` 不能改列序**：给视图加列必须追加到 SELECT 末尾，
+  否则 `42P16: cannot change name of view column …`（实测踩到）。
 
 ### 引入第三方素材 / 组件的规矩（2026-10-01 站长更新）
 

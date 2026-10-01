@@ -126,6 +126,12 @@ create table if not exists radio_tracks (
   album        text,
   data         text check (data is null or length(data) <= 36000000),  -- ⚠ data URL 全文（含 data:...;base64, 前缀）
   storage_path text,                                    -- 旧（云存储）方案遗留，新纪录一律 null
+  -- v4.9.5：外链音源（「URL 源播放」）。为空 = 用 data 里的 base64（「内链播放」）。
+  -- ⚠ 为什么不复用 storage_path：那是旧云存储方案的遗留字段，语义是"云存储对象路径"，
+  --    混用会让后来人分不清"这条到底能不能播、播的是哪一份"。
+  -- ⚠ CHECK 只放行 https：挡掉 http（混合内容会被浏览器拦）与 javascript: 之类注入
+  --    （<audio> 不会执行它们，但策略上不该留口子）。
+  source_url   text check (source_url is null or source_url ~ '^https://'),
   duration_sec int,
   size_bytes   bigint,                                  -- 二进制字节数（非 base64 长度）
   mime         text,
@@ -157,7 +163,14 @@ create index if not exists radio_tracks_order_idx on radio_tracks (sort_order, i
 --    绝不能引用它（PostgREST 会报 42703，v2.9.2 事故的根源）。
 create or replace view public_radio as
   select id, title, artist, album, mime, data, duration_sec, size_bytes,
-         sort_order, cover_url, (data is not null) as has_data, created_at
+         sort_order, cover_url,
+         -- v4.9.5：has_data 的含义扩为"这条记录有可播内容"（内链 base64 **或**外链 URL）——
+         -- 应用的过滤逻辑（访客不看无音频的记录）依赖它，只判 data 会把外链曲目漏掉。
+         (data is not null or source_url is not null) as has_data, created_at,
+         -- ⚠ source_url **必须放最后**：`create or replace view` 不允许改动已有列的顺序或名字
+         --   （实测把新列插在中间会报 42P16: cannot change name of view column "duration_sec"）。
+         --   追加到末尾才能就地升级线上视图，同时保住视图上的 GRANT。
+         source_url
   from radio_tracks;
 
 -- ------------------------------------------------------------

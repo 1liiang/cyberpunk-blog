@@ -1492,7 +1492,11 @@
         '</div>' +
         listHtml +
         (canManage ? '<div class="radio-drop" data-radio-drop hidden>松手即上传到频段</div>' : '') +
-        /* 上传表单：默认隐藏，点「+ 添加曲目」后显示（避免隐藏的 file input 无法聚焦） */
+        /* 上传表单：默认隐藏，点「+ 添加曲目」后显示（避免隐藏的 file input 无法聚焦）
+           v4.9.5：音源改为**二选一** —— 音频文件（内链，base64 进库）
+           或 **https 直链（外链，库里只存这一条 URL）**。
+           ⚠ 两个字段都摆出来、不藏在模式切换后面：用户一眼就能看到"有两种加法"，
+             切换器反而多一层"我是不是点错了"的疑惑；二选一由提交时的校验兜住。 */
         (canManage ? '' +
           '<div class="radio-form" data-radio-form hidden>' +
             '<label class="radio-field"><span>曲目名称 *</span>' +
@@ -1501,18 +1505,25 @@
               '<input type="text" data-radio-field="artist" maxlength="200" placeholder="可留空"></label>' +
             '<label class="radio-field"><span>专辑</span>' +
               '<input type="text" data-radio-field="album" maxlength="200" placeholder="可留空"></label>' +
-            '<label class="radio-field"><span>音频文件 *</span>' +
+            '<div class="radio-src-head">音源（<b>二选一</b>）</div>' +
+            '<label class="radio-field"><span>音频文件</span>' +
               '<input type="file" data-radio-field="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac"></label>' +
+            '<label class="radio-field"><span>…或 https 直链</span>' +
+              '<input type="text" data-radio-field="url" inputmode="url" spellcheck="false"' +
+                ' placeholder="https://…（外链音源，库里只存这条地址）"></label>' +
             '<div class="radio-form-ops">' +
               '<button type="button" class="btn btn-sm" data-radio-act="cancel-add">取消</button>' +
-              '<button type="button" class="btn btn-sm btn-cyan" data-radio-act="submit-add">上传并加入</button>' +
+              '<button type="button" class="btn btn-sm btn-cyan" data-radio-act="submit-add">加入频段</button>' +
             '</div>' +
             '<div class="radio-form-msg" data-radio-msg hidden></div>' +
           '</div>' : '') +
         '<div class="radio-hint">' +
           (canManage
             ? '提示：音频随曲目存在云端库中，<b>所有人（含未登录访客）</b>都可直接收听' +
-              (audioLimitText() ? '；单曲上限 ' + audioLimitText() + '。' : '。')
+              (audioLimitText() ? '；单曲上限 ' + audioLimitText() + '。' : '。') +
+              /* v4.9.5：把"内容责任"写在站长看得见的地方 —— 外链模式只提供管道，
+                 不校验、也不背书所贴音频的来源与授权。 */
+              '<br>外链音源只存地址、不复制文件：请自行确认所贴音频的来源与授权（本站不做校验）。'
             : '提示：按播放键即可收听。') +
         '</div>' +
       '</div>';

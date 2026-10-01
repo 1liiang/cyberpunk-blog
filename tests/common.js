@@ -504,6 +504,18 @@ function bootDom(opts) {
     }
   }
 
+  /* v4.9.5：radio.js —— **按需装载**（传 opts.radio: true）。
+     背景：index.html 里本来就有 js/radio.js，桩却一直漏了它 —— 于是 window.NEONRadio
+     恒为 undefined、paintDock() 直接 return、电台面板永远画不出来，
+     "电台界面"的行为断言根本无从写起（v4.9.5 写外链音源的界面用例时才发现）。
+
+     ⚠ 为什么不做成默认装载：试过，会踩到既有降级用例里"没有 document"的那条路 ——
+       radio.js 就位后 paintDock() 会往下走到 paintPanelProgress()，而它直接读 document。
+       那是**测试环境的产物**（真实浏览器里 document 永远存在），不是线上缺陷；
+       但为了不惊动既有 1155 条断言，这里做成 opt-in，谁要测电台界面谁显式打开。
+     ⚠ 必须在 app.js **之前**求值：app 求值即绑 dock，而 paintDock 需要
+       window.NEONRadio 已经存在（否则首绘就是空的，dock 点开也没内容）。 */
+  if (opts.radio) w.eval(SRC.radio);
   if (!opts.skipApp) w.eval(SRC.app);
   /* v4.3：装置（与 index.html 一致：app 之后）——console 的 DOM 惰性，
      eval 时只加载历史与定义接口，不触碰页面 */

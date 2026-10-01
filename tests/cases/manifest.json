@@ -310,5 +310,11 @@
     "name": "v4.9 收藏（账号 + 登录门槛）",
     "blocks": 1,
     "expect": 19
+  },
+  {
+    "file": "54-v4-9-5-radio-url.js",
+    "name": "v4.9.5 电台外链音源（URL 源播放）",
+    "blocks": 1,
+    "expect": 24
   }
 ]

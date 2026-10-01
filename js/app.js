@@ -1820,7 +1820,7 @@
   function numIdOf(id) { return Number(id); }
 
   /* ---------- 上传表单 ---------- */
-  var formDraft = { title: '', artist: '', album: '' };
+  var formDraft = { title: '', artist: '', album: '', url: '' };
 
   function showAddForm(on) {
     var host = document.getElementById('radio-panel-host');
@@ -1840,7 +1840,7 @@
     if (!host) return;
     var form = host.querySelector('[data-radio-form]');
     if (!form || form.hidden) return;
-    ['title', 'artist', 'album'].forEach(function (k) {
+    ['title', 'artist', 'album', 'url'].forEach(function (k) {
       var el = form.querySelector('[data-radio-field="' + k + '"]');
       if (el && !el.value) el.value = formDraft[k] || '';
     });
@@ -1867,30 +1867,47 @@
     var artistEl = form.querySelector('[data-radio-field="artist"]');
     var albumEl = form.querySelector('[data-radio-field="album"]');
     var fileEl = form.querySelector('[data-radio-field="file"]');
+    var urlEl = form.querySelector('[data-radio-field="url"]');
 
     var title = (titleEl && titleEl.value || '').trim();
     var file = fileEl && fileEl.files && fileEl.files[0];
+    var url = (urlEl && urlEl.value || '').trim();
 
     /* 校验在前，给具体原因（不做"上传失败"这种模糊提示） */
-    if (!file) { formMsg('请选择音频文件', 'err'); return; }
+    if (file && url) { formMsg('音频文件与直链只能选一个', 'err'); return; }
+    if (!file && !url) { formMsg('请选择音频文件，或填写 https 直链', 'err'); return; }
     if (!title) { formMsg('请填写曲目名称', 'err'); return; }
     if (title.length > 200) { formMsg('曲目名称不能超过 200 字', 'err'); return; }
+    /* 直链的结构校验放在前面做（别等提交到库层才因为 CHECK 报错，
+       那样用户拿到的是"曲目入库失败"，看不出是链接写错了） */
+    if (url) {
+      try { need('Radio').normalizeSourceUrl(url); }
+      catch (e2) { formMsg(errMsg(e2, '音频直链不合法'), 'err'); return; }
+    }
 
     var uid = State.session && State.session.user && State.session.user.id;
     if (!uid) { formMsg('请先登录', 'err'); return; }
 
     RadioUI.busy = true;
-    formMsg('正在上传并写入云端库…（大文件需要一点时间）');
+    formMsg(url ? '正在写入外链…' : '正在上传并写入云端库…（大文件需要一点时间）');
 
     try {
-      var row = await need('Radio').addTrack(file, {
-        title: title,
-        artist: (artistEl && artistEl.value || '').trim(),
-        album: (albumEl && albumEl.value || '').trim()
-      }, uid);
+      /* v4.9.5：两条路 —— 直链只存地址（秒完成、不占库容）；文件走原来的 base64 入库。
+         返回对象的形状两者一致（都有 has_data），所以下面的收尾代码共用。 */
+      var row = url
+        ? await need('Radio').addByUrl(url, {
+            title: title,
+            artist: (artistEl && artistEl.value || '').trim(),
+            album: (albumEl && albumEl.value || '').trim()
+          }, uid)
+        : await need('Radio').addTrack(file, {
+            title: title,
+            artist: (artistEl && artistEl.value || '').trim(),
+            album: (albumEl && albumEl.value || '').trim()
+          }, uid);
 
-      /* 上传成功 → 刷新列表，清空表单 */
-      formDraft = { title: '', artist: '', album: '' };
+      /* 成功 → 刷新列表，清空表单 */
+      formDraft = { title: '', artist: '', album: '', url: '' };
       await loadRadioTracks();
       RadioUI.loaded = true;
       paintPanel();
@@ -1898,7 +1915,7 @@
       toast('已加入频段：' + (row && row.title ? row.title : title), 'ok');
       formMsg('');
     } catch (e) {
-      formMsg(errMsg(e, '上传失败'), 'err');
+      formMsg(errMsg(e, url ? '外链写入失败' : '上传失败'), 'err');
     } finally {
       RadioUI.busy = false;
     }

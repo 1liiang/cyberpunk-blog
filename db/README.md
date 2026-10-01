@@ -41,7 +41,23 @@ node db/make-bootstrap.js
    历史原因：原平台的对象存储只服务登录用户，而博客图片必须匿名可读。
 3. **读走视图、写走基表**：`public_images` / `public_radio` 是匿名读通道，不暴露 `owner_id`；
    基表 `post_images` 对匿名返回 0 行（RLS 默认拒绝）。
-4. **电台（`radio_tracks` / `public_radio`）已退役**：表与视图结构保留、当前 0 行，
+4. **电台（`
+### radio_tracks.source_url（v4.9.5 外链音源）
+
+「贴一个 https 直链就能播」的落点。**与 data 二选一**：
+
+| 列 | 含义 | 谁在用 |
+|---|---|---|
+| `data` | base64 data URL 全文（内链播放） | 上传文件的曲目 |
+| `source_url` | https 直链（外链播放） | 只贴链接的曲目 |
+
+- `public_radio.has_data` = `data is not null or source_url is not null` ——
+  应用靠它决定"这条到底能不能播"，所以两条路都必须算进去（只判 data 会把外链曲目漏掉）。
+- CHECK 只放行 `^https://`：http 会被浏览器当混合内容拦掉，`javascript:` 之类更不该进这条管道。
+- ⚠ 视图新增列**必须追加到 SELECT 末尾**：`create or replace view` 不允许改动既有列的顺序或名字
+  （实测把新列插在中间 → `42P16: cannot change name of view column "duration_sec"`）。
+
+radio_tracks` / `public_radio`）已退役**：表与视图结构保留、当前 0 行，
    界面也保留（未登录访客看不到空播放器，站长登录后仍有上传入口）。
 5. **收藏（`bookmarks`，v4.9.0）是账号功能**：站长的规则是「只有登录了才能收藏，未登录只能浏览」。
    实现要点：主键 `(owner_id, post_id)` 天然去重；`post_id` 外键 `on delete cascade`

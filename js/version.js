@@ -15,17 +15,30 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '4.9.4',
+    BUILD: '4.9.5',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20261001T1559+0800-buildhbzr',
+    BUILD_ID: '20261001T1700+0800-buildckpv',
 
     /* 构建日期（随版本一起更新） */
     BUILT_AT: '2026-10-01',
 
     /* 工程日志：最新的一条放最前面 */
     LOG: [
+      {
+        version: '4.9.5',
+        date: '2026-10-01',
+        title: '电台支持外链音源（URL 源播放）',
+        items: [
+          '方案 A（站长拍板）：做能力、不做内容审核 —— 曲目音源二选一：data（base64 内链）或 source_url（https 直链外链）；playUrl 遇到外链直接返回地址、不碰 base64，没有外链时仍走原路（老曲目不受影响）',
+          '数据库：radio_tracks 新增 source_url（CHECK 只放行 https）+ public_radio 视图 has_data 扩为「data 或 source_url 任一存在」，迁移已在真项目跑过并做了行为验证（外链记录 has_data=true、匿名可读、http 被拒）',
+          '界面：站长面板的添加表单改为「音源」二选一（文件 / https 直链），提示里写明「外链只存地址、请自行确认所贴音频的来源与授权」',
+          'CSP 有意放宽：media-src 增加 https:（不加则浏览器直接拦掉外链音频）；只碰媒体面，script-src 仍是纯 self',
+          '测试：新增 54 号用例 24 条（含「外链不得回拉 base64」「老记录仍能播」「界面提交真按外链入库」「CSP 确实放行」）；顺带补上测试脚手架一直漏装的 radio.js（按需装载 opts.radio，默认关以免惊动既有断言）',
+          '踩坑：create or replace view 不允许改动既有列顺序（42P16），新增列必须追加到 SELECT 末尾'
+        ]
+      },
       {
         version: '4.9.4',
         date: '2026-10-01',
