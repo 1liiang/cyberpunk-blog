@@ -1660,7 +1660,7 @@
           '<div class="holo-now">' +
             '<span class="holo-now-label">NOW · 当前条目</span>' +
             '<div class="holo-now-title" data-holo-now>' + (nowPlaying ? esc(nowPlaying.title || '未命名') : '电台待命') + '</div>' +
-            '<div class="holo-now-sub" data-holo-now-sub">' +
+            '<div class="holo-now-sub" data-holo-now-sub>' +
               (nowPlaying ? esc(nowPlaying.artist || '') : '还没有条目') + '</div>' +
           '</div>' +
         '</div>' +

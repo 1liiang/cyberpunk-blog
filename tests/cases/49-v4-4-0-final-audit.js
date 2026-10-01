@@ -220,12 +220,12 @@ async function run() {
     var handover = '';
     try { handover = fs.readFileSync(path.join(ROOT, 'HANDOVER.md'), 'utf8'); } catch (e) { handover = ''; }
 
-    T(CN, 'R243 HANDOVER 已更新到 5.4.2（版本 / 门禁数 / 新文件树 / 新坑块）',
+    T(CN, 'R243 HANDOVER 已更新到 5.4.3（版本 / 门禁数 / 新文件树 / 新坑块）',
       /* ⚠ 版本号要钉**头部那一行**的格式：文件别处（如第 9/10 节注记）也会有 "v4.x.x"
          字样 —— 只查"全文出现过"会让"头部版本没改"的变异假绿（反向验证实锤）。
          ⚠ v4.8.0 迁移时同步改这里（Supabase 迁移 + 门禁 1106 → 1135）——
            文档更新后不同步断言，就会像这次一样在门禁上当场报红。 */
-      /\*\*版本\*\*：v5\.4\.2/.test(handover) &&
+      /\*\*版本\*\*：v5\.4\.3/.test(handover) &&
       /1155\/1155/.test(handover) &&
       /scene\.js/.test(handover) && /console\.js/.test(handover) &&
       /4\.0 时代的新坑/.test(handover),
