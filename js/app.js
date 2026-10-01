@@ -1486,6 +1486,10 @@
   if (typeof document !== 'undefined') {
     bindRadioPageOnce();
     rcLoad();
+    /* ⚠ 路由一变就重算控制台体型（mini ↔ full）—— 只改 data-mode，**不动 iframe**，
+       这正是"切页面不断歌"的实现方式。
+       第一版只在电台交互时重算，于是离开电台页后控制台还赖在大体型上（线上验收发现）。 */
+    window.addEventListener('hashchange', function () { paintStage(); });
   }
 
 function route() {
