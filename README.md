@@ -15,7 +15,7 @@
 │   ├── index.html      唯一入口（含 CSP）
 │   ├── js/ css/ assets/
 │   ├── data/           静态快照（GitHub Pages 的内容来源，勿手改）
-│   ├── tests/ tools/   门禁（1156 条断言）+ 构建/导出/审计脚本
+│   ├── tests/ tools/   门禁（343 条；18 个核心 case）+ 构建/导出/审计脚本
 │   └── README.md       ★ 站点自己的说明（先读这个）
 ├── db/           数据库重建资料（schema.sql + 种子 + 导出/导入/校验工具）
 ├── docs/         迁移与部署指南（docs/MIGRATION.md 等）
@@ -29,7 +29,7 @@
 ```bash
 cd app
 npm ci                 # 只装 jsdom（唯一 devDependency）
-npm run gate           # ★ 全量门禁，必须 1156/1156 全绿
+npm run gate           # ★ 全量门禁，必须 343/343 全绿
 python -m http.server 8898 --bind 127.0.0.1   # 本地预览 → http://127.0.0.1:8898/
 ```
 

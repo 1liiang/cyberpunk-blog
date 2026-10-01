@@ -15,11 +15,11 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '5.7.1',
+    BUILD: '5.7.2',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20261002T0144+0800-buildlfry',
+    BUILD_ID: '20261002T0230+0800-buildc9ro',
 
     /* 构建日期（随版本一起更新） */
     BUILT_AT: '2026-10-02',
@@ -29,6 +29,20 @@
        ⚠ v5.6.3：1.0.0 ~ 5.5.1 的 88 条逐版流水账已裁掉，改成末尾的「历史事故索引」——
          完整历史在 git 里逐版可查，这里只留**可能重演的教训**。 */
     LOG: [
+      {
+        version: '5.7.2',
+        date: '2026-10-02',
+        title: '电台功能彻底下线 + 门禁裁剪到核心',
+        items: [
+          "电台功能**整体下线**（用户要求「旧电台也全删了」）—— 这是 v5.6.1「删旧内核」的续篇：上一轮保留了 v5 的网易云条目能力，这一轮连它一起删。js/cloud.js 的 Radio 数据面（list/add/removeTrack/reorder）与 StaticRadio 回退、RADIO_READ_TABLE/RADIO_WRITE_TABLE/RADIO_FIELDS、parseNetease/buildEmbedUrl 全部移除；js/views.js 的 radioView、身份卡 holo-now 块；js/app.js 的常驻控制台（paintStage/rcLoad/renderRadio/bindRadioPage/canManageRadio/holoNowPaint）与路由、启动、身份钩子（-220 行）；index.html 的 #radio-stage 整块与开机 RADIO 行；css 的复古收音机与电台页样式全套（-155 行）",
+          "顺带收回 CSP 的放宽 —— index.html 里 `frame-src https://music.163.com` 当初是为电台 iframe 放的（v4.9.9），现在没有 iframe 了，一并去掉。**这是收紧安全面**，不是放宽",
+          "⚠ 保留了一件容易误删的东西 —— SIGNED_TTL_MAX/MIN/DEFAULT 与 clampTtl 物理上夹在电台代码段中间，但它们属于**附件下载**的签名有效期夹取，与电台无关。第一次删除时按「整段」删把它们一起吃了，导致整套门禁崩（ReferenceError: SIGNED_TTL_MAX is not defined）；已恢复重做并加断言守住",
+          "门禁裁剪到核心（用户要求「tests 只保留核心部分」）—— 54 个 case → **18 个**，断言 1031 → **298**。保留：主流程三件（启动/详情/首页）、供应链、版本一致、CSP、快照回退、Supabase 适配、配色与对比度、减少动效、收藏、氛围契约、终端设备契约、结构终审，以及本轮新加的 P0/P1/P2 三个硬化用例。删除 36 个历史批次用例",
+          "⚠ 裁剪的取舍说明（留档）—— 被删的用例里有几个守的是**活功能**（键盘可达、折叠组件、阅读进度、编辑器文本、图片收口、草稿、OG 卡片…），不是死代码。删它们纯粹是「缩小门禁规模」的取舍，不是「它们没用了」。完整版在 git 标签 **pre-trim** 里，一条命令可取回：`git checkout pre-trim -- app/tests`",
+          "过程踩坑（三处，都记进 HANDOVER §5）—— ① 删 CSS 时按「行里含类名」判，把 `*/` 删掉却留着 `/*`，产生从 L3035 开始的未闭合注释吞掉后面 2000+ 行（而括号配平仍显示 0，因为扫描器也把注释跳过了）；② 删 @media print 里的 `.radio-console,` 时连坐了后面的选择器，让 `.search-hero {…}` 变成没有选择器的裸块；③ 51 号切块时吃掉了块的 `{`，留下孤立 `}`。三次都是「按行号/字面推算」，最终改为**内容切片 + 边界断言 + 注释状态扫描**才稳",
+          "验证 —— 三个 JS 文件 node --check 通过；CSS 括号配平 0、注释 406/406 闭合；7 条路由逐个 jsdom 冒烟全绿且零未处理拒绝；#radio-stage 已不存在；门禁 **343/343** 全绿（298 回归 + 27 故障注入 + 18 沙箱）。删除前已打标签 pre-trim 可整体回退"
+        ]
+      },
       {
         version: '5.7.1',
         date: '2026-10-02',

@@ -105,12 +105,6 @@ function collectImageIds(posts) {
 
 const EXT_BY_MIME = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
 
-/* 电台条目字段（与 js/cloud.js 的 RADIO_FIELDS **同口径** —— 两边不一致时，
-   快照里的条目就缺字段、界面渲染不出播放器形态）。
-   ⚠ v5.6.2：旧的音频字段（data / mime / duration_sec / size_bytes / cover_url /
-     has_data 与 album）都已从库与服务端删除，这里若继续 select 会整轮导出失败
-     （42703 未定义列）—— 这正是审计清单 D 要修的东西。 */
-const RADIO_FIELDS = 'id,title,artist,kind,netease_id,source_url,sort_order,created_at';
 
 /* 快照里**不该带**的字段：owner_id 只在登录后的编辑鉴权里用
    （app.js 的 "这条信号不属于你" 判断），公开渲染一律走 owner_name。
@@ -229,7 +223,6 @@ async function main() {
     note: '由 tools/export-static.js 生成 —— 供云端不可达时（如 GitHub Pages）同源读取。勿手改。',
     posts: posts.map(slimPost),
     images: images,
-    radio: radio
   };
   const json = JSON.stringify(snapshot, null, 2);
 
