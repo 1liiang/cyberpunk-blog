@@ -255,9 +255,12 @@
       var name = e && e.name;
       if (name === 'NotAllowedError') {
         errText = '浏览器拦截了自动播放，请点一下播放键';
+      } else if (name === 'NotSupportedError') {
+        /* ⚠ 实测这里才是坏音源的**主**上报路径：play() 拒绝时 audio.error 往往还没被填上，
+           而 error 事件又常被"装载中"守卫挡掉 —— 只按 audio.error.code 判会漏，
+           于是英文兜底那句就漏到了界面上（站长截图里那句正是这么来的）。 */
+        errText = mediaErrText(4);
       } else if (audio.error && audio.error.code) {
-        /* ⚠ 走媒体错误码那一套：这里 reject 的往往是"同一个故障的第二条上报路径"，
-           直接取 e.message 会得到浏览器原文英文（实测踩到）。 */
         errText = mediaErrText(audio.error.code);
       } else {
         errText = (e && e.message) ? e.message : '播放失败';
@@ -475,8 +478,11 @@
       attachCurrent(true);
     });
     audio.addEventListener('error', function () {
-      /* src 为空时的 error 是换源的正常噪声，忽略 */
-      if (!audio.src || loading) return;
+      /* src 为空时的 error 是换源的正常噪声，忽略。
+         v4.9.7：但"装载中 + 带具体错误码"是真故障（坏音源恰好发生在换源那一刻）——
+         原来不分青红皂白地 return，把真错误也一起吞了，于是界面只剩英文兜底。 */
+      if (!audio.src) return;
+      if (loading && !(audio.error && audio.error.code)) return;
       /* v4.9.6：按 MediaError 码分档给**能指导下一步**的中文，而不是一句笼统的
          "文件可能缺失或已损坏"。最要紧的是 code 4 —— 实测站长第一次贴的是一条
          B 站**网页地址**，浏览器只会说 "The element has no supported sources."，
