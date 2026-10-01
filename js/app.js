@@ -1399,11 +1399,42 @@
       uptimeText: holoText(p), nickname: State.nickname || '漓光', tags: ['站长', '作者']
     }));
     holoPaint(); holoNowPaint();
+    bindHoloTilt();   /* v5.4.2：卡片挂上全息倾斜 */
     if (holoTickTimer) clearInterval(holoTickTimer);
     holoTickTimer = setInterval(function () {
       if (!document.querySelector('.holo-hero')) { clearInterval(holoTickTimer); holoTickTimer = null; return; }
       holoPaint();
     }, 1000);
+  }
+
+  /* ---------- v5.4.2：身份卡的全息倾斜 ----------
+     技法思路来自 DevCard 3D（跟随鼠标倾斜 + 虹彩反光，见 style.css 的 .holo-card 注释）。
+     ⚠ 两条守卫都是本项目铁律：① 触屏没有"悬停" → 只在 @media(hover:hover) 语境下启用
+       ② prefers-reduced-motion 下不启用（CSS 里也把 transform 归零了，双保险）。
+     ⚠ 只改 transform，不动布局；离开时复位，避免卡片歪着回不去。 */
+  function bindHoloTilt() {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    var card = document.querySelector('[data-holo-card]');
+    if (!card || card._holoBound) return;
+    var hoverOK = true, reduceOK = true;
+    try { hoverOK = !window.matchMedia || window.matchMedia('(hover: hover)').matches; } catch (e) {}
+    try { reduceOK = !window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
+    if (!hoverOK || !reduceOK) return;
+    card._holoBound = true;
+    var MAX = 8;   /* 最大倾角（度）—— 再大就晕了 */
+    function tilt(ev) {
+      var r = card.getBoundingClientRect();
+      if (!r.width || !r.height) return;
+      var px = (ev.clientX - r.left) / r.width - 0.5;
+      var py = (ev.clientY - r.top) / r.height - 0.5;
+      card.style.transform = 'perspective(700px) rotateY(' + (px * MAX * 2).toFixed(2) + 'deg) rotateX(' +
+        (-py * MAX * 2).toFixed(2) + 'deg) translateZ(0)';
+      card.classList.add('is-tilting');
+    }
+    function reset() { card.style.transform = ''; card.classList.remove('is-tilting'); }
+    card.addEventListener('pointermove', tilt);
+    card.addEventListener('pointerleave', reset);
+    card.addEventListener('pointercancel', reset);
   }
 
   /* ---------- v5.1.0：电台页与常驻控制台 ---------- */
@@ -1420,6 +1451,7 @@
   function rcSetCurrent(id) {
     RC_STATE.curId = id ? String(id) : '';
     try { if (RC_STATE.curId) localStorage.setItem(RC_KEY, RC_STATE.curId); } catch (e) {}
+    if (typeof holoNowPaint === 'function') holoNowPaint();   /* v5.4.2：选中变了，卡片跟着变 */
   }
 
   function rcCurrent() {
@@ -1471,6 +1503,9 @@
     }
     RC_STATE.loaded = true;
     paintStage();
+    /* v5.4.2：电台列表到货 → 身份卡同步"当前条目"
+       （之前卡片在列表回来**之前**就画好了，之后没人通知它重画，于是一直显示"电台待命"） */
+    if (typeof holoNowPaint === 'function') holoNowPaint();
   }
 
   function renderRadio() {

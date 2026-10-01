@@ -15,17 +15,27 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '5.4.1',
+    BUILD: '5.4.2',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20261001T2035+0800-build6lli',
+    BUILD_ID: '20261001T2040+0800-build99ot',
 
     /* 构建日期（随版本一起更新） */
     BUILT_AT: '2026-10-01',
 
     /* 工程日志：最新的一条放最前面 */
     LOG: [
+      {
+        version: '5.4.2',
+        date: '2026-10-01',
+        title: '身份卡：实时当前条目 + 全息倾斜',
+        items: [
+          '修：卡片在电台列表到货**之前**就画好了，之后没人通知它重画，于是一直显示「电台待命」—— 现在 rcLoad 与 rcSetCurrent 都会调 holoNowPaint',
+          '加：身份卡全息倾斜（跟随鼠标 rotateX/rotateY + 虹彩反光）—— 技法思路来自 DevCard 3D',
+          '两条守卫按本项目铁律：触屏不启用（只在 hover:hover 语境）、prefers-reduced-motion 不启用（CSS 也把 transform 归零，双保险）；离开卡片自动复位'
+        ]
+      },
       {
         version: '5.4.1',
         date: '2026-10-01',
