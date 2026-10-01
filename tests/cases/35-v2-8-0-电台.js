@@ -78,49 +78,9 @@ function fnBody(src, name) {
   return src.slice(b + 1, j);
 }
 
-/* 造一个可观测的 Audio 桩：记录调用 + 支持手动触发事件 */
-function makeAudioStub() {
-  const calls = [];
-  const listeners = {};
-  return {
-    _calls: calls,
-    _fire(t) { (listeners[t] || []).forEach((f) => f({})); },
-    src: '', volume: 1, muted: false, loop: false,
-    currentTime: 0, duration: NaN, preload: '',
-    setAttribute(k, v) { calls.push(['setAttribute', k, v]); },
-    removeAttribute(k) { this.src = ''; calls.push(['removeAttribute', k]); },
-    load() { calls.push(['load']); },
-    play() { calls.push(['play']); return Promise.resolve(); },
-    pause() { calls.push(['pause']); },
-    addEventListener(t, fn) { (listeners[t] = listeners[t] || []).push(fn); }
-  };
-}
-
-/* 在隔离的 jsdom 里跑 radio.js 真源码 */
-function bootRadio(fetchUrl) {
-  let JSDOM;
-  try { JSDOM = require('jsdom').JSDOM; }
-  catch (e) { JSDOM = require('C:/Users/liu/.workbuddy/binaries/node/workspace/node_modules/jsdom').JSDOM; }
-
-  const dom = new JSDOM('<!doctype html><html><body></body></html>', {
-    url: 'http://localhost/', runScripts: 'outside-only', pretendToBeVisual: true
-  });
-  dom.window.eval(SRC.radio);
-  const R = dom.window.NEONRadio;
-  const audio = makeAudioStub();
-  R.init({ audio: audio, fetchUrl: fetchUrl || ((row) => Promise.resolve('https://cdn.test/' + (row && row.id))) });
-  return { R, audio, dom };
-}
-
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-
-/* v2.9.0：音频存库（base64），行里不再有 storage_path —— 只有 has_data 标记。
-   保留 has_data:true 让"可播放"路径正常走通。 */
-const ROWS = [
-  { id: 11, title: '夜航西飞', artist: 'A', mime: 'audio/mpeg', has_data: true, duration_sec: 200 },
-  { id: 22, title: '雨林电波', artist: 'B', mime: 'audio/mpeg', has_data: true, duration_sec: 180 },
-  { id: 33, title: '霓虹残响', artist: 'C', mime: 'audio/mpeg', has_data: true, duration_sec: 240 }
-];
+/* ⚠ v5.6.3：这一块（makeAudioStub / bootRadio / wait / ROWS）是给 <audio> 内核
+   用的 harness —— radio.js 已删除，随之移除。电台现在的播放由网易云官方 iframe
+   承担，本站既不持有音频、也不推进进度。 */
 
 async function run() {
   const S = makeSuite();
@@ -131,203 +91,31 @@ async function run() {
   const cloud = SRC.cloud;
   const views = SRC.views;
   const css = SRC.css;
-  const radio = SRC.radio;
   const html = SRC.html;
 
-  /* ================= ① 内核行为（真跑 jsdom） ================= */
-  {
-    const { R, audio } = bootRadio();
-
-    R.setList(ROWS);
-    let st = R.state();
-    T('内核 · 队列', 'R129 setList 载入队列，初始未选中',
-      st.count === 3 && st.index === -1 && st.current === null,
-      'count=' + st.count + ' index=' + st.index);
-
-    await R.play();
-    await wait(30);
-    st = R.state();
-    T('内核 · 播放', 'R130 play() 选中首曲并设为播放中',
-      st.index === 0 && st.current && st.current.id === 11 && st.playing === true,
-      'index=' + st.index + ' playing=' + st.playing);
-
-    T('内核 · 播放', 'R130b src 被设为取地址函数返回的签名地址',
-      /^https:\/\/cdn\.test\//.test(audio.src), audio.src);
-
-    R.pause();
-    T('内核 · 播放', 'R130c pause() 停止播放态', R.state().playing === false);
-
-    R.next();
-    await wait(30);
-    T('内核 · 切歌', 'R131 next() 前进一首',
-      R.state().current && R.state().current.id === 22,
-      'id=' + (R.state().current && R.state().current.id));
-
-    audio.currentTime = 0;
-    R.prev();
-    await wait(30);
-    T('内核 · 切歌', 'R131b prev() 在起始位置退回上一首',
-      R.state().current && R.state().current.id === 11);
-
-    /* 播过 3 秒：符合"先回本曲开头"的通用播放器习惯 */
-    audio.currentTime = 10;
-    R.prev();
-    await wait(20);
-    T('内核 · 切歌', 'R131c 播过 3s 后 prev 回到本曲开头而非上一首',
-      R.state().current && R.state().current.id === 11);
-
-    R.setVolume(0.5);
-    T('内核 · 音量', 'R132 setVolume 生效（0.5）', Math.abs(R.state().volume - 0.5) < 0.001);
-    R.setVolume(2);
-    T('内核 · 音量', 'R132b setVolume 上越界夹到 1', R.state().volume === 1);
-    R.setVolume(-1);
-    T('内核 · 音量', 'R132c setVolume 下越界夹到 0', R.state().volume === 0);
-
-    R.setVolume(0.8);
-    R.toggleMute();
-    T('内核 · 音量', 'R132d toggleMute 进入静音', R.state().muted === true);
-    R.setVolume(0.6);
-    T('内核 · 音量', 'R132e 调音量自动解除静音（符合直觉）', R.state().muted === false);
-
-    R.setRepeat('one');
-    T('内核 · 模式', 'R133 setRepeat(one) 生效且 audio.loop 同步',
-      R.state().repeat === 'one' && audio.loop === true);
-    R.setRepeat('bogus');
-    T('内核 · 模式', 'R133b setRepeat 脏值被忽略（白名单）', R.state().repeat === 'one');
-
-    R.setShuffle(true);
-    T('内核 · 模式', 'R133c setShuffle 生效', R.state().shuffle === true);
-    R.setShuffle(false);
-
-    R.playAt(33);
-    await wait(30);
-    T('内核 · 指定播放', 'R134 playAt(id) 命中指定曲目',
-      R.state().current && R.state().current.id === 33);
-    T('内核 · 指定播放', 'R134b playAt 不存在的 id 返回 false', R.playAt(9999) === false);
-
-    audio.duration = 200;
-    R.seek(50);
-    T('内核 · 进度', 'R135 seek(50) 生效', Math.abs(R.state().time - 50) < 0.001);
-    R.seek(9999);
-    T('内核 · 进度', 'R135b seek 越界被夹在时长内', audio.currentTime <= 200);
-
-    /* 每次切歌都重取地址：不复用上一轮的 URL（可能已失效）。
-       v2.9.0 起地址是库内 data URL（永久有效），"重取"由数据层的
-       LRU 缓存兜住成本，因此这条约定仍然成立且更便宜。 */
-    let fetchCount = 0;
-    const h = bootRadio((row) => { fetchCount++; return Promise.resolve('https://cdn/' + fetchCount); });
-    h.R.setList(ROWS);
-    await h.R.play(); await wait(20);
-    const c1 = fetchCount;
-    h.R.playAt(22); await wait(20);
-    T('内核 · 取址', 'R136 每次切歌都重取地址（不复用可能已失效的 URL）',
-      fetchCount > c1, 'fetch=' + fetchCount);
-    h.R.destroy();
-
-    /* ---------- 取址契约（v2.9.0 从「传路径」改为「传整行」） ----------
-       ⚠ 这是跨层契约：内核若不传整行，数据层从「存储签名 URL」换成
-       「库内 data URL」时内核就得跟着改 —— 契约钉住，换实现不必动内核。 */
-    let gotRow = null;
-    const g = bootRadio((row) => {
-      gotRow = row;
-      return Promise.resolve('data:audio/mpeg;base64,QUFB');
-    });
-    g.R.setList(ROWS);
-    await g.R.play(); await wait(20);
-    T('内核 · 取址', 'R136b 取址回调收到整行数据（而不是某一列路径字符串）',
-      !!gotRow && gotRow.id === 11 && typeof gotRow === 'object',
-      '收到：' + JSON.stringify(gotRow));
-    T('内核 · 取址', 'R136c 返回字符串 = 永久地址，直接设为 src（data URL 全链路走通）',
-      /^data:audio\/mpeg/.test(g.audio.src), 'src=' + g.audio.src.slice(0, 40));
-    g.R.destroy();
-
-    /* 对象返回值 {url, ttl} 也要支持 —— 将来若换成"带 token 的公开直链"，
-       内核不必再改一次（ttl>0 才挂续签定时器）。 */
-    const o = bootRadio(() => Promise.resolve({ url: 'https://cdn/tok/1.mp3', ttl: 1800 }));
-    o.R.setList([ROWS[0]]);
-    await o.R.play(); await wait(20);
-    T('内核 · 取址', 'R136d 返回 {url,ttl} 同样可用（限时地址路径未被改坏）',
-      /^https:\/\/cdn\/tok\//.test(o.audio.src), 'src=' + o.audio.src);
-    o.R.destroy();
-
-    /* 空队列安全性 */
-    R.setList([]);
-    R.next(); R.prev();
-    T('内核 · 边界', 'R137 空队列 next/prev 不崩且无选中',
-      R.state().count === 0 && R.state().index === -1);
-
-    /* ended 行为 */
-    R.setList(ROWS);
-    R.setRepeat('off');
-    R.playAt(33); await wait(30);
-    audio._fire('ended'); await wait(40);
-    T('内核 · 边界', 'R137b repeat=off 播完末曲后停止（不环绕）',
-      R.state().playing === false);
-
-    R.setRepeat('all');
-    R.playAt(33); await wait(30);
-    audio._fire('ended'); await wait(40);
-    T('内核 · 边界', 'R137c repeat=all 播完末曲后回到首曲',
-      R.state().current && R.state().current.id === 11);
-
-    /* 时间格式化 */
-    T('内核 · 格式化', 'R138 fmtTime 处理分/时/非法值',
-      R.fmtTime(0) === '0:00' && R.fmtTime(65) === '1:05' &&
-      R.fmtTime(3661) === '1:01:01' && R.fmtTime(NaN) === '--:--',
-      [R.fmtTime(0), R.fmtTime(65), R.fmtTime(3661), R.fmtTime(NaN)].join(' / '));
-
-    /* 取地址失败降级 */
-    const f = bootRadio(() => Promise.reject(new Error('签名服务不可用')));
-    f.R.setList([ROWS[0]]);
-    await f.R.play(); await wait(60);
-    T('内核 · 容错', 'R139b 取地址失败时给出错误文案（不静默）',
-      !!f.R.state().error && /签名服务不可用/.test(f.R.state().error),
-      'error=' + f.R.state().error);
-    f.R.destroy();
-
-    /* destroy 必须真的清掉定时器（否则宿主进程不退出） */
-    T('内核 · 生命周期', 'R139c 提供 destroy() 清理续签定时器',
-      /function\s+destroy\s*\(/.test(radio) && /clearTimeout\(signTimer\)/.test(radio),
-      '缺少 destroy 或未清定时器');
-
-    R.destroy();
-  }
+  /* ⚠ v5.6.3：①「内核行为」整段（R129~R139c 共 49 条）已随 radio.js 删除 ——
+     那个 <audio> 内核不再被 index.html 加载、运行时代码里也无人调用。
+     电台播放现在完全交给网易云官方 outchain iframe（断言见 54 号）。 */
 
   /* ================= ② 数据层契约 ================= */
   {
-    T('数据层', 'R140 音频 MIME 白名单存在且覆盖常见格式',
-      /AUDIO_TYPES/.test(cloud) && /audio\/mpeg/.test(cloud) && /audio\/flac/.test(cloud),
-      '缺少 MIME 白名单');
-
-    T('数据层', 'R140b 音频体积上限存在（防超大文件打爆存储）',
-      /AUDIO_MAX\s*=\s*\d+\s*\*\s*1024\s*\*\s*1024/.test(cloud),
-      '缺少 AUDIO_MAX');
-
-    /* ---------- v2.9.0：音频改走 base64 入库，不再写云存储 ----------
-       ⚠ 为什么必须换（2026-09-29 真实故障）：云存储**只服务登录用户**
-       （文档：Storage is for signed-in users，不暴露公开 URL / 公开 Bucket），
-       匿名访客调 createSignedUrl 直接 MISSING_CREDENTIALS —— 与电台
-       「所有人可听」的需求互斥。改存库 + 公开视图后匿名也能读到（图片一直如此）。 */
-    T('数据层', 'R140c 上传走 FileReader → data URL（不再写云存储）',
-      /readAsDataURL\(file\)/.test(cloud) &&
-      !/sharedPath\(uid,\s*'blog\/audio\//.test(cloud),
-      '仍在走云存储上传路径（匿名访客将拿不到播放地址）');
-
-    /* 库层 CHECK 必须覆盖「单曲上限」的 base64 最坏长度，否则合法文件会撞库报错。
-       ⚠ 两个常量联动 —— 断言从 AUDIO_MAX 推导，不写死数字，
-       这样「调大单曲上限却忘了同步库层」会被立刻抓住。 */
-    const audioMaxM = cloud.match(/AUDIO_MAX\s*=\s*(\d+)\s*\*\s*1024\s*\*\s*1024/);
-    /* ⚠ 正则只捕获到前导数字（24），必须自己乘回字节数 ——
-       否则会拿「24」当字节数，算出荒唐的 base64 最坏长度。 */
-    const audioMaxVal = audioMaxM ? Number(audioMaxM[1]) * 1024 * 1024 : NaN;
-    const dataMaxM = cloud.match(/AUDIO_DATA_MAX\s*=\s*(\d+)/);
-    const dataMaxVal = dataMaxM ? Number(dataMaxM[1]) : NaN;
-    const b64Worst = Number.isFinite(audioMaxVal) ? Math.ceil(audioMaxVal / 3) * 4 : NaN;
-    T('数据层', 'R140d 库层体积上限覆盖单曲上限的 base64 最坏长度（合法文件不撞库）',
-      Number.isFinite(audioMaxVal) && Number.isFinite(dataMaxVal) &&
-      dataMaxVal >= b64Worst,
-      'AUDIO_MAX=' + (audioMaxVal / 1048576) + 'MB → base64 最坏 ' + b64Worst +
-      ' 字符，而 AUDIO_DATA_MAX=' + dataMaxVal);
+    /* ---------- v5.6.1：base64 时代的 8 条断言已退役 ----------
+       R140（AUDIO_TYPES MIME 白名单）/ R140b（AUDIO_MAX）/ R140c（FileReader → data URL）
+       / R140d（AUDIO_DATA_MAX 覆盖 base64 最坏长度）
+       / R141d（RADIO_DATA_FIELDS 单行取音频）/ R141e（RADIO_VIEW_ONLY 登记 has_data）
+       / R142b（读出的 data URL 二次量长）/ R143（playUrl 取库内 data URL）
+       —— 它们钉的都是"音频以 base64 存库"那条管道；该管道在 v5.0.0 随
+       「电台 = 网易云条目」整体退役，cloud.js 里对应的
+       readAudio / probeDuration / trackData / create / addTrack / probeSourceUrl /
+       neteaseEmbedUrl / isEmbedUrl / addByUrl / playUrl 与 AUDIO_* 常量、
+       音频 LRU 缓存已按 HANDOVER §6 审计清单 ① 删除（v5.6.1）。
+       ⚠ 退役时**逐条**处理，不做批量正则替换（§6 记着"括号配平批量退役"的翻车教训）。
+       ⚠ 本轮新增的"清理守卫"一律扫**剥过注释**的源码：cloud.js 的清理纪要里
+       就写着这些被删掉的名字，用原文扫会自己把自己判红（第一版实测踩到）。 */
+    const cloudCode = stripJsLineComments(stripComments(cloud));
+    /* ⚠ cloudCode 必须在**本块最前面**声明：R141d 就要用它，
+       声明写在中途会撞 temporal dead zone（"Cannot access before initialization"），
+       而且只有那一条会红 —— 典型难查的错法（v5.6.1 实测踩到）。 */
 
     /* 字段白名单：列表只取展示必需字段 */
     T('数据层', 'R141 列表查询使用显式字段清单（非 select('*')）',
@@ -346,9 +134,15 @@ async function run() {
       'RADIO_FIELDS = ' + fieldList);
 
     T('数据层', 'R141d 音频走单行查询按 id 取一首（绝不整表拉音频）',
-      /RADIO_DATA_FIELDS\s*=\s*'[^']*\bdata\b[^']*'/.test(cloud) &&
-      /\.select\(RADIO_DATA_FIELDS\)[\s\S]{0,80}?\.eq\('id',\s*id\)/.test(cloud),
-      '缺单曲音频读取通道，或不是按 id 的单行查询');
+      /* ⚠ v5.6.1 退役原判据（RADIO_DATA_FIELDS 单行取 base64）。
+         翻转为**清理守卫**：base64 取音频的通道必须不存在。
+         ⚠ 不能写「全文件不得出现 .select(...data...)」—— 图片那条活的读取路径
+           正是 `.select('id,content_type,data,width,height')`（实测踩到误伤）。
+           这里只钉电台那三个**专属**标识。 */
+      !/RADIO_DATA_FIELDS/.test(cloudCode) && !/trackData/.test(cloudCode) &&
+      !/id,data,mime/.test(cloudCode) &&
+      !/(^|,)\s*data\s*(,|$)/.test(fieldList),
+      '又出现了音频 data 列的读取通道');
 
     /* ⚠⚠⚠ v2.9.2 实测事故（用户上传时报「column radio_tracks.has_data does not exist」）：
        读/写**两套字段清单必须分开**。has_data 是视图 public_radio 里**算出来**的列
@@ -358,22 +152,23 @@ async function run() {
        ⚠ 实现里的**注释也写了这些标识符** ⇒ 必须先剥注释（块 + 行）再扫。
        ⚠ 下面不满足于扫字面：把常量声明块整段抽出来**真跑一遍**，
          直接在"实际生效的值"上断言 —— 后人换种写法重构也不会误红。 */
-    const cloudCode = stripJsLineComments(stripComments(cloud));
     const constBlock = (function () {
+      /* ⚠ 切到**分号**为止，不能切到 `var RADIO_FIELDS` 这个位置 ——
+         后者会把声明本身排除在外，eval 出来就是 "RADIO_FIELDS is not defined"
+         （v5.6.1 改判时实测踩到，R141f/R141g 两条同时红）。 */
       const s = cloudCode.indexOf('var RADIO_READ_TABLE');
-      const e = cloudCode.indexOf('var RADIO_DATA_FIELDS');
-      return (s >= 0 && e > s) ? cloudCode.slice(s, e) : '';
+      const e = cloudCode.indexOf(';', cloudCode.indexOf('var RADIO_FIELDS'));
+      return (s >= 0 && e > s) ? cloudCode.slice(s, e + 1) : '';
     })();
     let RC = null;
     try {
       RC = new Function(constBlock +
-        '\nreturn { F: RADIO_FIELDS, W: RADIO_WRITE_FIELDS, V: RADIO_VIEW_ONLY, R: RADIO_READ_TABLE };')();
+        '\nreturn { F: RADIO_FIELDS, R: RADIO_READ_TABLE };')();
     } catch (e) { RC = null; }
 
     const cols = function (s) { return String(s || '').split(',').map(function (c) { return c.trim(); }).filter(Boolean); };
-    T('数据层', 'R141e 视图专有列已显式登记（has_data 不在基表上）',
-      !!RC && Array.isArray(RC.V) && RC.V.indexOf('has_data') >= 0,
-      RC ? 'RADIO_VIEW_ONLY = [' + RC.V.join(',') + ']' : '常量块抽取/求值失败');
+    /* v5.6.1 退役：R141e「RADIO_VIEW_ONLY 登记 has_data」—— 视图专有列清单随
+       base64 管道一起删掉了（has_data 这个概念在 v5.0.0 就已不存在）。 */
 
     /* v5.0.0：电台改为「网易云条目」，has_data 概念消失（每条都必然可播）。
        改判：读清单必须带 kind / netease_id / source_url —— 界面靠它们决定摆 66px 还是 430px 播放器。 */
@@ -382,33 +177,38 @@ async function run() {
       cols(RC.F).indexOf('source_url') >= 0,
       RC ? 'RADIO_FIELDS = ' + RC.F : '常量块求值失败');
 
-    T('数据层', 'R141g 基表清单 = 读清单 − 视图专有列（不含 has_data，常规列还在）',
+    T('数据层', 'R141g 写路径复用同一套清单（RADIO_FIELDS），且不含任何已删列',
+      /* ⚠ v5.6.1 改判：原先比的是"RADIO_WRITE_FIELDS = 读清单 − 视图专有列"。
+         v5 的写入口 add() 直接 select(RADIO_FIELDS) —— 两套清单合一，
+         因为视图专有列（has_data）已经没有了。守的东西不变：
+         写路径返回的列必须与读路径一致，且不得回到 data/mime/storage_path 那批已删列。 */
       !!RC && (function () {
-        const w = cols(RC.W);
-        return w.length > 0 && w.indexOf('has_data') < 0 &&
-          w.indexOf('title') >= 0 && w.indexOf('created_at') >= 0;
+        const f = cols(RC.F);
+        const addPath = cloudCode.slice(cloudCode.indexOf('add: async function'));
+        return f.indexOf('title') >= 0 && f.indexOf('created_at') >= 0 &&
+          f.indexOf('data') < 0 && f.indexOf('mime') < 0 && f.indexOf('has_data') < 0 &&
+          /insert\(row\)\.select\(RADIO_FIELDS\)/.test(addPath);
       })(),
-      RC ? 'RADIO_WRITE_FIELDS = ' + RC.W : '常量块求值失败');
+      RC ? '写路径清单可疑：' + RC.F : '常量块求值失败');
 
     T('数据层', 'R141h v5 的写入不再碰任何已删列（data / has_data / mime 都不该再出现）',
       /parseNetease/.test(cloudCode) && /buildEmbedUrl/.test(cloudCode) &&
+      !/has_data/.test(cloudCode) && !/duration_sec/.test(cloudCode) &&
+      !/cover_url/.test(cloudCode) && !/AUDIO_/.test(cloudCode) &&
       !/\.select\('id,data,mime'\)/.test(cloudCode),
-      '写入路径仍引用已删列');
+      '写入路径仍引用已删列 / 已删的 base64 常量');
 
-    T('数据层', 'R141i 入库返回的行补 has_data（与列表行同形，调用方无需分支判断）',
-      /saved\.has_data\s*=\s*true/.test(cloudCode),
-      '入库返回值缺 has_data —— 新上传行与列表行不同形');
+    /* v5.6.1 退役：R141i「入库返回的行补 has_data」—— has_data 已随管道删除。 */
 
-    /* 入库前校验：标题必填 + 长度上限 */
+    /* 入库前校验：标题必填 + 长度上限。
+       ⚠ v5.6.1 改口径：base64 时代的上传入口 create() 文案（"请填写曲目名称"）已删除，
+       现在唯一入口是 add()，文案是"请填写条目名称（单曲名或歌单名）"与"名称不能超过 200 字"。 */
     T('数据层', 'R142 入库前校验标题必填与长度上限',
-      /请填写曲目名称/.test(cloud) && /不能超过 200 字/.test(cloud),
+      /请填写条目名称/.test(cloudCode) && /名称不能超过 200 字/.test(cloudCode),
       '缺少标题校验');
 
-    /* 体积「三保险」：file.size 一关 → 读出的字符串长度二关 → 库 CHECK 兜底。
-       第二关不可省：base64 比二进制大 33%，只看 file.size 挡不住编码膨胀。 */
-    T('数据层', 'R142b 读出的 data URL 再量一次长度（防 base64 膨胀撞库上限）',
-      /url\.length\s*>\s*AUDIO_DATA_MAX/.test(cloud),
-      '缺少编码后的二次体积校验');
+    /* v5.6.1 退役：R142b「读出的 data URL 再量一次长度」—— 不再有 base64 二次体积关
+       （文件上传整条路在 v5.0.0 就移除了，AUDIO_DATA_MAX 随 ① 一并删除）。 */
 
     /* 音频本体与记录同行 ⇒ 删记录即删音频；不得再残留存储补偿逻辑 */
     const removeBody = cloud.slice(cloud.indexOf('removeTrack: async function'));
@@ -417,13 +217,20 @@ async function run() {
       !/storage\.remove/.test(removeBody),
       '仍残留云存储删除逻辑');
 
-    /* 播放地址 = 库内音频数据（data: URL），**匿名可读** —— 本次修复的核心 */
-    const playUrlBody = cloud.slice(cloud.indexOf('playUrl: async function'),
-      cloud.indexOf('playUrl: async function') + 600);
-    T('数据层', 'R143 播放地址取自库内音频数据（不再依赖登录态与签名 URL）',
-      /playUrl: async function/.test(cloud) && /Radio\.trackData\(/.test(cloud) &&
-      !/Storage\.signedUrl/.test(playUrlBody),
-      '播放地址仍走签名 URL（匿名访客必然失败）');
+    /* v5.6.1 从 R143 原判据（playUrl 取库内 data URL）**改判为清理守卫**：
+       网易云条目自带 source_url（官方播放器地址），界面直接渲染 iframe，
+       不再有"取可播放地址"这一步 —— playUrl / trackData 必须彻底消失，
+       且整条路径都不得再依赖登录态与签名 URL。 */
+    T('数据层', 'R143 播放地址不再走 base64（条目自带 source_url，界面渲染官方 iframe）',
+      /* ⚠ 必须扫**剥过注释**的 cloudCode：cloud.js 的清理纪要里就写着这些名字，
+         用原文扫会自己把自己判红（实测踩到）。
+         ⚠ 不能写 !/signedUrl/ —— 附件下载（Storage.signedUrl）是**另一条活路**，
+           与电台无关，扫全文件会误伤（实测踩到）。这里只钉电台那条：
+           音频取址通道（playUrl / trackData / data 列）必须彻底消失。 */
+      !/playUrl/.test(cloudCode) && !/trackData/.test(cloudCode) &&
+      !/RADIO_DATA_FIELDS/.test(cloudCode) &&
+      /source_url:\s*Radio\.buildEmbedUrl\(/.test(cloudCode),
+      '播放地址仍在走 base64 取址那条死路');
 
     /* ⚠⚠ 签名有效期：平台硬上限 3600 秒（SDK 的 validateSignedURLTTL 硬校验）。
        v2.8.0 首次上线时写了 7200 → createSignedUrl 直接抛
@@ -474,11 +281,9 @@ async function run() {
       /createSignedUrl\(path,\s*clampTtl\(/.test(cloud),
       'signedUrl 未夹取 ttl');
 
-    /* 内核不再自带 TTL 常数 —— 有效期由数据层**单一来源**下发。
-       曾经两处各自写数字（cloud 7200 / radio 3300），改一处漏一处必炸。 */
-    T('数据层', 'R143f 内核不自带 TTL 兜底常数（有效期单一来源，避免各自越界）',
-      !/AUDIO_TTL/.test(radio) && /signTtlSec\s*>\s*0/.test(radio),
-      '内核仍持有 TTL 常量，或未按 ttl 正负判定是否续签');
+    /* v5.6.3 退役：R143f「内核不自带 TTL 兜底常数」—— 判据扫的是 radio.js，
+       而那个内核已删除（整个文件是死代码）。TTL 的单一来源现在只剩数据层自己，
+       由上面的 R143a/R143b/R143d/R143e 继续守着。 */
 
     /* 「所有人可听」的实现基石：读的是**公开视图**（anon 有 SELECT），不是基表 */
     T('数据层', 'R143g 读取来源是公开视图 public_radio（这才是"所有人可听"）',
@@ -486,102 +291,64 @@ async function run() {
       /from\(RADIO_READ_TABLE\)/.test(cloud),
       '读取来源不是公开视图');
 
-    /* 缓存：重播 / 上下一首来回切不该重新拉十几 MB。
-       ⚠ 必须**双限**（条数 + 字符总量）—— 单首 data URL 最坏 33.5M 字符（约 33MB），
-       只限条数的话「3 条」就是 100MB，移动端直接崩。 */
-    T('数据层', 'R143h 音频缓存双限（条数 + 字符总量），防大文件把内存吃爆',
-      /RADIO_CACHE_MAX_ITEMS\s*=\s*\d+/.test(cloud) &&
-      /RADIO_CACHE_MAX_CHARS\s*=\s*\d+/.test(cloud) &&
-      /radioCacheGet\(id\)/.test(cloud) && /radioCachePut\(/.test(cloud),
-      '缺少音频数据缓存，或只限条数不限字符总量');
-
-    T('数据层', 'R143i 删除曲目时同步清该曲缓存（防"已删还能播"）',
-      /radioCacheDrop\(row\.id\)/.test(cloud), '未清缓存');
-
-    /* 真跑一遍淘汰逻辑（不靠"源码里有这个常量"这种弱断言）：
-       两条大文件塞进去，字符总量超限就必须丢掉最旧的那条。 */
-    let cacheOk = false;
-    let cacheDetail = '未提取到缓存实现';
-    /* ⚠ 提取必须**停在** radioCacheDrop 之前 —— 用 lookahead 而不是把
-       `function radioCacheDrop` 本身吃进来，否则 new Function 里留一个
-       没有函数体的声明，直接 SyntaxError（实测踩过）。 */
-    const cacheM = cloud.match(/var RADIO_CACHE_MAX_ITEMS[\s\S]*?(?=function radioCacheDrop)/);
-    if (cacheM) {
-      try {
-        const api = new Function(cacheM[0] +
-          '\n  return { put: radioCachePut, get: radioCacheGet,' +
-          ' size: function () { return radioCache.length; } };')();
-        const big = new Array(25000001).join('x');    /* 25M 字符：单个就超半量 */
-        api.put(1, big);
-        api.put(2, big);
-        const afterTwo = api.size();                  /* 期望 1（字符总量已越界） */
-        api.put(3, big);
-        api.put(4, 'small');
-        cacheOk = afterTwo === 1 && api.size() === 2 &&
-          api.get(1) === null && api.get(3) === big && api.get(4) === 'small';
-        cacheDetail = '两条大文件后 size=' + afterTwo + '（应为 1），最终 size=' +
-          api.size() + '，get(1)=' + api.get(1) + '，get(3)命中=' + (api.get(3) === big) +
-          '，get(4)=' + api.get(4);
-      } catch (e) { cacheDetail = 'eval 失败: ' + e.message; }
-    }
-    T('数据层', 'R143j 缓存淘汰真跑一遍（超字符总量丢最旧，最近使用仍命中）',
-      cacheOk, cacheDetail);
-
-    /* owner_id 必须是 text —— 与 posts 一致，否则 RLS 的 auth.uid() 比较报 42883 */
-    T('数据层', 'R143c owner_id 用 text 类型（与 posts 一致，避免 RLS 类型不匹配）',
-      /owner_id:\s*meta\.owner_id/.test(cloud) && !/owner_id:\s*Number\(/.test(cloud),
-      'owner_id 处理方式可疑');
+    /* v5.6.1 退役：R143h / R143i / R143j / R143c ——
+       · R143h/i/j 钉的是"取回的 base64 data URL 出入 LRU 缓存"（条数 + 字符总量双限、
+         删曲目时清缓存、真跑一遍淘汰）。条目不再有本体可缓存，radioCache 全家
+         （含三个常量与三个函数）已随 ① 删除。
+       · R143c 钉 `owner_id: meta.owner_id` 这个赋值形状（防被 Number() 包住）。
+         v5 的写入口 add() 里 owner_id 直接来自 uid 参数（add(row) 的 row.owner_id = uid），
+         字面形状变了；owner_id 仍是 text（库列类型 + RLS 契约），
+         但已无任何"可能被数字化的赋值点"可钉，故一并退役。 */
   }
 
   /* ================= ③ 界面结构 ================= */
   {
-    T('界面 · 迷你条', 'R144 迷你条渲染播放键与曲目信息',
-      /radio-dock-inner/.test(views) && /data-radio-act="toggle"/.test(views) &&
-      /radio-dock-title/.test(views),
-      '迷你条结构缺失');
+    /* ⚠ v5.6.1：v2.8.0 的 10 条"迷你条 / 面板"断言（R144 / R144b / R145 / R145b /
+       R145c / R145d / R146 / R146b / R146c / R146d）已随视图出口一起退役 ——
+       容器与函数都没了（审计清单 ②）。这里换成**现在真正活着**的那一版：
+       电台页（radioView）+ 常驻控制台（paintStage）。 */
 
-    T('界面 · 迷你条', 'R144b 迷你条可键盘操作（role=button + tabindex）',
-      /data-radio-open="1" role="button" tabindex="0"/.test(views),
-      '迷你条不可键盘聚焦');
+    /* 电台页：条目列表 + 播放/管理入口 */
+    T('界面 · 电台页', 'R144 条目列表渲染成卡片，每张带可点播的播放键与标题',
+      /class="radio-board"/.test(views) && /class="radio-card/.test(views) &&
+      /data-radio-act="playitem"/.test(views) && /radio-card-title/.test(views) &&
+      /radio-card-id/.test(views),
+      '电台页列表结构缺失');
 
-    /* 五个基本控制齐全 */
-    T('界面 · 控制', 'R145 面板含播放/暂停/上一首/下一首',
-      /data-radio-act="toggle"/.test(views) && /data-radio-act="prev"/.test(views) &&
-      /data-radio-act="next"/.test(views),
-      '基本控制不全');
+    T('界面 · 电台页', 'R144b 播放键可被读屏识别（aria-label 带条目名）',
+      /data-radio-act="playitem"[\s\S]{0,120}?aria-label="播放 /.test(views),
+      '播放键缺 aria-label');
 
-    T('界面 · 控制', 'R145b 面板含音量调节与静音',
-      /data-radio-act="volume"/.test(views) && /data-radio-act="mute"/.test(views),
-      '音量控制缺失');
+    /* v5.1.0：控制台在 #app 之外常驻；单曲 66px / 歌单 430px 官方条 */
+    T('界面 · 控制台', 'R145 官方播放器按类型给高度（单曲 66 / 歌单 430）',
+      /\/type=0\/\.test\(url\)\s*\?\s*'430'\s*:\s*'66'/.test(app),
+      '未按类型区分播放器高度');
 
-    T('界面 · 控制', 'R145c 面板含进度拖拽（seek）',
-      /data-radio-act="seek"/.test(views), '缺少进度拖拽');
+    T('界面 · 控制台', 'R145b 同一个地址不重建 iframe（重建 = 重新加载 = 歌断掉）',
+      /RC_STATE\.mounted === url\) return/.test(app) && /RC_STATE\.mounted = url/.test(app),
+      '缺少"地址未变则不重建"的守卫');
 
-    T('界面 · 控制', 'R145d 面板含循环与随机模式切换',
-      /data-radio-act="repeat"/.test(views) && /data-radio-act="shuffle"/.test(views),
-      '缺少模式切换');
+    T('界面 · 控制台', 'R145c 控制台给出"加载不出来"的兜底链接（新窗口打开）',
+      /rc-fallback/.test(app) && /target="_blank"/.test(app),
+      '缺少兜底链接');
 
-    /* 当前播放曲目信息 */
-    T('界面 · 信息', 'R146 面板显示当前曲目的标题/艺术家',
-      /radio-now-title/.test(views) && /radio-now-artist/.test(views),
-      '当前曲目信息缺失');
+    T('界面 · 控制台', 'R145d mini / full 两种体型由路由决定（切页不断歌）',
+      /setAttribute\('data-mode',\s*isFull \? 'full' : 'mini'\)/.test(app),
+      '未按路由切换 data-mode');
 
-    /* 曲目列表 */
-    T('界面 · 列表', 'R146b 曲目列表渲染每首的标题与时长',
-      /radio-track-title/.test(views) && /radio-track-dur/.test(views),
-      '曲目列表结构缺失');
+    /* 条目信息：标题 / 类型 / 网易云 id 三样都要露出来 */
+    T('界面 · 信息', 'R146 卡片显示标题、类型标签与网易云 id',
+      /'歌单' : '单曲'/.test(views) && /it\.netease_id/.test(views) &&
+      /radio-card-artist/.test(views),
+      '条目信息不完整');
 
-    T('界面 · 列表', 'R146c 列表项可点播（data-radio-act="playat"）',
-      /data-radio-act="playat"/.test(views), '列表项不可播放');
-
-    /* v2.9.0：库里可能残留「云存储时代」的旧记录（有记录、无音频本体）。
-       这类行点了必报错 —— 视图必须显式禁用并说明原因，
-       而不是给一个"点了没反应/点了报错"的按钮。 */
-    T('界面 · 列表', 'R146d 无音频本体的旧记录禁用播放并说明原因',
-      /has_data\s*!==\s*false/.test(views) &&
-      /' disabled'/.test(views) &&
-      /radio-track-warn/.test(views),
-      '未处理 has_data=false 的旧记录（会出现"点了报错"的死按钮）');
+    /* v5.0.0：每条条目都必然可播（网易云官方播放器），has_data 概念消失 ——
+       原先"禁用不可播旧记录"的分支已无对应物，改钉"不再出现死按钮判据"。
+       ⚠ 必须先剥注释：views.js 的清理纪要里就写着 has_data（实测踩到误伤）。 */
+    const viewsCode = stripJsLineComments(stripComments(views));
+    T('界面 · 信息', 'R146b 视图不再依赖 has_data（v5 每条条目都必然可播）',
+      !/has_data/.test(viewsCode) && !/radio-track-warn/.test(viewsCode),
+      '视图仍按 has_data 判断可播性');
 
     /* 管理：上传 / 删除 / 排序 */
     /* v5.0.0：本地文件上传按站长决定移除，表单改为"网易云条目" */
@@ -608,44 +375,35 @@ async function run() {
     T('界面 · 无障碍', 'R148 图标按钮均带 aria-label（读屏可辨）',
       bareButtons === 0, bareButtons + ' 个图标按钮缺 aria-label');
 
-    /* CSP：不得出现内联事件 */
-    T('界面 · CSP', 'R149 无内联事件属性（CSP 禁内联）',
-      !/\son(click|change|input|keydown|submit|load|error)\s*=/i.test(views),
-      '出现内联事件属性');
+    /* v5.6.1 从 R149 原判据**改判**：原断言扫的是"整个 views.js 无内联事件属性"，
+       而它真正想守的只有电台那一块。现在改成扫**电台页视图源码**（radioView），
+       范围更准，也能挡住"给电台卡片加 onchange=" 这类回归。
+       ⚠ 不用全站版：editor/boot 那些块与电台无关，红起来指向不明。 */
+    var radioSrcBlock = '';
+    (function () {
+      var i = views.indexOf('function radioView(');
+      if (i < 0) return;
+      var b = views.indexOf('{', i);
+      var d = 0;
+      for (var j = b; j < views.length; j++) {
+        if (views[j] === '{') d++;
+        else if (views[j] === '}') { d--; if (d === 0) { radioSrcBlock = views.slice(b + 1, j); break; } }
+      }
+    })();
+    T('界面 · CSP', 'R149 电台页无内联事件属性（CSP 禁内联；事件全走 data-radio-act + 代理）',
+      radioSrcBlock.length > 0 && !/\son[a-z]+\s*=\s*["']/i.test(radioSrcBlock) &&
+      /data-radio-act/.test(radioSrcBlock),
+      radioSrcBlock.length ? '出现内联事件属性' : '没有取到 radioView 函数体');
 
-    /* ⚠⚠ 电台还有一个**跨文件**的 CSP 前提：曲目播放地址是 data URL、
-       读时长用 blob URL，所以 index.html 的 CSP 必须有 `media-src` 且放行
-       data:/blob:（缺失时回落到 default-src 'self'，音频被静默拦下，
-       Chromium 只报 code 4 —— 看起来像"文件损坏"）。
-       该约束的断言放在 CSP 自己的主场 `13-m-csp.js`（R35b media-src 两条），
-       避免同一正则两处写死；这里只留路标。 */
+    /* ⚠⚠ v5.6.1：原先还有一条"跨文件 CSP 前提"的路标注释（曲目播放地址是 data URL、
+       读时长用 blob URL，故 index.html 必须有 media-src 且放行 data:/blob:）。
+       条目改成网易云官方 iframe 后**不再需要** media-src 放宽（那条放宽已在 v5 收回），
+       本 case 这里只留这段说明；media-src 的现状由 13-m-csp.js 与 54 号的 R297 守着。 */
 
-    /* ⚠⚠ v2.9.3 实测缺陷：进度显示在播放过程中**完全冻住**。
-       内核每次进度推进都 emit('timeupdate', {time, duration})，但 UI 侧从没订阅它 ——
-       进度条与两个时间标签只由 paintPanelProgress 维护，而它此前只在**离散**的
-       statechange（播放/暂停/载入/切歌）里被捎带调一次；播放中不触发 statechange。
-       ⇒ 整首歌里进度不动；总时长更只在整面板重绘时渲染一次，
-         切歌后长期停在**上一首**的值（实测：播 2:31 的曲子，标签显示 5:03）。
-       ⚠ 实现的注释里也写了这些标识符 ⇒ 必须先剥注释（块 + 行）再扫。 */
-    const appCode = stripJsLineComments(stripComments(app));
-
-    T('界面 · 进度', 'R168 订阅了内核的 timeupdate（进度才会随时间走）',
-      /on\(\s*'timeupdate'\s*,[\s\S]{0,80}?paintPanelProgress\s*\(/.test(appCode),
-      '未订阅 timeupdate —— 进度条与时间标签会冻在瞬时值上');
-
-    /* ⚠ 这条必须**先提取函数体**再断言。用「函数名 ⋯ 大窗口 ⋯ 关键字」的懒匹配会
-       跨出函数边界、蹭到后面别处的 `.textContent =`，于是"删掉函数体内那行赋值"
-       仍判绿（v2.9.3 反向验证实测：M2 变异假绿）。 */
-    const progBody = fnBody(appCode, 'paintPanelProgress');
-    const durHook = progBody.indexOf('[data-radio-dur]') >= 0;
-    const durWrite = /\.textContent\s*=\s*[\s\S]{0,60}?fmtTime\(\s*st\.duration/.test(progBody);
-    T('界面 · 进度', 'R168b 进度更新函数当场取「总时长」那一格、并当场把 st.duration 写进去',
-      durHook && durWrite,
-      'paintPanelProgress 体内缺' + (durHook ? '' : ' [data-radio-dur] 取值') + (durWrite ? '' : ' fmtTime(st.duration) 回写'));
-
-    T('界面 · 进度', 'R168c 总时长那一格带 data-radio-dur 钩子（否则无处可更新）',
-      /<span class="radio-time" data-radio-dur>/.test(stripJsLineComments(stripComments(views))),
-      '总时长 span 缺 data-radio-dur');
+    /* v5.6.1 退役：R168 / R168b / R168c（"订阅内核 timeupdate，进度条与总时长要跟着走"）。
+       整条前提已不存在 —— 播放由网易云官方播放器（iframe）自己负责，
+       本站既不拿音频进度、也不画进度条；paintPanelProgress 与 [data-radio-dur]
+       随审计清单 ② 一并删除。 */
 
     /* 挂载点必须在 #app 之外 —— 否则路由重写会打断播放 */
     const bodyStart = html.indexOf('<main class="wrap"');
@@ -662,36 +420,48 @@ async function run() {
 
   /* ================= ④ app.js 接线 ================= */
   {
-    T('接线', 'R151 启动流程调用电台初始化（且包了 try）',
-      /try\s*\{\s*initRadio\(\)/.test(app), '未在 boot 中初始化电台');
+    /* v5.6.1：R151 原判据（boot 里调 initRadio 且包 try）已退役 ——
+       initRadio 随审计清单 ② 删除。改钉**现在这条**启动路：
+       电台代理绑定一次 + 条目延后到首绘之后才拉（v5.3.0 的启动加速，
+       访客多半不开电台，不该为首屏付一次跨区往返）。 */
+    T('接线', 'R151 启动流程按 v5.3.0 的方式起电台（代理只绑一次 + 首绘后再拉条目）',
+      /function bindRadioPageOnce\(\)/.test(app) &&
+      /bindRadioPageOnce\(\);\s*\/\*[^*]*v5\.3\.0/.test(app) &&
+      /requestIdleCallback\(function \(\) \{ rcLoad\(\); \}/.test(app),
+      '电台启动路径与 v5.3.0 的约定不一致');
 
-    T('接线', 'R151b 事件用代理绑定（面板重渲染不失效）',
-      /radioDockEl\.addEventListener\('click'/.test(app) &&
-      /host\.addEventListener\('click'/.test(app),
+    T('接线', 'R151b 事件用代理绑定（委托一次，重渲染不失效）',
+      /* ⚠ 旧判据绑在 radioDockEl / radio-panel-host 上（容器与函数都没了）。
+         v5 的委托点是 document 上的 [data-radio-act] —— 卡片整块重渲染也不会失效。 */
+      /function bindRadioPage\(\) \{[\s\S]{0,200}?document\.addEventListener\('click'/.test(app) &&
+      /function bindRadioPageOnce\(\) \{[\s\S]{0,200}?rcPageBound = true/.test(app),
       '未用事件代理');
 
-    T('接线', 'R151c 拖动进度条时不回写 value（避免与手指打架）',
-      /document\.activeElement\s*!==\s*seek/.test(app),
-      '缺少拖动保护');
+    T('接线', 'R151c 代理覆盖电台页全部动作（playitem / up / down / del / additem）',
+      (function () {
+        const need = ['playitem', 'up', 'down', 'del', 'additem'];
+        const i = app.indexOf('function bindRadioPage(');
+        const j = app.indexOf('function route()', i);
+        const body = (i >= 0 && j > i) ? app.slice(i, j) : '';
+        return body.length > 0 && need.every(function (a) {
+          return new RegExp("act === '" + a + "'").test(body);
+        });
+      })(),
+      '有动作没接上');
 
-    /* 上传防重复提交 */
-    T('接线', 'R152 上传有防重复提交标志',
-      /RadioUI\.busy/.test(app) && /if\s*\(RadioUI\.busy\)\s*return/.test(app),
-      '缺少防重复提交');
+    /* v5.6.1 退役：R151c（拖动进度条不回写 value）、R152（RadioUI.busy 防重复提交）、
+       R153b（restoreFormDraft 表单草稿）、R153（点面板外/Esc 收起面板）——
+       它们钉的都是旧面板的交互件，容器与函数都已删除。
+       ⚠ 防重复提交这一条值得说一句：新表单是"点一次 → 立刻写库 → rcLoad → 重绘"，
+       没有按钮常驻可连点的窗口（写入中会把状态写在表单提示位），
+       故不需要 busy 标志；真要防连点，那是新页面自己的事，不是被删代码的遗产。 */
 
     /* 上传前校验并给具体原因 */
-    T('接线', 'R152b 上传前校验文件与标题，给具体原因',
-      /请选择音频文件/.test(app) && /请填写曲目名称/.test(app),
-      '缺少上传前校验');
-
-    /* 面板外点击收起 + Esc 收起 */
-    T('接线', 'R153 点面板外部与 Esc 都能收起',
-      /closest\('\.radio-panel'\)/.test(app) && /=== 'Escape'/.test(app),
-      '缺少收起交互');
-
-    /* 表单草稿保留 */
-    T('接线', 'R153b 重渲染后回填表单草稿（填一半不丢）',
-      /function\s+restoreFormDraft/.test(app), '缺少草稿回填');
+    T('接线', 'R152b 入库前校验并给具体原因（未登录 / 缺字段 / 认不出链接）',
+      /say\('请先登录'/.test(app) &&
+      /say\('名称与链接都要填'/.test(app) &&
+      /errMsg\(e2, '加入失败'\)/.test(app),
+      '缺少入库前校验或具体原因');
 
     /* 权限：只读收听 vs 管理 */
     T('接线', 'R154 管理能力依赖登录态（未登录只读收听）',
@@ -699,16 +469,12 @@ async function run() {
       /State\.session\s*&&\s*State\.session\.user/.test(app.slice(app.indexOf('function canManageRadio'), app.indexOf('function canManageRadio') + 300)),
       '权限判断缺失');
 
-    /* v2.9.0：访客队列要摘掉「无音频本体」的旧记录 —— 它对访客永远播不了，
-       留着只会让电台看起来是坏的；而作者必须看得到才能删/重传，故管理视角全留。 */
-    T('接线', 'R167 访客队列摘掉无音频本体的旧记录（作者仍可见以便重传）',
-      /function\s+radioQueue\(\)/.test(app) &&
-      /if\s*\(\s*canManageRadio\(\)\s*\)\s*return\s+RadioUI\.rows/.test(app) &&
-      /has_data\s*!==\s*false/.test(app.slice(app.indexOf('function radioQueue'))),
-      '未按身份过滤播放队列');
+    /* v5.6.1 退役：R167「访客队列摘掉无音频本体的旧记录」——
+       判据（radioQueue + has_data !== false）随 base64 时代一起删除：
+       v5 的条目条条可播，没有"访客不该看到的死记录"这回事了。 */
 
-    /* ⚠ 过滤判据依赖登录态，而启动时会话还没恢复完 ⇒ 身份一变必须重取，
-       否则作者登录后会看不到那条待处理的旧记录（"消失"而不是"可见待删"）。
+    /* ⚠ 条目按身份渲染（未登录访客没有增删排序入口）⇒ 身份一变必须重取。
+       v5.6.1：重取调用从旧面板的 loadRadioTracks() 换成现在这条真路 rcLoad()。
 
        ⚠ 判据不能靠"固定字符数"或"第一个 });"定位：v4.9.0 给 SIGNED_IN 分支加了
          收藏迁移 + 刷新（几十行，内部自带 }); ），这两种写法都假红过一次。
@@ -716,133 +482,125 @@ async function run() {
     const authIdx = app.indexOf('onAuthStateChange(function');
     const authEnd = authIdx >= 0 ? app.indexOf('} catch (e) { /* 监听失败', authIdx) : -1;
     const authBody = (authIdx >= 0 && authEnd > authIdx) ? app.slice(authIdx, authEnd) : '';
-    T('接线', 'R167b 身份变化后重取曲目（否则作者看不到待处理的旧记录）',
-      authBody.length > 0 && /loadRadioTracks\(\)/.test(authBody),
-      '登录态变化未重取曲目');
+    T('接线', 'R167b 身份变化后重取电台条目（否则登录后界面不反映管理入口）',
+      authBody.length > 0 && /rcLoad\(\)/.test(authBody),
+      '登录态变化未重取条目');
   }
 
   /* ================= ⑤ 样式 ================= */
   {
+    /* ⚠ v5.6.2（审计清单 ④ 落地）：v2.8.0 的 dock/panel 样式已整段删除，
+       本节原有 10 条"守着已删样式"的断言随之退役 ——
+       R155 / R155b（dock 定位与避让）、R156（面板滚动上限）、
+       R159 / R159b（dock 与曲目行的截断）、R160 / R160c / R160d / R160e（dock 的
+       脉冲、毛玻璃、跑马灯与 hover 归属）、R164（body.has-radio 让位）、
+       R164b（has-radio 判据）、R165（打印隐藏 dock）。
+       它们钉的类名在 views.js / app.js / index.html 里**零标记**，只剩 CSS 自己引用自己。
+       改判到**现在真正活着**的那台常驻控制台（.radio-console / .rc-*）上。 */
+
     const rules = topLevelRules(css);
     const findRule = (name) => {
       const hit = rules.find((r) => r[0] === name);
       return hit ? hit[1] : null;
     };
 
-    T('样式', 'R155 迷你条固定定位（常驻不随滚动消失）',
-      /position\s*:\s*fixed/.test(findRule('.radio-dock') || ''),
-      'dock 未固定定位');
-
-    T('样式', 'R155b 迷你条避开顶栏高度（用 --topbar-h 变量）',
-      /var\(--topbar-h/.test(findRule('.radio-dock') || ''),
-      '未避开顶栏');
-
     T('样式', 'R155c --topbar-h 已定义为变量（单一来源）',
       /--topbar-h\s*:\s*\d+px/.test(css), '未定义 --topbar-h');
 
-    T('样式', 'R156 面板有滚动上限（长列表不撑破视口）',
-      /max-height/.test(findRule('.radio-panel') || '') &&
-      /overflow-y\s*:\s*auto/.test(findRule('.radio-panel') || ''),
-      '面板缺少滚动约束');
-
-    /* 长文本截断：曲名过长不能撑破布局 */
-    T('响应式', 'R159 长曲名截断（ellipsis）不撑破容器',
-      /text-overflow\s*:\s*ellipsis/.test(findRule('.radio-dock-title') || '') &&
-      /text-overflow\s*:\s*ellipsis/.test(findRule('.radio-track-title') || ''),
+    /* 长文本截断：曲名过长不能撑破容器（控制台右侧标题那一格） */
+    T('响应式', 'R159 长标题截断（ellipsis）不撑破容器',
+      /text-overflow\s*:\s*ellipsis/.test(findRule('.rc-title') || '') &&
+      /text-overflow\s*:\s*ellipsis/.test(findRule('.radio-card-title') || ''),
       '缺少截断');
 
-    /* flex 子项 min-width:0 —— 不加则 ellipsis 失效 */
-    T('响应式', 'R159b 弹性子项设 min-width:0（否则 ellipsis 不生效）',
-      /min-width\s*:\s*0/.test(findRule('.radio-dock-info') || '') &&
-      /min-width\s*:\s*0/.test(findRule('.radio-track-info') || ''),
+    /* 弹性子项 min-width:0 —— 不加则 ellipsis 失效。
+       ⚠ 控制台那个槽位是字号/长度都可变的 iframe 宿主，窄屏下最容易被内容顶破。 */
+    T('响应式', 'R159b 弹性子项设 min-width:0（否则 ellipsis / iframe 会顶破容器）',
+      /min-width\s*:\s*0/.test(findRule('.rc-slot') || ''),
       '缺少 min-width:0');
 
-    /* reduce 归零：装饰动效与新时长必须登记 */
-    T('样式 · reduce', 'R160 reduce 块关闭电平脉冲动画',
-      /\.radio-dock-inner\.is-playing::before\s*\{\s*animation:\s*none/.test(css),
-      'reduce 未关闭脉冲');
+    /* reduce 归零：控制台的两个无限循环装饰动画必须登记。
+       ⚠ 与旧断言同一套道理：它们是**无限循环**的裸时长 animation，
+          R66m 只扫 transition、R72k 只认 --t-*，谁都不会替我关掉。 */
+    T('样式 · reduce', 'R160 reduce 块关掉控制台的指针扫频与 VU 电平（无限循环装饰动画）',
+      /\.rc-tune-needle,\s*\.rc-vu i\s*\{\s*animation:\s*none\s*!important/.test(css),
+      'reduce 未关闭控制台动画');
 
-    T('样式 · reduce', 'R160c reduce 块关掉电台浮层的毛玻璃（省算力）',
-      /\.radio-dock-inner,\s*\.radio-panel\s*\{\s*backdrop-filter:\s*none/.test(css),
-      'reduce 未关毛玻璃');
+    T('样式 · reduce', 'R160c reduce 块把指针摆回中位（停转后不能停在随机相位）',
+      /\.rc-tune-needle\s*\{\s*left:\s*40%\s*!important/.test(css),
+      'reduce 未复位指针');
 
-    /* v2.9.6：dock 的跑马灯光效。
-       ⚠ 它的 1.9s 是裸时长写在 animation 里 —— R66m 只扫 transition、
-         R72k 只认 --t-* 变量，两条既有守卫都【够不着】它。
-       ⇒ 若 reduce 块里那条显式关闭被删掉，跑马灯会在"减少动效"下照常狂跑，
-         而且没有任何其它断言会红。这条就是唯一的守卫。 */
-    T('样式 · reduce', 'R160d reduce 块显式关掉 dock 跑马灯光效（裸时长 animation 无其它守卫）',
-      /\.radio-dock-inner:hover::after\s*\{\s*animation:\s*none\s*!important;\s*opacity:\s*0\s*!important/.test(css),
-      'reduce 未关跑马灯');
+    T('样式 · reduce', 'R160d reduce 块关掉底栏与帮助面板的毛玻璃（省算力）',
+      /* ⚠ v5.6.2：旧判据扫的是 `.radio-dock-inner, .radio-panel` 那两项（已删）。
+         现在守的是这条规则本身还在，且**不许**把已删的电台浮层再写回来。 */
+      /\.topbar,\s*\.kbd-help\s*\{\s*backdrop-filter:\s*none\s*!important/.test(css) &&
+      !/\.radio-dock-inner,\s*\.radio-panel\s*\{\s*backdrop-filter/.test(css),
+      'reduce 未关毛玻璃，或已删的旧浮层又回来了');
 
-    T('样式 · reduce', 'R160e 跑马灯只在 hover 媒体块内驱动（E1 铁律 + 触屏不触发）',
-      (function () {
-        const blocks = [];
-        const re = /@media\s*\(hover:\s*hover\)\s*\{/g;
-        let m;
-        while ((m = re.exec(css))) {
-          let depth = 1, i = re.lastIndex;
-          while (depth > 0 && i < css.length) {
-            if (css[i] === '{') depth++;
-            else if (css[i] === '}') depth--;
-            i++;
-          }
-          blocks.push(css.slice(re.lastIndex, i - 1));
-        }
-        const body = blocks.join('\n');
-        return /\.radio-dock-inner:hover::after\s*\{[^}]*animation:\s*radio-marquee/.test(body);
-      })(),
-      'hover 驱动未落在 @media(hover:hover) 内');
+    /* 三档主题：控制台内部**刻意**用局部变量模拟实体机器（木纹/金属不跟主题翻），
+       但它不该硬编码本站在用的那四个霓虹色 —— 那是"换主题就露馅"的老坑。
+       ⚠ 这条比原来更严：旧版只看 dock 一条规则，现在扫整段控制台。 */
+    const consoleBlock = (function () {
+      var i = css.indexOf('/* ============================================================\n   v5.1.0：电台常驻控制台');
+      if (i < 0) i = css.indexOf('v5.1.0：电台常驻控制台');
+      var j = css.indexOf('/* 电台页 */', i);
+      return (i >= 0 && j > i) ? css.slice(i, j) : '';
+    })();
+    T('样式 · 主题', 'R161 控制台不硬编码本站霓虹色（材质走它自己的局部变量）',
+      consoleBlock.length > 0 && !/#00f0ff|#ff2a6d|#b537f2|#f9f002/i.test(consoleBlock),
+      consoleBlock.length ? '硬编码了霓虹色' : '没取到控制台样式段');
 
-    /* 三档主题：新组件不得硬编码霓虹色（走变量才能随主题自适应） */
-    const dockBody = findRule('.radio-dock-inner') || '';
-    T('样式 · 主题', 'R161 新组件颜色走 CSS 变量（不硬编码霓虹色）',
-      !/#00f0ff|#ff2a6d|#b537f2|#f9f002/i.test(dockBody),
-      '硬编码了霓虹色');
+    /* ---------- 与固定控制台的布局避让 ----------
+       ⚠ v5.6.2 改判：旧版是"dock 固定在左上，正文顶部让出 84px"（body.has-radio）。
+         新控制台固定在**右下/底部居中**，所以正文改在**底部**让位：
+         电台页给 240px，否则最后一条条目会被控制台盖住。 */
+    const reserveSel = rules.find((r) => /data-mode="full"/.test(r[0]) && /#app/.test(r[0]));
+    T('样式 · 避让', 'R164 电台页底部让出控制台高度（最后一条不被盖住）',
+      !!reserveSel && /padding-bottom\s*:\s*2[0-9]{2}px/.test(reserveSel[1]),
+      reserveSel ? 'padding-bottom 不足：' + reserveSel[1].slice(0, 60) : '缺少 [data-mode=full] ~ #app 规则');
 
-    /* ---------- 布局避让（真实浏览器实测出的重叠） ----------
-       dock 是 fixed 浮层，居中布局下 .wrap 会钻到它底下 —— 实测 1258px 视口
-       横向重叠 168px，页面标题被压掉大半。修复＝给正文顶部让出 dock 高度。 */
-    const reserveSel = rules.find((r) => /body\.has-radio/.test(r[0]) && /\.wrap/.test(r[0]));
-    T('样式 · 避让', 'R164 电台启用时主内容顶部让出 dock 高度（不压标题）',
-      !!reserveSel && /padding-top\s*:\s*8[0-9]px/.test(reserveSel[1]),
-      reserveSel ? 'padding-top 不足：' + reserveSel[1].slice(0, 60) : '缺少 body.has-radio .wrap 规则');
+    /* v5.6.2 退役：R164b（has-radio 由 paintDock 驱动）—— 挂 class 的代码 v5.6.1 已删，
+       v5.6.2 连那条孤儿 CSS 一起删了，判据无处可查。 */
 
-    /* class 由 paintDock 挂 —— 判据必须是「电台可用」而非「dock 当前可见」，
-       否则面板一开一关正文会上下跳 84px。 */
-    const paintDockBody = app.slice(app.indexOf('function paintDock'), app.indexOf('function paintPanelProgress'));
-    T('样式 · 避让', 'R164b has-radio 由电台可用性驱动（非 dock 显隐，防正文跳动）',
-      /classList\.toggle\(\s*'has-radio'\s*,\s*!!st\.count\s*\|\|\s*canManageRadio\(\)/.test(paintDockBody),
-      '判据不对（可能跟 dock.hidden 绑定 → 正文会跳）');
-
-    /* 打印：浮层不该被打出来（原隐藏清单漏了电台）
+    /* 打印：控制台不该被打出来（它是屏幕专属的实体机器造型）
        ⚠ 必须用配平提取，不能贪婪到文件末尾 —— 否则会误命中主样式里的
-       `.radio-dock[hidden]{display:none}`，摘掉实现也照样绿（假绿，实测踩过）。 */
+       别的规则，摘掉实现也照样绿（假绿，实测踩过）。 */
     const printBody = mediaBlocks(css, (c) => /print/.test(c)).map((b) => b.body).join('\n');
-    T('样式 · 打印', 'R165 打印时隐藏电台浮层（不浪费纸墨）',
-      /\.radio-dock[^{]*\{[^}]*display\s*:\s*none/.test(printBody),
-      '打印未隐藏 .radio-dock');
+    T('样式 · 打印', 'R165 打印时隐藏常驻电台控制台（不浪费纸墨）',
+      /\.radio-console[^{]*\{[^}]*display\s*:\s*none/.test(printBody),
+      '打印未隐藏 .radio-console');
   }
 
   /* ================= ⑥ 交叉一致性 ================= */
   {
-    /* 内核导出的函数与 UI 调用的动作名要对得上 —— 拼错会"点了没反应" */
-    const acts = ['toggle', 'prev', 'next', 'playat', 'mute', 'repeat', 'shuffle'];
+    /* v5.6.1 改判：动作名从"内核能力"（toggle/prev/next/playat/mute/repeat/shuffle，
+       那是已删的旧面板）换成**现在真正在用的**这一套 ——
+       电台页与首页入口发出的 data-radio-act 必须被 app.js 的代理接住，
+       拼错就是"点了没反应"，这条守卫照旧值钱。 */
+    const acts = ['playitem', 'up', 'down', 'del', 'additem'];
     const missing = acts.filter((a) => !new RegExp('data-radio-act="' + a + '"').test(views));
-    T('交叉一致性', 'R162 UI 动作名与内核能力一一对应',
+    T('交叉一致性', 'R162 UI 发出的动作名与代理相接（拼错 = 点了没反应）',
       missing.length === 0, '缺失动作：' + missing.join(','));
 
-    /* app.js 的 switch 分支要覆盖 UI 里出现的每个动作 */
-    const handler = app.slice(app.indexOf('function handleRadioAction'));
-    const handlerBody = handler.slice(0, handler.indexOf('function numIdOf'));
-    const notHandled = acts.filter((a) => !new RegExp("case\\s+'" + a + "'").test(handlerBody));
-    T('交叉一致性', 'R162b app 侧动作处理覆盖 UI 全部动作',
-      notHandled.length === 0, '未处理：' + notHandled.join(','));
+    /* app.js 的代理要覆盖 UI 里出现的**每一个**动作 —— 不再手写清单，
+       直接从 views.js 里把动作名刮出来比对，新增动作忘了接就会红。 */
+    const viewActs = Array.from(new Set(
+      (views.match(/data-radio-act="[a-z-]+"/g) || []).map(function (s) {
+        return s.replace(/^data-radio-act="|"$/g, '');
+      })
+    )).sort();
+    const bindIdx = app.indexOf('function bindRadioPage(');
+    const bindEnd = app.indexOf('function route()', bindIdx);
+    const bindBody = (bindIdx >= 0 && bindEnd > bindIdx) ? app.slice(bindIdx, bindEnd) : '';
+    const notHandled = viewActs.filter(function (a) {
+      return !new RegExp("act === '" + a + "'").test(bindBody);
+    });
+    T('交叉一致性', 'R162b app 侧代理覆盖 UI 全部动作（从 views.js 实刮，非手写清单）',
+      viewActs.length > 0 && bindBody.length > 0 && notHandled.length === 0,
+      notHandled.length ? '未处理：' + notHandled.join(',') : ('共 ' + viewActs.length + ' 个动作'));
 
-    /* 面板与迷你条共用同一套动作名（toggle） */
-    const toggleCount = (views.match(/data-radio-act="toggle"/g) || []).length;
-    T('交叉一致性', 'R162c 迷你条与面板共用 toggle 动作（≥2 处）',
-      toggleCount >= 2, 'toggle 出现 ' + toggleCount + ' 次');
+    /* v5.6.1 退役：R162c（"迷你条与面板共用 toggle 动作 ≥2 处"）——
+       迷你条与面板都已不存在，toggle 不再是 UI 动作（播放交给网易云 iframe 自己）。 */
 
     /* 数据层产出的行 → 视图消费的字段必须对齐 */
     T('交叉一致性', 'R163 视图消费的字段都在数据层白名单内（title / artist / kind）',
@@ -861,12 +619,9 @@ async function run() {
       /RADIO_FIELDS\s*=\s*'[^']*\bnetease_id\b[^']*'/.test(cloud),
       'RADIO_FIELDS 缺 netease_id —— 条目无法还原成播放器');
 
-    /* 取址回调的跨层契约：内核传**整行**、数据层按 id 取。
-       这条钉住「地址来源从存储换成库」这类改造不必再动内核。 */
-    T('交叉一致性', 'R163c 取址回调传整行（内核与地址来源解耦）',
-      /fetchUrl:\s*function\s*\(row\)/.test(app) &&
-      /playUrl:\s*(async\s+)?function\s*\(row\)/.test(cloud),
-      '取址回调仍按某一列路径传参 —— 换地址来源时内核会被迫改动');
+    /* v5.6.1 退役：R163c（取址回调传整行 / 内核与地址来源解耦）——
+       fetchUrl 是 NEONRadio 内核的接口，取址来自已删的 initRadio；
+       条目的播放地址现在是行里的 source_url，界面直接渲染 iframe，没有"回调"这一层。 */
   }
 
   return {

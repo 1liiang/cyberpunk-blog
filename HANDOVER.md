@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v5.6.0（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v5.7.1（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能；审计 ①~⑤+D 清完 + 全项目精简化**） ｜ **门禁**：1156/1156 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -44,7 +44,7 @@
 ```bash
 cd cyberpunk-blog
 
-npm run gate        # ★ 全量门禁（1155 条断言）。改任何东西之后都跑它
+npm run gate        # ★ 全量门禁（v5.7.0 起 1156 条断言）。改任何东西之后都跑它
 npm run baseline    # 增删断言后更新基线（**新增 case 必须手动登记进 tests/cases/manifest.json**）
 npm run build       # = gate + 生成 feed.xml
 ```
@@ -69,28 +69,29 @@ cyberpunk-blog/
 ├── js/
 │   ├── app.js          ★ 主逻辑（路由、视图装配、编辑器、主题、装置面板、NEONControls 导出）
 │   ├── views.js        视图层（返回 HTML 字符串，全部经 esc() 转义；含字标组装与街区）
-│   ├── cloud.js        云端封装（数据表访问、图片压缩、音频）
-│   ├── radio.js        电台播放器
+│   ├── cloud.js        云端封装（数据表访问、图片压缩、条目读写）
 │   ├── keys.js         快捷键（含 Ctrl+` 唤起终端、Esc 优先级链）
 │   ├── theme-boot.js   ★ 首绘前脚本（主题/色相/氛围三件都在这里定，必须独立不能依赖 app.js）
 │   ├── scene.js        ★ 4.0 场景框架（路由→场景→氛围层集；手动优先链；reapply）
 │   ├── atmo.js         ★ 4.0 氛围运行时（数字雨 DOM 列法 + 帧率保底与自动降档）
 │   ├── boot.js         4.0 开场序列（首访终端自检；CSS failsafe 兜底自退场）
 │   ├── tap.js          4.0 点击反馈（三档；hover + reduce 双闸）
-│   ├── console.js      ★ 4.0 命令终端（Ctrl+`；九命令 + 彩蛋；DOM 惰性构建）
+│   ├── console.js      ★ 4.0 命令终端（Ctrl+`；八命令 + 彩蛋；DOM 惰性构建）
 │   ├── wordmark-paths.js  4.0 霓虹字标字形数据（**生成物**——字体转曲，勿手改）
 │   └── version.js      版本号 + 完整版本演进 LOG（**改代码必须同步 bump**）
 ├── tests/
 │   ├── run-all.js      门禁入口
-│   ├── cases/          47 个用例 + manifest.json（★ 新增 case 必须登记）
+│   ├── cases/          57 个用例 + manifest.json（★ 新增 case 必须登记）
 │   └── fault-matrix.js / sandbox-p2.js / regress.js
 ├── tools/
-│   ├── bump.js         版本号提升脚本
-│   └── gen-feed.js     RSS 生成
+│   ├── bump.js          版本号提升脚本
+│   ├── gen-feed.js      RSS 生成
+│   ├── export-static.js 静态快照导出（workflow 每 6 小时跑）
+│   └── audit-all.js    ★ 全项目审计（剥注释再扫，命中即真信号）
 └── docs/handover-notes/   ← 本交接包附带的深度笔记快照（见第 6 节）
 ```
 
-**代码规模参考**：`app.js` 约 3700 行、`views.js` 约 1500 行、`style.css` 约 5300 行。
+**代码规模参考**：`app.js` 约 3400 行、`views.js` 约 1300 行、`style.css` 约 5400 行。
 `bindEditor` 是唯一超过 300 行的函数（334 行），重构它属于已知技术债。
 
 ---
@@ -117,7 +118,7 @@ cyberpunk-blog/
    后果：表行有长度上限（`data` ≤ 3.6M 字符），所以上传管线会**自动压缩**（`cloud.js` 的 `compressImage`）。
    （Supabase 的 Storage 支持公开桶，将来若想改成对象存储，这是一次独立改动。）
 2. **读视图与写基表的字段不能混用** —— `has_data` 是视图算出来的列，写路径引用它会报 42703
-   （v2.9.2 事故，详见 `PROJECT-NOTES.md` §1.3）。
+   （v2.9.2 事故，判据已收进 `js/version.js` 的历史事故索引）。
 3. **直连 Postgres 的域名只有 IPv6**：`db.<ref>.supabase.co` 无 A 记录，IPv4 环境要用 Session pooler
    （`aws-0-ap-southeast-1.pooler.supabase.com`，用户名 `postgres.<ref>`）。
    建库/灌数据更省事的通道是 **Management API**（个人访问令牌 PAT）——`POST /v1/projects/{ref}/database/query`。
@@ -152,11 +153,10 @@ cyberpunk-blog/
   `playUrl` 遇到外链直接返回地址、**不碰 base64**；没有外链时仍走原路（老曲目不受影响）。
 - ⚠ **CSP 是有意放宽的**：`media-src` 加了 `https:` —— 不加的话浏览器会直接拦掉外链音频。
   它只管 `<audio>/<video>`，不涉及脚本与样式。想收紧就把 `https:` 换成你固定的域名。
-- ⚠ **测试脚手架曾经漏装 `radio.js`**：真实 `index.html` 有它，`bootDom` 却一直没求值，
-  于是 `window.NEONRadio` 恒为 undefined、电台面板在测试里永远画不出来 ——
-  任何"电台界面"的行为断言都写不了。现在改成 `bootDom({ radio: true })` 按需装载。
-  为什么不做成默认：默认开启会踩到降级用例里"没有 document"的路径
-  （`paintDock → paintPanelProgress` 直接读 document），那是**测试环境产物**，不是线上缺陷。
+- ⚠ **测试脚手架与 `radio.js`**（历史，v5.6.3 收尾）：`bootDom` 曾经漏装 `radio.js`
+  （真实 `index.html` 有它），后来靠 `bootDom({ radio: true })` 按需装载。
+  **现在这一段已整体撤下** —— 内核文件本身已删除（见第 6 节的精简化说明），
+  电台界面也不再依赖任何本脚本，断言直接看渲染出的 DOM。
 - ⚠ **`create or replace view` 不能改列序**：给视图加列必须追加到 SELECT 末尾，
   否则 `42P16: cannot change name of view column …`（实测踩到）。
 
@@ -201,14 +201,16 @@ cyberpunk-blog/
   1. 要删列，**必须先 drop 掉依赖它的视图**（否则 2BP01: cannot drop column … because view depends on it）
   2. 视图重建后**必须补回 GRANT**（`grant select on public_radio to anon, authenticated`）—— 忘了就是"匿名访客读不到、电台全空"
 - **播放**：单曲 `type=2&height=66`；歌单 `type=0&height=430`（官方给的正是这两个值）。
-- **待办（下一轮）**：独立页面 `#/radio` + 常驻官方播放器（挂在 `#app` 之外，切页面不断歌）；
-  以及删除旧 `js/radio.js`（`<audio>` 内核）与 base64 时代遗留方法。
+- ✅ **已办（v5.0/v5.1）**：独立页面 `#/radio` + 常驻官方播放器（挂在 `#app` 之外，切页面不断歌）。
+- ✅ **已办（v5.6.1 / v5.6.3）**：base64 时代遗留方法已清空；旧 `js/radio.js`（`<audio>` 内核）
+  整个文件已删除 —— 它不再被 `index.html` 加载，运行时也无人调用。
 
 ### 网易云官方外链播放器（v4.9.9）
 
 - **形态**：它不是"一条音频地址"，而是**一整个官方 iframe 播放器** —— 所以
   ① 入库前**不做音频校验**（<audio> 当然加载不了它，不特判会被误判成坏链接）
-  ② 播放时**不碰 <audio>**，转 embed 态由界面渲染 iframe（`radio.js` 里 embedUrl）
+  ② 播放时**不碰 <audio>**，由界面直接把行里的 `source_url` 渲染成 iframe
+     （`app.js` 的 `paintStage`；v5.6.3 前那层 `radio.js` 内核已删除）
 - **CSP 两次放宽的边界**：`media-src … https:`（v4.9.5 外链音源）+ `frame-src https://music.163.com`（v4.9.9）。
   脚本/样式/图片来源一律没动。想收紧就换成你实际用到的那一个域。
 - **贴法**：歌曲页 `/#/song?id=…`、`/song/…`、outchain 页 `/#/outchain/2/<id>/…`、裸 id 都认，
@@ -346,21 +348,79 @@ cyberpunk-blog/
 4. 动效（glitch / 扫描线 / 倾斜）必须在 reduce 块里显式归零
 5. 首页断言很多（45/46/48 号等）→ 改版后按"先取原文件、再最小范围改"的方式更新，**不要全局替换**
 
-### 全项目审计结论（v5.6.0，待专项清理）
+### 全项目审计结论（v5.6.0 立项 → ① ② 于 v5.6.1、③ ④ ⑤ + D 于 v5.6.2 全部清理完毕）
 
-扫描脚本：`_push/tools/audit-all.js`（扫事实，不猜）。**已修**：页脚 POWERED BY WORKBUDDY CLOUD → SUPABASE。
-**待清理**（按顺序，每条都要配套改用例）：
+扫描脚本：`tools/audit-all.js`（扫事实，不猜；v5.6.3 起已**剥注释再扫**）。**已修**：页脚 POWERED BY WORKBUDDY CLOUD → SUPABASE。
+
+> **v5.6.1 注记（① ② 已还）**：`js/cloud.js` 的 base64 时代旧电台 API、
+> `app.js` + `views.js` 的旧「迷你条 dock + 弹出面板」整台机器都已删除。
+> **v5.6.2 注记（③ ④ ⑤ + D 已还）**：旧 dock/panel 样式整段删除（约 410 行）、
+> `export-static.js` 的电台导出块按 v5 重写、5 处 console.log 定性为"自证机制，保留"。
+> 门禁 1194 → 1157（v5.6.1）→ **1153 全绿**（v5.6.2）。
+> **这张表现在全绿 —— 没有遗留项了**，新的清理需求请重新跑一次审计脚本再开单。
 
 | 项 | 证据 | 处理要点 |
 |---|---|---|
-| ① cloud.js 死 API | readAudio / probeDuration / trackData / create / addTrack / probeSourceUrl / neteaseEmbedUrl / isEmbedUrl / addByUrl / playUrl / RADIO_DATA_FIELDS / radioCache×15 / RADIO_VIEW_ONLY / RADIO_WRITE_FIELDS —— **外部零调用** | 删除后，**35 号用例有 4 条断言要退役**（R140c/R141d/R142b/R143，测的是已废弃的 base64 管道）、**54 号有 2 条要改用 `add`**（addByUrl 已不存在） |
-| ② app.js/views.js 死面板机器 | paintDock×8 / paintPanel×12 / RadioUI×22 / loadRadioTracks×8 / submitAddTrack / showAddForm / formDraft / askRemoveTrack / moveTrack / restoreFormDraft / radioDockView（views.js×4） | 约 300 行；容器早已删除，函数体也已是空实现 |
-| ③ 已删列的残留引用 | has_data / storage_path / duration_sec / size_bytes / cover_url | ⚠ 它们**全都藏在 ① ② 的死代码里** —— 死代码删净即自动消失；但要**先确认**没有活路径引用 |
-| ④ 旧 dock/panel CSS | .radio-dock* / .radio-panel* / .radio-track* / .radio-form* | ⚠ 别误删在用的：.radio-board / .radio-compose / .radio-field / .radio-select 是**新电台页**在用的 |
-| ⑤ console.log | 5 处 | 逐条判断（多为 [NEON] 诊断） |
+| ~~① cloud.js 死 API~~ | ✅ **v5.6.1 完成** | 实际删的比清单更长：除列出的那些，还删了 `normalizeSourceUrl` / `StaticRadio.playUrl` 与只为它们存在的 `AUDIO_*` 常量、`RADIO_FIELDS` 之外的三个字段清单；`Radio` 现在只剩 `list / parseNetease / buildEmbedUrl / add / removeTrack / reorder` |
+| ~~② app.js/views.js 死面板机器~~ | ✅ **v5.6.1 完成** | 活下来的只有 `canManageRadio`（新电台页与常驻控制台共用）；身份变化时的重取改成 `rcLoad()`，`boot` 里的 `initRadio()` 调用删除；`app.js` 那个 `tune` 分支是旧面板遗留的不可达分支，一并删了 |
+| ~~③ 已删列的残留引用~~ | ✅ **随 ① ② 清零，v5.6.2 复核** | `js/` 下（**剥掉注释后**）已无任何一处。仍在提这几个名字的只剩 `version.js` 的历史日志；`app.js`/`cloud.js` 里那几处 `storage_path`/`size_bytes` 是**图片**那条活路的字段（同名列，不是已删的电台列） |
+| ~~④ 旧 dock/panel CSS~~ | ✅ **v5.6.2 完成**（约 410 行） | 删了 `.radio-dock*` / `.radio-panel*` / `.radio-track*` / `.radio-btn*` / `.radio-now*` / `.radio-seek` / `.radio-volume` / `.radio-bar` / `.radio-time` / `.radio-ctrls` / `.radio-vol*` / `.radio-list*` / `.radio-empty*` / `.radio-embed*` / `.radio-drop` / `.radio-hint` / `.radio-err` / `.radio-mark` / `.radio-glyph`，外加 `@keyframes radio-pulse`/`radio-marquee`、`body.has-radio .wrap`、打印块里那两个隐藏项、reduce 块里为它们写的三条。判据：这些类名在 `views.js`/`app.js`/`index.html` 里**零标记**，逐个核实后才删 |
+| ~~⑤ console.log~~ | ✅ **v5.6.2 定性：全部保留** | 5 处全在 `js/version.js` 的「自证」块里 —— 排查"页面是不是旧版/浏览器吃了缓存"的第一手证据（§5 那次 bump 忘改导致登录 `Failed to fetch` 的事故就是靠它定性的）。输出恒定 5 行、不含用户数据；理由已写进源码。**纪律是别新增**：审计脚本会把计数报出来 |
+| ~~D 导出器电台块~~ | ✅ **v5.6.2 完成（选了"按 v5 重写"）** | 它原来 select `data/mime/duration_sec/size_bytes/cover_url/has_data` —— 这些列 v5 已从库与服务端删除，真去查会 42703 **整轮导不出快照**（之前没爆只因快照 `radio` 恒为空）。现在只导 v5 条目元数据，字段与 `cloud.js` 的 `RADIO_FIELDS` **逐字一致**（51 号 R253c 钉着这条）；`FORCE_AUDIO`/`AUDIO_EXT_BY_MIME`/`localFileSize`/`data/radio` 落地与清目录逻辑一并删除，空的 `app/data/radio/` 目录也删了 |
 
-⚠ **过程教训（本轮实锤）**：用"括号配平"批量退役断言时，**遇到内部含分号/嵌套括号的断言会配平失败**（本轮 2 条失败并连带把 54 号改出运行时错）。
+**④ 里必须记住的"别误删"清单**（下一轮再有人清 CSS 时照着对）：
+电台页在用 `.radio-page-tip` / `.radio-board` / `.radio-card*` / `.radio-compose` / `.radio-field` / `.radio-select` / `.radio-src-head` / `.radio-form*` / `.radio-op*`；
+常驻控制台在用 `.radio-console` / `.rc-*`（复古收音机材质走它自己的局部变量，刻意不跟主题翻）。
+
+⚠ **过程教训（v5.6.0 立项时实锤）**：用"括号配平"批量退役断言时，**遇到内部含分号/嵌套括号的断言会配平失败**（当时 2 条失败并连带把 54 号改出运行时错）。
 正解：断言退役要**一条一条**做，或者改用"整文件从远端取回 + 精确最小替换"的方式 —— 不要写通用批处理去啃它们。
+
+⚠ **过程教训（v5.6.1 清理时新增两条，都是实测踩到的）**：
+1. **"清理守卫"必须扫剥过注释的源码**。删了代码之后，源码注释里往往会写下被删的名字（本轮 `cloud.js` / `views.js` / `app.js` 都写了），
+   于是 `!/playUrl/.test(cloud)` 这类断言会被自己写的注释判红 —— 改成 `stripJsLineComments(stripComments(cloud))` 后再扫。
+   另外别写太宽的守卫：`!/\.select\([^)]*\bdata\b/` 会误伤图片那条活路（`Images.fetchMany` 正是 `.select('id,content_type,data,…')`），
+   `!/signedUrl/` 会误伤附件下载（`Storage.signedUrl` 是另一条活路）。
+2. **`cloudCode` 这类"给全块用的局部变量"必须在块首声明**。本轮把它写在了块的中途，于是块里靠前的断言撞 temporal dead zone，
+   只有那一条报红（`Cannot access 'cloudCode' before initialization`）—— 症状像是断言写错了，其实是声明顺序。
+
+⚠ **过程教训（v5.6.2 清 CSS 时新增三条）**：
+1. **删"中间一段规则"比删"整块"危险得多**：本轮 reduce 块里是按行删两条规则，结果把**上一条规则的注释收尾 `*/` 一起吃掉** ——
+   于是 `.topbar/.kbd-help` 那条 `backdrop-filter` 整条被吞进注释、块结构破损，而门禁**并没有红**（它只断言"某条规则还在不在"）。
+   教训：删完必须独立复核结构（本轮用"注释开闭计数 + 括号配平 + 关键规则在不在"三条一起验），别只信测试全绿。
+2. **审计脚本要注释感知，否则清干净了也报残留**：`audit-all.js` 原先按原文扫，于是刚删完的 20+ 个标识符因为"注释里写着它已删除"继续报命中，
+   真信号被假阳性淹没。已改成剥注释后再扫（① ② ③ ④ ⑦ 项）。
+3. **`export-static.js` 这类"平时不跑"的工具最容易烂掉**：它的电台查询写着早已删掉的列，只要真跑一次就整轮失败，
+   但因为快照 `radio` 恒为空、CI 里也没单独校验它的查询字段，烂了很久没人发现。
+   教训：给"生产快照的工具"配一条**跨文件字段一致性断言**（本轮 51 号 R253c 就是干这个的），比指望人记得强。
+
+### 全项目精简化（v5.6.3，站长要求"没用的全删、极大精简"）
+
+一次**全项目**级别的清点，判据一律是"**扫出来的事实**"，不靠感觉。做法与结果：
+
+| 批次 | 删了什么 | 判据 / 证据 |
+|---|---|---|
+| A | **`js/radio.js` 整个文件**（17.7KB，旧 `<audio>` 播放内核）+ 35 号 30 条内核断言 + 控制台 `radio` 命令 | 它**没有被 index.html 加载**，运行时代码里 `window.NEONRadio` 只剩 console.js 一处引用（那处必然拿不到内核）；`audit-all.js` ⑤ 项直接报"js/radio.js ❌ index.html 里没有它" |
+| B | 旧「全息面板」整段（`.holo-panel/-head/-live/-grid/-cell/-foot`、`@keyframes holo-blink`，72 行）+ print 块里三个 v3.6.0 就已从 DOM 移除的装饰层 | 这些类名在 `views.js`/`app.js`/`index.html` 里**零标记**（被 `.holo-hero`/`.holo-card` 取代） |
+| C | `_ppt_assets/`（33MB 一次性 PPT 工作区）、根目录 PPT/PDF（7MB）、`_push/`（249 个一次性脚本，4.5MB）、`deps/`、`config/`、两个人工样张 HTML、`db/seed/removed-posts-archive/`（6.5MB）、`db/seed/radio-*.json` | 逐个查过引用：站点与脚本都不读；审计脚本先搬去 `tools/audit-all.js` 保住 |
+| D | 顺带修掉两处**真实的 CSS 破损**（v3.6.0 留下的孤儿 `}`、v5.6.2 删 keyframes 时留下的半截片段） | 括号配平长期差 1~2，浏览器静默忽略，**所有既有断言照样全绿** —— 故新增结构性守卫（见下） |
+
+**净效果**：项目目录 **71.1MB → 20.8MB**（其中 19MB 是 `node_modules`，
+站点本体与文档合计约 1.5MB）；文件数 1873 → 1567；门禁 1153 → **1125 条全绿**。
+
+⚠ **本轮新增的门禁守卫（49 号 R244 / R244b）**：CSS 括号配平 + 顶层无孤儿声明。
+起因是上面 D 那两处 —— "删规则时只删到第一个 `}`"是本项目**唯一**能让"删一半"
+还不被任何断言发现的删法（既有断言只查"某条规则在不在"）。有了这条，
+以后再犯会当场报红。
+4. **"过期检查"比死代码更坏**：死代码只是占地方，而过期的检查会**主动在界面上说假话**。
+   本轮截图实锤：v5.3.0 把三个 Markdown 库改成"渲染正文时按需注入"之后，
+   启动阶段那句"若 marked/DOMPurify/hljs 不存在就报 CDN 组件加载失败"就变成了
+   必然触发的假警报（文案还停在 v4.8.1 之前的 CDN 时代），于是页面顶部常驻一条红条。
+   **纪律**：改"加载时机"（同步 → 按需、defer → 懒加载）时，必须回头搜一遍所有
+   `typeof X === 'undefined'` 的判定点 —— 它们默认假设"到这一步就该有了"。
+5. **守卫自己会被自己的注释判红（本轮第 3 次踩）**：新加的 R16e 扫的是源码原文，
+   而我在注释里写了那句要禁掉的过期文案做说明 → 守卫当场报红。
+   凡是"禁止出现某字符串"的守卫，一律扫 `stripComments()` 之后的内容。
+
 
 ## 7. 未完成 / 待决定
 
@@ -377,6 +437,14 @@ cyberpunk-blog/
   - ✅ ~~字号体系不规范（24 种含半像素）~~ → 已还（18 种，v4.0.0）
   - ⏳ `bindEditor` 334 行，建议按关注点拆 4~5 个函数
   - ✅ ~~首屏 Hero 无背景图~~ → 已由「霓虹字标 + 9 层氛围」取代（v4.1.0）
+  - ✅ ~~审计清单 ①②：cloud.js 的 base64 旧电台 API 与 app.js/views.js 的旧面板机器~~ → 已还（v5.6.1；门禁 1194→1157，用例逐条退役见 §6）
+  - ✅ ~~审计清单 ③④⑤ + D：残留列引用 / 旧 dock-panel CSS（约 410 行）/ console.log 定性 / 导出器电台块~~ → 已还（v5.6.2；门禁 1157→1153）
+- **剩余项（审计清单全清完之后的新清单，按建议顺序）**：
+  1. **内容**（最大短板，见本节第一条）：机器已经够用，需要的是写东西
+  2. Hero 背景图（待选素材）；双视觉态（缓做）；音景（装置④仍是占位）
+  3. 性能实测报告待补（见上一条）→ 通道恢复后补一次实测
+  4. 想再清一轮死代码/不一致时：先跑 `node tools/audit-all.js`
+     （注释感知，命中更接近真信号；① ② 项只在 `version.js` 的构建日志里命中，属预期）
 - **SEO（架构性限制）**：SPA 的静态 HTML 里没有正文，非 JS 爬虫抓不到内容；`robots.txt` 与 `sitemap.xml` 未提供。
   `feed.xml` 是当前唯一的缓解手段。
 
@@ -385,7 +453,7 @@ cyberpunk-blog/
 ## 8. 接手第一小时建议
 
 1. 读 `docs/handover-notes/MEMORY.md`（建立全局认知）
-2. 跑一次 `npm run gate`，确认 1155/1155
+2. 跑一次 `npm run gate`，确认 **1156/1156**（v5.6.2 起；更早的文档写过 1155 / 1157，那是被清理掉的断言）
 3. 打开线上站点，把每个页面点一遍（首页 / 归档 / 标签 / 搜索 / 收藏 / 关于 / 详情页 / 编辑器），
    再按 **Ctrl+`** 玩玩命令终端（先 `help`）、点开右上角的**装置面板**（氛围九层开关在那儿）
 4. **先别改代码** —— 先写一篇真文章，用下来哪里硌手，那才是真正值得改的地方
@@ -449,7 +517,7 @@ git add -A && git commit -m "chore: 刷新静态快照" && git push
 > 否则每 6 小时全量拉一次音频会把免费档 5GB/月的额度吃光。
 
 ⚠ 仓库是**公开**的（用户 2026-09-30 确认「全部公开」），所以仓库里的一切
-（含安全审计报告、本交接文档）都对外可见。往里加东西前先想一下这一点。
+（含本交接文档）都对外可见。往里加东西前先想一下这一点。（历史审计报告已于 v5.6.3 清理。）
 
 > ⚠ **一处已知的过时注释（待办）**：`.github/workflows/sync-snapshot.yml` 头部的说明
 > 写的还是迁移前的架构（"Pages 读的是仓库里的 data/ 快照"、"Pages 网页读不到云端"）。
@@ -466,7 +534,9 @@ git add -A && git commit -m "chore: 刷新静态快照" && git push
 > 故有「旧默认值 184 + 无 `neon_hue_pick` 标记 ⇒ 视为从未选过」这套迁移，
 > 且判据在 **theme-boot.js / app.js / views.js 三处必须同口径**（详见 50 号用例的头部注释）。
 > 别只改 `--hue` 那一个数字就以为完事。收尾 v4.4.1 把数字雨从 Canvas 擦除法换成 **DOM 列法**
-> （拖尾长度/强度/密度全面收紧，滚动损耗压到零）。改版的完整设计文档在 `docs/archive/4.0-改版方案.md`。
+> （拖尾长度/强度/密度全面收紧，滚动损耗压到零）。⚠ v5.6.3：改版的完整设计文档
+（原 `docs/archive/4.0-改版方案.md`）已随历史归档清理删除 —— 设计取向的结论都
+留在本节的注记与各源码注释里，完整原文在 git 历史中可查。
 
 | 项 | 状态 |
 |---|---|

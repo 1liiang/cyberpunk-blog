@@ -15,17 +15,127 @@
 
   var VERSION = {
     /* 当前构建版本号 —— 每次改动必须递增 */
-    BUILD: '5.6.0',
+    BUILD: '5.7.1',
 
     /* 构建唯一标识：每次改动换个新值。
        用途：确认浏览器实际加载的是哪一份文件。 */
-    BUILD_ID: '20261001T2341+0800-buildw4od',
+    BUILD_ID: '20261002T0144+0800-buildlfry',
 
     /* 构建日期（随版本一起更新） */
-    BUILT_AT: '2026-10-01',
+    BUILT_AT: '2026-10-02',
 
     /* 工程日志：最新的一条放最前面 */
+    /* 工程日志：最新的一条放最前面。
+       ⚠ v5.6.3：1.0.0 ~ 5.5.1 的 88 条逐版流水账已裁掉，改成末尾的「历史事故索引」——
+         完整历史在 git 里逐版可查，这里只留**可能重演的教训**。 */
     LOG: [
+      {
+        version: '5.7.1',
+        date: '2026-10-02',
+        title: 'P2 低端设备档：按设备降一档',
+        items: [
+          "P2 低端设备档 —— 取证：全站 64 条规则用了 box-shadow / filter:blur / backdrop-filter，其中 35 条**常驻**（每帧都在付）。高端显卡无感，集显与老机器上就是拖帧主因。策略不是删效果（那是美术代价，不是 bug），而是按设备降一档",
+          "P2 判定与时机 —— js/theme-boot.js 的 isLowEnd()：reduce 偏好 / deviceMemory ≤ 4GB / hardwareConcurrency ≤ 4 核，任一命中即 low；data-tier 写在**首绘之前**（事后才发现就只能先卡一下再救）。低端机在自动模式下开局就砍掉最重的三层氛围（rain / stardust / signs）",
+          "P2 路由校正也要守 —— js/scene.js 的 trimForTier()：否则切一次页面就被 ATMO_ALL 打回全开。⚠ 手动层集（装置面板勾选）优先级高于档位：省性能不能凌驾于用户选择",
+          "P2 CSS 侧 —— 新增 html[data-tier=low] 一组规则：关掉 .topbar / .console-panel / .search-bar / .kbd-help / .modal 的毛玻璃（给实底替代），关掉 .post-card:hover 的 9 层双色内发光与 .toast / .md-body pre 的阴影，并把 rain / stardust 的 will-change 收回。只动性能档，不动颜色与布局；与 reduce 块互不冲突",
+          "新增 57 号用例 9 条（已登记 manifest）—— 两条关键纪律被钉死：① theme-boot 与 scene 裁的必须是同一批层、且等于 atmo 降档顺序的开头（三处口径漂移即报红）；② 用户手动选过的层集不降级。另有低配判 low（2GB/2 核 → 6 层）、高配不误伤（8GB/12 核 → 9 层）、reduce 也算低端、路由校正守档位",
+          "过程坑 —— isLowEnd() 里最初用了 try/catch，而 39 号 R175r 是按「文件里第一个 try 块」切块做断言的，我的函数把锚点抢走导致那条红了；更隐蔽的是我随后在**注释里写下了那两个词**，indexOf 照样命中。已改成不用异常保护块、注释也不写该字样（这类「锚点被抢」的坑与之前的注释误伤同源）"
+        ]
+      },
+            {
+        version: '5.7.0',
+        date: '2026-10-02',
+        title: 'P0 网络硬化：出网超时 + 首屏竞速兜底',
+        items: [
+          "问题（实测取证）—— supabase-js 只给 Realtime 与 Auth 路径加了时限；PostgREST 请求（文章列表/标签统计/电台条目）走的是 postgrest-js，全文没有任何 signal 或 timeout。更致命的是「挂住」不等于「失败」：withFallback 的兜底挂在 catch 上，一直 pending 就永远不切快照 —— jsdom 实测（把请求变成永不返回）6 秒过去仍是 0 张卡片、一直骨架态，且看不到尽头",
+          "修法一 · 出网边界统一超时 —— 在 createClient 的 global.fetch 上包一层 AbortController（REQ_TIMEOUT_MS = 8000）。一处覆盖 Auth + PostgREST + Storage，不再逐个调用点加（那是「钉调用点」，本项目十几条出网路径必漏，以后新增还会漏）。已核对 vendor 的 bundle：postgrest-js 构造吃 fetch 选项、supabase-js 把 global.fetch 透传下去。调用方自带的 signal 仍生效（AbortSignal.any，退化为事件转发）；没有 window.fetch 的老环境不注入、行为不变",
+          "修法二 · withFallback 加竞速上限（FALLBACK_RACE_MS = 10000）—— 光有 fetch 超时不够：实测首屏仍要干等 8 秒，根因是这道兜底只挂在失败上，而「慢」与「挂」都不算失败。现在超过竞速上限就先拿本地快照把页面画出来。竞速上限刻意大于请求超时，避免正常慢请求被快照抢先、同一次会话里内容会「变」",
+          "新增 55 号用例 11 条（已登记进 manifest）—— 含端到端判据 R303：把云端请求变成「挂到超时才失败」后，断言首屏必须有界出内容。实测 858ms 渲染出 4 张卡片（修前 12 秒仍无内容）。另含「时限内返回不被误伤」「调用方 signal 仍生效」「竞速上限必须大于请求超时」",
+          "反向验证（证明判据不松）—— 逐个摘掉机制各跑一遍：原样 11/11 全绿；不注入 global.fetch → 4 条红；去掉竞速 → R304 红且 R303 仍绿（说明两层机制相互独立）；定时器不 abort → 判据被挂死 12 秒未跑完，正是原始故障的形状",
+          "配套 —— 51 号 R250/R250d 两条结构断言同步（withFallback 多了一层竞速，意图不变、字面恢复原形状以免误报）；tests/common.js 新增 hangCloud 故障桩（像真 fetch 那样在时限到达时抛 AbortError）与 timeoutMs 注入，并修掉「桩读不到 jsdom window 时限」的坑",
+          "⚠ 本轮起有本地回滚点：_backup/20261002-012016-v5.6.6-pre-hardening（127 文件 / 9.7MB 源码快照）。改 js/ 必须 bump 且发布后 Ctrl+F5 —— ?v= 是唯一缓存击穿手段",
+          "P1 氛围降档收敛 —— 原实现 3s 采样 × 4 个坏样本 = 连续 12 秒不达标才降档，而 downgrade() 一次只摘一层 ⇒ 最坏 9×12 ≈ 108 秒才关到不卡，体感就是「先卡十几秒，机器才开始自救」。现在 1s 采样 × 2 个坏样本（触发窗口 2s）+ 一次连降 2 层 + 2s 冷却，最坏约 10 秒关完",
+          "P1 为什么单靠调采样不够 —— 那只能把「12 秒降一层」变成「2 秒降一层」，9 层仍要 18 秒；连降（CASCADE_LIMIT）才是把收敛时间压下来的那一步。冷却则防「一降帧率就回升、又判坏、再降」把氛围一层层抖光",
+          "新增 56 号用例 9 条（已登记进 manifest）—— 用桩把帧率按到 10fps 真跑探针，断言：有界时间内真的降档（实测首次 35ms）、一次连降 ≥2 层、从最耗的层开始摘、降档有可见提示、冷却期内只触发一轮、持续低帧率下仍保留静态纹理作底",
+          "反向验证 —— 把 CASCADE_LIMIT 改回 1（旧行为）后 56 号 R306b 当场报红，证明「连降」这条判据不是摆设",
+          "配套 —— 45 号 R211f 同步（阈值仍 45fps，判据从「连续 4 个坏样本」改为「触发窗口 ≤3s」；降档顺序契约不变）。⚠ 探针采样间隔可由 window.__NEON_ATMO_SAMPLE_MS 覆盖，仅供测试压缩时间，源码里的真实值仍被契约断言钉着",
+          "工程基建 —— 本目录此前没有版本控制。本轮装了 MinGit（便携版，解压即用、不写注册表，已加入用户 PATH）并做了首次提交 5bb9d0e；以后每步改动都能 diff/revert。另有独立于 git 的本机快照 _backup/20261002-012016-v5.6.6-pre-hardening"
+        ]
+      },
+      {
+        version: '5.6.6',
+        date: '2026-10-02',
+        title: '诊断横幅同步改准（不再把未加载当成缺失）',
+        items: [
+          'app.js 的 ?diag=1 诊断条原先也做 typeof marked/DOMPurify/hljs 三项检查并报成依赖缺失。同样的过期逻辑，三个库 v5.3.0 起改成渲染正文时按需注入，启动那刻必然不存在，于是诊断条永远显示缺失、把真正的诊断信息淹了',
+          '现在改为如实汇报三态：加载失败过（loadVendors 新增 vendorFailed 记账）/ 待按需加载（正常，打开文章时才注入）/ 已就绪；并去掉 WorkBuddyCloud 那项（旧平台 SDK，早已不加载也不再使用）'
+        ]
+      },
+      {
+        version: '5.6.5',
+        date: '2026-10-02',
+        title: '修掉启动时那条过期假警报（截图实锤）',
+        items: [
+          '问题 —— 页面顶部常驻一条红条「以下 CDN 组件加载失败：Markdown、DOMPurify、highlight.js。请检查网络后刷新。」它同时错在两点。文案上，三个库 v4.8.1 起已本地托管在 js/vendor/，站里早没有 CDN 依赖；时机上，v5.3.0 起它们改成渲染正文时按需注入，于是启动那一刻必然不存在 —— 这条检查 100% 会亮，而用户其实还没打开任何一篇文章',
+          '修法 —— 删掉 app.js 启动阶段的整段「CDN 依赖检查」。真实失败路径本来就有且更准：renderMarkdownInto() 在 loadVendors() 失败时就地渲染「Markdown 引擎加载失败，仅显示纯文本」加 pre 原文兜底（不白屏、不丢内容）。启动阶段不再对还没用到的库下结论',
+          '配套用例 —— 故障矩阵 noMarked 从「期待出现 CDN 组件加载失败」改成「不许出现该过期文案」（新增 mustNot 机制）；noAllCDN 更名 noAllLibs（站里已无 CDN 依赖，场景真实含义是三个本地库加 SDK 一起缺失）；05 号新增 R16e 守卫防回流。故障注入 26 → 27 条',
+          '过程坑（本项目第 3 次踩同一类）—— R16e 一开始扫的是未剥注释的源码，而我在注释里写了那句过期文案做说明，守卫自己判红。已改为扫 stripComments(SRC.app)，并在断言注释里写明这个坑',
+          '另外：本轮发现「bump 的 --item 里带某些中文标点（如全角冒号）会让参数解析错位」——已记进教训，写 bump 命令时用「」与破折号代替'
+        ]
+      },
+      {
+        version: '5.6.4',
+        date: '2026-10-02',
+        title: '精简化收尾：裁掉历史日志流水账与历史归档文档',
+        items: [
+          'js/version.js：1194 行 → 199 行（105KB → 13KB）。原先 1.0.0~5.5.1 共 88 条逐版工程日志占了 3/4 篇幅；现只保留最近 4 版（5.6.3/5.6.2/5.6.1/5.6.0）的完整记录，并把更早历史里**有复发风险的 20 条教训**汇总成末尾一条「历史事故索引」（按发布缓存/库结构/云存储/降级/首绘/a11y/测试基建/CSS/主题等主题归类）。完整流水账在 git 历史里逐版可查',
+          'app/docs/archive/ 整体删除（16 份 322KB）：3.0/4.0 改版方案、B5 终审报告、各期版本更新说明（v2.0.0/v2.0.2/v2.0.3/v2.9.5）、优化方案-v2.1规划、UI优化建议、体验优化方向-v2.7、改进设计表、安全审计报告、代码审计报告、版本更新排查指引、测试拆解与覆盖分析。判据：它们记录的是已退役的架构（CDN 时代、2.x 规划、base64 音频）与过期发布说明；27 处引用逐一改道后，有复发风险的教训进 version.js 索引、设计结论留在 HANDOVER 与源码注释',
+          '配套改判：49 号 R243b 从「读 docs/archive/4.0-改版方案.md 并断言写着 B1~B5」改成「守 HANDOVER 里的五批注记」——归档删了，但记录不能跟着丢；另改 4 个 case 文件头的过期指针、HANDOVER/README/vendor-README/MIGRATION/handover-notes 里共 10 处指向已删文档的引用',
+          '本轮精简化累计：项目 71.1MB → 20.6MB（不含 node_modules 则 ~4.7MB），文件数 1873 → 1551；门禁 1153 → 1125 条全绿；版本 v5.6.0 → v5.6.4'
+        ]
+      },
+      {
+        version: '5.6.3',
+        date: '2026-10-02',
+        title: '全项目精简化：删死内核与一次性物料，补结构性守卫',
+        items: [
+          '批次 A · js/radio.js 整个文件删除（17.7KB 的 <audio> 播放内核）。判据：index.html 根本没加载它（审计脚本 ⑤ 项直接报「未加载」），运行时代码里 window.NEONRadio 只剩 console.js 一处引用、而那处必然拿不到内核 —— 整个文件是死代码。连带：35 号 30 条内核断言（R129~R139c + R143f）退役、控制台 radio 命令撤下（命令从九条变八条）、tests/common.js 的 SRC.radio 与 opts.radio 按需装载移除',
+          '批次 B · CSS 孤儿清理：旧「全息面板」整段 72 行（.holo-panel/-head/-live/-grid/-cell/-foot、@keyframes holo-blink）——被 v5.4 的 .holo-hero/.holo-card 取代后零标记；print 块里三个 v3.6.0 就已从 DOM 移除的装饰层（.grid-bg/.scanlines/.bg-noise）；reduce 块里指向已删 .holo-panel/.holo-live 的选择器同步去掉',
+          '批次 C · 无引用物料与目录删除：_ppt_assets/（32.7MB 一次性 PPT 工作区）、根目录 NEON-DIARY 项目全景 PDF+PPTX（7MB）、_push/（249 个一次性部署排障脚本 4.5MB）、deps/ 与 config/（纯说明文档，站点与脚本都不读）、tests 里两个人工样张 HTML、db/seed/removed-posts-archive/（6.5MB 已删文章图备份）、db/seed/radio-*.json（base64 时代历史记录）。审计脚本先搬去 app/tools/audit-all.js 并改成相对路径',
+          '批次 D · 顺带修掉两处真实的 CSS 破损：v3.6.0 删氛围层时留下的孤儿右花括号、v5.6.2 删 @keyframes radio-pulse 时留下的半截 keyframe。浏览器静默忽略，而既有断言只查「某条规则在不在」，所以长期没人发现 —— 整份样式的括号配平因此一直差 1~2。现已配平',
+          '新增门禁守卫（49 号 R244/R244b）：CSS 括号配平 + 顶层无孤儿声明。「删规则时只删到第一个右花括号」是本项目唯一能让「删一半」不被任何断言发现的删法，这条守卫直接盯结构本身。已用本轮两处真实破损反向验证过它会报红',
+          '净效果：项目目录 71.1MB → 20.8MB（其中 19MB 是 node_modules；站点本体+文档约 1.5MB），文件数 1873 → 1567；门禁 1153 → 1125 条全绿',
+          '文档同步：根 README 重写（原先是 v4.7.0 那份迁移包说明，目录树/验收清单早已过期）、MANIFEST.md 顶部加历史档案说明并逐条标注已删项、db/README 与 docs/MIGRATION + SUPABASE-SETUP 标注已删 _push 引用、app/README 更新版本与断言数、HANDOVER 新增「全项目精简化」小节并同步头部版本/门禁/文件树'
+        ]
+      },
+      {
+        version: '5.6.2',
+        date: '2026-10-02',
+        title: '审计清单 ③④⑤ 与发现 D 收口：CSS 孤儿、导出器重建、日志定性',
+        items: [
+          "④ 旧电台样式整段删除（约 410 行）：.radio-dock* / .radio-panel* / .radio-track* / .radio-btn* / .radio-now* / .radio-seek / .radio-volume / .radio-bar / .radio-time / .radio-ctrls / .radio-vol* / .radio-list* / .radio-empty* / .radio-embed* / .radio-drop / .radio-hint / .radio-err / .radio-mark / .radio-glyph，外加 @keyframes radio-pulse / radio-marquee、body.has-radio .wrap 让位规则、打印块里的两个隐藏项、reduce 块里为它们写的三条归零；判据是「这些类名在 views.js / app.js / index.html 里零标记」，逐个核实后才删",
+          "④ 保留（别误删）：电台页那批 .radio-page-tip / .radio-board / .radio-card* / .radio-compose / .radio-field / .radio-select / .radio-src-head / .radio-form* / .radio-op*，以及常驻控制台那套 .radio-console / .rc-*（复古收音机材质走它自己的局部变量，刻意不跟主题翻）",
+          "④ 顺带修掉一处我自己造成的缺陷：删 reduce 块那两条时把上一条规则的注释收尾一起吃掉了（.topbar/.kbd-help 的 backdrop-filter 整条消失且块结构破损）。已按原样恢复，并核对整个 reduce 块括号配平、块内 .rc-tune-needle / .rc-vu i / backdrop-filter 三处都在",
+          "发现 D：修 app/tools/export-static.js —— 它的电台导出块还在 select data/mime/duration_sec/size_bytes/cover_url/has_data，这些列在 v5 已从库与服务端删除，一旦真去查询会 42703 整轮导不出快照（现在没爆只是因为快照 radio 恒为空）。整块重写为「只导 v5 条目元数据」，字段与 cloud.js 的 RADIO_FIELDS 逐字一致；同时删掉 FORCE_AUDIO / AUDIO_EXT_BY_MIME / localFileSize / data/radio 落地与清目录逻辑。实测 --dry-run 跑通：云端现有 2 条网易云条目字段齐全",
+          "发现 D 续：删掉仓库里那个空的 app/data/radio/ 目录（音频 2026-09-30 已移出仓库，目录只剩空壳；导出器也不再建它）。⚠ 快照 radio 数组保持原样未动 —— 云端那 2 条要等 workflow 下次跑才进快照，那是独立的一次变更",
+          "⑤ 5 处 console.log 逐条判断完毕：全部保留。它们在 version.js 的「自证」块里，是排查「页面是不是旧版 / 浏览器吃了缓存」的第一手证据（§5 记着一次 bump 忘改导致登录 Failed to fetch 的事故，当时正是靠它定性的），输出恒定 5 行且不含用户数据；已在源码里写明保留理由与「别新增」的纪律",
+          "配套用例：35 号 83→79（④ 删掉样式后，10 条守着已删样式的断言逐条退役或改判 —— R155/R155b/R156/R159b/R160c/R160e/R164b 退役，R159/R160/R160d/R161/R164/R165 改判到控制台与电台页上）、51 号 R253/R253b/R253c 改判（从「快照必须 0 首音频」改成「只许带 v5 八个字段」+「导出器字段与 cloud.js 逐字一致」）。门禁 1157→1153 全绿",
+          "工具：_push/tools/audit-all.js 改成注释感知 —— 剥掉块/行注释再扫（① ② ③ ④ ⑦ 项）。原先按原文扫，刚清干净的代码因为注释里留了「某某已删除」的痕迹而继续报残留，把真信号淹没在假阳性里（实测 20+ 条全是注释）。现在 ① ② 在 js/ 下只剩 version.js 的构建日志命中，属预期"
+        ]
+      },
+      {
+        version: '5.6.1',
+        date: '2026-10-02',
+        title: '全项目审计专项清理 ① ②（死代码退场）',
+        items: [
+          '① cloud.js：删掉 base64 时代的全部旧电台 API —— readAudio / probeDuration / trackData / create / addTrack / probeSourceUrl / neteaseEmbedUrl / isEmbedUrl / addByUrl / playUrl / normalizeSourceUrl，以及只为它们存在的 AUDIO_* 常量、音频 LRU 缓存（radioCache 三函数 + 两个上限）、RADIO_DATA_FIELDS / RADIO_VIEW_ONLY / RADIO_WRITE_FIELDS；Radio 现在只剩 list / parseNetease / buildEmbedUrl / add / removeTrack / reorder',
+          '② app.js + views.js：删掉旧「迷你条 dock + 弹出面板」整台机器 —— RadioUI 状态对象、paintDock / paintPanelProgress / paintPanel / openRadioPanel / closeRadioPanel / bindRadioDock / bindRadioPanel / handleRadioAction / formDraft / showAddForm / restoreFormDraft / formMsg / submitAddTrack / askRemoveTrack / moveTrack / loadRadioTracks / radioQueue / initRadio，以及 views.js 的 radioDockView / radioTrackRow / radioPanelView / audioLimitText / R_ICON；容器在 v5.2.0 就没了，函数体早已是空实现或不可达代码',
+          '③ 保留件与改判：canManageRadio 是唯一还有用的（新电台页与常驻控制台都靠它）；登录态变化时的重取从 loadRadioTracks 改成 rcLoad（重取条目 + 重绘控制台）；boot 里的 initRadio() 调用随之删除（电台启动早在 v5.1.0 由 bindRadioPageOnce + requestIdleCallback(rcLoad) 完成）；app.js 的 tune 分支是旧面板遗留的不可达分支，一并删除',
+          '④ 配套用例退役/改写（逐条做，不用批量正则 —— §6 记着「括号配平批量退役」的翻车教训）：35 号 106→83 条、54 号 39→26 条（整个 case 重写成 v5「网易云条目」，只保留界面/CSP 那几组真契约）、51 号 37→36 条；门禁 1194→1157 条，全绿。退役的每条都在源码里写明「退役了什么、为什么、谁继续守」',
+          '⑤ 新引入的「清理守卫」一律扫**剥过注释**的源码：cloud.js 的清理纪要里就写着被删的名字，用原文扫会自己把自己判红（R143 / R146b 实测踩到）；另两处误伤也记下了 —— 不能写「全文件不得出现 .select(...data...)」（图片那条活路正是 .select(id,content_type,data,...)），也不能写 !/signedUrl/（附件下载是另一条活路）',
+          '⑥ 已知遗留（不在本批范围）：body.has-radio 这个 class 已无代码挂载，对应的 CSS 规则与 .radio-dock* / .radio-panel* / .radio-track* / .radio-form* 一起留给审计清单 ④（只做 ① ②，不混批）；本轮只删代码，没动 CSS'
+        ]
+      },
       {
         version: '5.6.0',
         date: '2026-10-01',
@@ -36,1047 +146,60 @@
           '没问题的部分：db/schema.sql 与 app/db/schema.sql 完全一致；建站时刻字面量只剩 1 处；js/vendor 四个库都被引用；.holo-*/.uptime-* 类均有对应标记'
         ]
       },
-      {
-        version: '5.5.1',
-        date: '2026-10-01',
-        title: '雷达盘做大做细',
-        items: [
-          '尺寸 108→144px；加三层同心圆（repeating-radial-gradient）与十字准线（两条 1px 线性渐变）；主刻度由 30° 细分到 15°；内阴影与外发光加强'
-        ]
-      },
-      {
-        version: '5.5.0',
-        date: '2026-10-01',
-        title: '左半侧加花样：雷达扫掠 + 信号频谱',
-        items: [
-          '照抄开源技法（站长新规：开源即可照抄，只需告知）：雷达扫掠取 fwdtools 的纯 CSS radar sweep 片段与 CSDN「纯 CSS 雷达扫描动画」的 conic-gradient 扇形技法；霓虹切角与配色参考 sebyx07/cybercore-css（纯 CSS 赛博朋克框架）',
-          '雷达盘 = 一圈刻度（repeating-conic-gradient + mask 挖空圆心）+ 扫掠扇（conic-gradient + rotate）+ 三颗错峰回波点；频谱 = 12 根高低跳动的柱子（量子化 delay）',
-          '两者都是纯 CSS、零外部脚本；动效三处全部进 reduce 块归零（扫掠/回波/频谱）',
-          '左半侧另加一行仪表文字（扫描频段 / 链路状态 / 遥测）'
-        ]
-      },
-      {
-        version: '5.4.3',
-        date: '2026-10-01',
-        title: '修身份卡副行（属性名多了个引号）',
-        items: [
-          'holoHero 里手滑写成 data-holo-now-sub「」（属性名被污染），选择器因此永远匹配不到 —— 副行一直显示「还没有条目」，即使主标题已经是真实曲目',
-          '教训：属性名的引号错位不会报错，只会让选择器静默失效；这类一个字的错，靠线上 DOM 快照才看得出来'
-        ]
-      },
-      {
-        version: '5.4.2',
-        date: '2026-10-01',
-        title: '身份卡：实时当前条目 + 全息倾斜',
-        items: [
-          '修：卡片在电台列表到货**之前**就画好了，之后没人通知它重画，于是一直显示「电台待命」—— 现在 rcLoad 与 rcSetCurrent 都会调 holoNowPaint',
-          '加：身份卡全息倾斜（跟随鼠标 rotateX/rotateY + 虹彩反光）—— 技法思路来自 DevCard 3D',
-          '两条守卫按本项目铁律：触屏不启用（只在 hover:hover 语境）、prefers-reduced-motion 不启用（CSS 也把 transform 归零，双保险）；离开卡片自动复位'
-        ]
-      },
-      {
-        version: '5.4.1',
-        date: '2026-10-01',
-        title: '补上全息大字读数（5.4.0 发的是早先那一版）',
-        items: [
-          '线上实测发现：部署的 holoHero 是早先一版（只有隐藏兼容节点 + 身份卡，没有那块故障字大读数）—— 根因是我后续脚本写了「函数已存在就跳过」，旧版因此一直留着',
-          '改为强制替换函数体，并加上 data-holo-uptime 与 data-text（故障字要复制两层）',
-          '教训：修补既有函数时不要写「存在即跳过」——那会让修复静默失效；要么精确替换、要么先核对线上部署的内容'
-        ]
-      },
-      {
-        version: '5.4.0',
-        date: '2026-10-01',
-        title: '首页两栏：全息读数 + 身份卡',
-        items: [
-          '首页顶部改两栏：左·全息读数（故障字大字 + 天/时/分/秒 + 每秒跳动）／右·身份卡（署名漓光 + 身份标签 + 当前条目）',
-          '按站长选的 B：ABOUT 页那块 STATION UPTIME 迁到首页（该页只留隐藏兼容节点承接 data-born 与 uptime-* id，用户看不到重复）',
-          '按站长选的 A：建站时刻仍是 2026-09-28 00:18（不推翻上回指正）；app.js 里不写日期字面量，一律读 DOM 的 data-born',
-          '身份卡文案按「诚实版」：网易云是跨域 iframe，真实播放态读不到，因此只写「当前条目」，不写「正在播放」',
-          '技法来源（开源，已就地署名）：故障字 alddesign/cyberpunk-css · 霓虹切角与扫描线 @laddtnov/cyberpunk-ui + Uiverse(MIT) · 全息倾斜与虹彩 DevCard 3D 思路'
-        ]
-      },
-      {
-        version: '5.3.0',
-        date: '2026-10-01',
-        title: '启动加速（按需加载）+ 开场序列加料',
-        items: [
-          '按需加载三个库 / 电台列表延后 / preconnect / 开场 8 行'
-        ]
-      },
-      {
-        version: '5.1.2',
-        date: '2026-10-01',
-        title: '补上控制台体型复位（5.1.1 的补丁没生效）',
-        items: [
-          '5.1.1 的说明写了这条修复，但补丁实际没打上（我的判据被路由原有的 hashchange 监听骗了，误判为已存在）—— 这一版真正补上：路由变化时只改 data-mode，不动 iframe，所以歌照样不断'
-        ]
-      },
-      {
-        version: '5.1.1',
-        date: '2026-10-01',
-        title: '控制台体型随路由复位',
-        items: [
-          '离开电台页时控制台缩回小条（只改 data-mode，不动 iframe —— 所以歌照样不断）'
-        ]
-      },
-      {
-        version: '5.1.0',
-        date: '2026-10-01',
-        title: '电台重做（二）：独立页面 + 常驻复古控制台',
-        items: [
-          '新增 #/radio 独立页面：条目列表（单曲/歌单徽章）+ 站长增删排序 + 说明；播放器**不在页面里**',
-          '常驻复古控制台挂在 #app **之外**（index.html 的 #radio-stage）——这是参考那批复古播放器（kitsune / Junk Phonic 9000 / cliamp）总结出的关键：官方 iframe 一旦待在会被路由重绘的区域，切页面就会重载、歌就断了。放外面则不断歌。data-mode 由路由在 mini（小条）与 full（大控制台）之间切换',
-          '只在**目标地址变化时**重建 iframe（重建=重新加载=断歌）；同一个地址什么都不做',
-          'CSP 收回 media-src 的 https 放宽（重做后不再播任意外链音频），保留 frame-src music.163.com —— 安全面比 v4.9.5 更小',
-          '踩坑三条：① askConfirm 这个助手并不存在（凭印象写的会直接抛错），改用项目现成的 openModal ② 启动调用插在 var 赋值之前 → var 提升给 undefined → 启动 TypeError ③ 降级用例跑在没有 document 的环境里 → 电台相关函数一律加内部守卫'
-        ]
-      },
-      {
-        version: '5.0.0',
-        date: '2026-10-01',
-        title: '电台重做（一）：库只存网易云条目',
-        items: [
-          '站长拍板的三项：① 独立页面 #/radio + 常驻 mini 条 ② 删掉本地音频上传 ③ 支持歌单 + 单曲。本轮先落地数据层与条目表单（页面与常驻舞台在下一轮）',
-          '数据库：radio_tracks 改为「网易云条目」——kind(song/playlist) + netease_id + 规范化 outchain 地址；**删掉 data/storage_path/duration_sec/size_bytes/mime/cover_url** 六个旧列（data 单行可达 36MB 字符）。已有记录已回填 kind/netease_id',
-          '公共视图 public_radio 重建为八列；⚠ 重建视图有两条硬规矩：必须先 drop 才能删列（2BP01：视图依赖列时删不掉列），且重建后**必须补回 GRANT**（否则匿名访客读不到，电台直接空）',
-          '界面：条目表单改为「名称 + 备注 + 网易云链接或 id + 类型(自动/单曲/歌单)」，本地文件上传整条路移除；贴歌曲页/歌单页/outchain 页/裸 id 都认',
-          '播放：单曲 → type=2（66px），歌单 → type=0（430px 完整官方歌单播放器）；解析与地址组装都在数据层（parseNetease / buildEmbedUrl）',
-          '测试：把断言旧设计的 8 条改写为断言新设计（不是删断言）——读清单字段、写入口、表单字段、类型选择器、netease_id 跨层契约、界面提交入库形态'
-        ]
-      },
-      {
-        version: '4.9.11',
-        date: '2026-10-01',
-        title: '外链播放器：去掉懒加载 + 加新窗口兜底',
-        items: [
-          'ifr ame 上的 loading=lazy 会让官方播放器迟迟不加载（面板本来就是点开才渲染，惰性毫无收益）；去掉',
-          '加一条播放器加载不出来？在新窗口打开 ↗的兜底链接：个别网络/地区可能嵌不进来，而那个外链页本身就是同一首歌的官方页面'
-        ]
-      },
-      {
-        version: '4.9.10',
-        date: '2026-10-01',
-        title: '外链态改为按当前曲目推导（修面板不出现官方播放器）',
-        items: [
-          '实测病灶：数据层明明返回了 outchain 地址，但 playAt() 这条路径不经过 attachCurrent，靠副作用写入的 embedUrl 一直是空 —— 于是面板里永远不渲染官方播放器',
-          '改法：不在某条路径上补丁，而是**从当前曲目直接推导**（isEmbedRow(currentRow())）—— snapshot 每次重算 embedUrl，doPlay 也按行判定。这样无论从哪条路切过来（setList / playAt / next / 自动跳）都对',
-          '教训：状态能从既有数据推导时，别用某个函数跑过的副作用来维护它 —— 副作用会漏掉没走到那条路的入口'
-        ]
-      },
-      {
-        version: '4.9.9',
-        date: '2026-10-01',
-        title: '电台支持网易云官方外链播放器',
-        items: [
-          '站长给的 /#/outchain/2/<id>/m/use/html 这类链接，现在贴进「音频直链」框就行 —— 歌曲页 /#/song?id=…、/song/… 与裸歌曲 id 都认，统一规范化成官方 outchain 播放器地址再入库',
-          '播放器面板里直接摆**官方 iframe 播放器**（不用 auto=1：浏览器自动播放策略会拦，访客也可能被吓一跳；在它自己的界面上点播放）',
-          'CSP 第二次有意放宽：增加 frame-src https://music.163.com https://*.music.163.com。真浏览器 A/B 实测：加 frame-src → iframe 正常加载、CSP 违规 0 条；不加 → 违规指令正是 frame-src。脚本/样式/图片来源一律没动',
-          '内核改动：外链曲目**不碰 <audio>**（设了 src 只会得到一句无法播放），转入 embed 态由界面渲染；切回普通曲目时清掉该状态',
-          '试听校验对官方外链直接放行 —— 不特判的话 <audio> 当然加载不了它，会被误判成坏链接拒掉，功能直接不可用（测试 R299f 就是这个判据）',
-          '54 号用例扩到 39 条（四种链接形式解析 / isEmbedUrl / 外链跳过音频校验 / CSP frame-src / 内核不碰 audio 两处）'
-        ]
-      },
-      {
-        version: '4.9.8',
-        date: '2026-10-01',
-        title: '坏音源的错误文案：补上真正的主上报路径',
-        items: [
-          '实测（CDP 驱动线上站自动跳歌复现）：坏音源的**主**上报路径是 play() 拒绝时的 NotSupportedError —— 那一刻 audio.error 往往还没填上，而 error 事件又常被「装载中」守卫挡掉，于是英文兜底句漏到了界面（站长截图那句正是这么来的）',
-          '两处一起修：① catch 里显式认 NotSupportedError → 归到 code 4 那档中文 ② error 监听不再一律吞掉「装载中」的错误 —— 「装载中 + 带具体错误码」是真故障，不是换源噪声',
-          '保留了「无 src 的 error 一律忽略」这条：那才是真正的换源噪声'
-        ]
-      },
-      {
-        version: '4.9.6',
-        date: '2026-10-01',
-        title: '外链音源：入库前试听校验 + 错误说人话',
-        items: [
-          '真浏览器实测（Edge 154 + CDP 驱动线上站）：① 站长贴的 B 站**网页地址** → ERROR code 4「Format error」且 CSP 违规 0 条 —— 不是 CSP 拦的，是这条地址根本不是媒体文件（直连返回 text/html、2.85MB HTML）② 换一条 CC0 真音频直链 → METADATA、时长 2 秒 —— 外链播放在新 CSP 下确实可用',
-          '入库前试听校验（probeSourceUrl）：用 <audio> 亲口问这地址能不能当音频加载，不能播就当场拒绝并给人话原因，这类错从此进不了库。为什么不用 fetch 看 Content-Type：防盗链/同源策略会让它拿到与 <audio> 不同的结果，且 .m3u8 这类流常是 text/plain 却照样能播',
-          '播放器错误按 MediaError 码分档说人话：code 4 不再是一句笼统的「文件可能缺失或已损坏」，改为点名不是可直接播放的音频文件（可能是网页链接/需要登录/防盗链）',
-          '教训：CSP 拦截与地址不可播会给浏览器**同一句**文案（no supported sources），必须分开取证 —— 这次靠 CDP 里读 securitypolicyviolation（0 条）+ 直连看 Content-Type 才定案',
-          '54 号用例扩到 28 条（新增试听校验四条：能播/网页地址被识破/人话原因/无媒体能力时降级不崩）'
-        ]
-      },
-      {
-        version: '4.9.5',
-        date: '2026-10-01',
-        title: '电台支持外链音源（URL 源播放）',
-        items: [
-          '方案 A（站长拍板）：做能力、不做内容审核 —— 曲目音源二选一：data（base64 内链）或 source_url（https 直链外链）；playUrl 遇到外链直接返回地址、不碰 base64，没有外链时仍走原路（老曲目不受影响）',
-          '数据库：radio_tracks 新增 source_url（CHECK 只放行 https）+ public_radio 视图 has_data 扩为「data 或 source_url 任一存在」，迁移已在真项目跑过并做了行为验证（外链记录 has_data=true、匿名可读、http 被拒）',
-          '界面：站长面板的添加表单改为「音源」二选一（文件 / https 直链），提示里写明「外链只存地址、请自行确认所贴音频的来源与授权」',
-          'CSP 有意放宽：media-src 增加 https:（不加则浏览器直接拦掉外链音频）；只碰媒体面，script-src 仍是纯 self',
-          '测试：新增 54 号用例 24 条（含「外链不得回拉 base64」「老记录仍能播」「界面提交真按外链入库」「CSP 确实放行」）；顺带补上测试脚手架一直漏装的 radio.js（按需装载 opts.radio，默认关以免惊动既有断言）',
-          '踩坑：create or replace view 不允许改动既有列顺序（42P16），新增列必须追加到 SELECT 末尾'
-        ]
-      },
-      {
-        version: '4.9.4',
-        date: '2026-10-01',
-        title: '搜索页插画构图微调',
-        items: [
-          '文字从居中改为靠左：原图人物在画面中右，文字居中会正好压在脸上；改靠左后文字吃满左侧更暗的遮罩，人物留在右侧当视觉重心 —— 可读性与构图同时变好',
-          '遮罩改为两层：横向（左深右浅，给文字让路）+ 纵向（上下收边，避免亮部顶到边框）；提示文字限宽 30ch，避免长行压到人物'
-        ]
-      },
-      {
-        version: '4.9.3',
-        date: '2026-10-01',
-        title: '搜索页空态加背景插画',
-        items: [
-          '站长提供的插画铺在搜索页空态（#/search 首次打开即可见）：assets/search-bg.jpg 1067×600 / 62KB，由 1280×720 PNG 568KB 压出；窄屏另有 search-bg-narrow.jpg 720×460 / 37KB（原图 16:9 在手机上会被裁成一条，窄屏把焦点移回人物）',
-          '可读性三层处理：压一档 opacity + 上深下更深的渐变遮罩 + 文字用固定浅色（不跟主题变量走）—— 照片亮度不随主题变，跟着亮色主题翻成深字就会变成深字压深图；这块因此是「暗色孤岛」，与封面压字同一套思路',
-          '工程细节：插画走 CSS 伪元素而非 <img>（纯装饰、不进无障碍树、打印样式可单独关掉）；结果态不铺图（避免与列表抢注意力）；窄屏规则并入既有 768 断点块，不新开 @media（R202d 守上限）'
-        ]
-      },
-      {
-        version: '4.9.2',
-        date: '2026-10-01',
-        title: '登录与首屏的两处等待优化',
-        items: [
-          '电台列表请求去重：loadRadioTracks 原先无在途去重，首屏同一秒会发两个一模一样的 public_radio GET；改为在途共享同一个 promise（请求结束即清空，上传/删除后仍会真刷新）—— 首屏请求数 4 降到 3',
-          '收藏取回不再阻塞：v4.9.0 的 migrateLegacyMarks + refreshMarks 是 await 在 route() 之前的，等于让首屏与登录跳转多等一个 bookmarks 往返（实测 ~350ms，收藏多时更久）；改为先渲染、后回填（repaintMarks 本来就是为同 hash 不重绘写的）',
-          '实测口径（真浏览器环境 + 线上站 + 临时账号）：点获取验证码 2152ms（其中 POST /otp 真发信 1846ms，是 Supabase 同步发信 + 适配器为新邮箱多发一次探测写 305ms）；点登录到界面可用 914ms；到 Supabase 单次往返 1.2s —— 后两项是服务端与网络延迟，客户端修不了，已如实记录'
-        ]
-      },
-      {
-        version: '4.9.1',
-        date: '2026-10-01',
-        title: '锁定态的锁换成霓虹 SVG',
-        items: [
-          '收藏按钮与空态的 🔒 emoji 换成内联 SVG 霓虹锁：切角锁体（与全站 clip-corner 同一套几何）+ 品红发光锁梁 + 锁孔，颜色走 currentColor 与 --magenta，因此三套主题 × 九档色相自动跟随',
-          '借法自（不搬组件）：React Bits「Electric Border」的通电辉光层次、「Target Cursor」的四角闭合意象，以及 Uiverse 静态素材的纯 CSS 描边 + 扫描线技法；reactbits 与 aceternity 均为 React 组件（本站零依赖、CSP 仅 self），故只取风格不取代码',
-          '踩坑记录：最初用 sprite + <use> 引图元，结果渲染成**黑色实心块** —— <use> 克隆的内容在影子树里，类选择器进不去、描边规则全部失效、扫描线动画也无从触发；改为内联 SVG 后选择器与动画都正常（截图才发现，静态断言看不出来）',
-          '测试：53 号 R285b 判据从「文本里有 emoji」改为「有内联 SVG、锁体/锁梁 path 带类名」；门禁 1155 条仍全绿'
-        ]
-      },
-      {
-        version: '4.9.0',
-        date: '2026-10-01',
-        title: '收藏改成账号功能：只有登录才能收藏',
-        items: [
-          '规则：未登录只能浏览 —— 点收藏给出提示并引导到登录页，按钮显示锁定态（不是点了没反应，也不是 disabled 问不出原因）',
-          '数据：收藏从 localStorage 搬到数据库表 bookmarks，跟账号走（换设备登录后依然在）；v4.9.0 之前存在本机的收藏在首次登录时自动并入账号并删除旧键',
-          '库层：bookmarks 表（owner_id + post_id 主键、文章删除级联清收藏、索引按最近收藏排序）、RLS 只放行本人，并**显式 revoke 掉 anon**（Supabase 的 public 默认授权会让匿名也拿到表权限，只靠 RLS 挡不住这条承诺）',
-          '修掉一个老 bug：卡片上的收藏按钮走冒泡委托，会被卡片自身的跳转处理器抢先 —— 点一下收藏会顺带打开文章；改为捕获阶段（stopPropagation 才来得及）',
-          '测试：新增 53 号用例 19 条行为断言（访客点收藏零写请求、写失败回滚、旧收藏迁移、快照兜底、退出清缓存、点收藏不跳转）；门禁 1136 到 1155'
-        ]
-      },
-      {
-        version: '4.8.1',
-        date: '2026-10-01',
-        title: '第三方库全部本地托管（全站零外部脚本）',
-        items: [
-          '依赖：marked / DOMPurify / highlight.js 改本地托管（js/vendor/），字节与线上 CDN 版本逐字节一致（用 index.html 原有 SRI 反查通过）',
-          'CSP：script-src 收窄为 self —— 全站不再有外部脚本域；原先那三个库走 jsdelivr，本机网络下时通时不通（失败时 Markdown 不渲染、代码不高亮）',
-          '测试：供应链判据从「CDN 精确版本 + SRI + crossorigin」改为「本地引用 + 不再走 CDN + 档案哈希」，新增「全站零外部脚本」一条；门禁 1135 到 1136 全绿',
-          '仓库：新增 db/ 目录（schema.sql + 建库 SQL + 说明），让只看仓库的人也能重建后端'
-        ]
-      },
-      {
-        version: '4.8.0',
-        date: '2026-10-01',
-        title: 'Supabase 数据层迁移',
-        items: [
-          '数据层：SDK 边界换成 supabase-js（init + auth 适配器），业务逻辑与静态快照回退一行未动',
-          '后端：新建 Supabase 项目；schema.sql 建表 + 4 篇文章 / 1 张图入库（图片 sha256 与原件逐字节一致）',
-          '认证：发码 / 验码 / 改密三处签名差异在 makeAuthAdapter 抹平；邮件模板补 Token 占位才收得到验证码',
-          '电台：按站长决定退役 —— 3 首商业歌曲（27MB）移出仓库与快照，表结构与界面保留',
-          'CSP：connect-src 放行 supabase 域；supabase-js 2.117.2 改为本地托管',
-          '工具链：export-static.js / export-cloud-full.js 指向 PostgREST，并新增音频增量拉取（省免费额度）',
-          '测试：新增 52 号用例（auth 适配 28 条，已做反向验证）；门禁 1106 到 1135 全绿'
-        ]
-      },
-      {
-        version: '4.7.0',
-        date: '2026-09-30',
-        title: '4.7.0 GitHub Pages 主站化：电台纳入快照 + 每 6 小时自动同步内容',
-        items: [
-          '目标：让 GitHub Pages 从「只读镜像」变成可以当对外主站用的地址。核心技术前提是——CORS 是**浏览器**才有的限制，服务器端没有。GitHub Actions 跑在 GitHub 的服务器上，用 Node 直接请求云端，没有 Origin 头也就没有那道闸，所以它**能**读到云数据库；而 Pages 网页本身读不到（云端点按 Origin 白名单放行，*.github.io 一律 403 + CSP connect-src self）。',
-          '新增 .github/workflows/sync-snapshot.yml：每 6 小时自动跑一次 tools/export-static.js 并提交；也支持手动触发（发完文想立刻同步时用）。刻意**不监听 push** —— 这个 workflow 自己会产生推送，监听 push 会形成「提交→触发→再检查→无变更→结束」的空转环；另外无变更时必须静默退出，否则每 6 小时一个空提交会把历史刷成噪音。',
-          '电台纳入快照（3 首，27.1MB）。关键设计：音频**以文件形式落地** data/radio/<id>.mp3，**不塞进 JSON** —— 云端存的是十几 MB 的 base64 data URL，照搬进快照会让 posts.json 变成 30MB，浏览器解析都费劲。落成同源文件后快照本体仍只有 4KB，playUrl 直接返回文件路径（播放器不关心是 data URL 还是路径，只把它交给 audio）。',
-          'js/cloud.js 的 Radio 也走同源回退（list + playUrl），与 Posts/Images 同一套纪律：只包读路径，云端可用时行为逐字不变。曲目被删后旧音频会被清理 —— 这条比图片更要紧，音频单文件大，残留一首就是十几 MB。',
-          '测试 51 号扩到 35 条（+10）：快照含电台且音频真落地、快照本体轻量上限（音频不许进 JSON）、Radio 回退两条读路径的行为验证、workflow 三要素（定时/手动/写权限）、空提交保护、不监听 push、服务器端导出步骤。门禁 1094 → 1104/1104 全绿。',
-          '⚠ 反向验证 4/4 全中，且**连抓两次我自己的假绿**：① 只断言「产物里曲目都有 file」而没断言生产者会写 —— 把赋值注释掉，已有文件当然不变、断言照样绿；② 补了生产者断言后仍漏，因为正则没锚定行首，`// item.file = file;`（注释掉）照样匹配。最终以「锚定行首的赋值点 + 产物自洽」两层合围。这是本项目第三次栽在「钉产物不钉生产者」上，已写进用例注释。',
-          '⚠ 版权提示（用户已知悉并选择纳入）：夜航星/孤勇者/苦昼短均为商业歌曲，放进**公开仓库**比放在自己博客上更容易被认定为再分发。风险点不只是版权，还有 GitHub 账号本身可能因 DMCA 被处理。',
-          '⚠ 如实记录的限制：登录/发文/编辑/上传在 Pages 上**永远**不可用（无后端）。所以 WorkBuddy 站必须保留作为写作后台 —— Pages 只是对外门面。'
-        ]
-      },
-      {
-        version: '4.6.0',
-        date: '2026-09-30',
-        title: '4.6.0 静态快照回退：把站点搬到 GitHub Pages（同源内容，绕开 CSP + CORS 双闸）',
-        items: [
-          '动机：把站点部署到 GitHub Pages 时，云取数会被两道闸同时拦 —— ① CSP 的 connect-src self 让跨源请求浏览器直接不发；② 云端点按 Origin 白名单放行（只认自己的域名与 localhost，*.github.io 一律 403）。结果是「界面在、文章全没有」的空壳',
-          '解法：让内容也变成同源资源 —— 新增 tools/export-static.js，把已发布文章与被引用的图片导出到 data/（posts.json + images/），js/cloud.js 在云端不可达时自动改读它。这是绕开 CSP/CORS 的唯一办法（两条闸都只拦跨源，同源一律放行）',
-          '实现纪律：回退只包在**导出边界**，不改 Posts/Images 内部逻辑 —— 云端可用时行为逐字不变（既有 1069 条断言零改动通过），只有真抛错才落快照；且只包读路径（listPublished/get/tagStats/fetchMany），写路径不包：没有后端时假成功比明确失败更糟',
-          '两处关键取舍：① 快照也拿不到时抛**原始错误**而非快照错误（根因不能被后果盖掉 —— 首版没做这个区分，noSDK/noAllCDN 两条既有降级文案被静默改掉，被门禁当场抓住）；② snapshotMode 在回退**成功之后**才置位（一次网络抖动不该把整个会话永久钉死在静态模式）',
-          '导出脚本的三条自保：① 0 篇时拒绝写入（接口抖动返回空数组若无脑覆盖，会把好快照擦成空文件 —— 宁可报错让人重跑）；② 只导出被引用到的图片（未发布的草稿素材不该被一并公开，那既是体积问题也是内容泄露）；③ 从 js/cloud.js 读端点与公钥（不重复硬编码，gen-feed.js 那处重复已是前车之鉴）',
-          '快照字段裁剪：剥掉 owner_id（只在登录后的编辑鉴权里用），只带渲染所需字段 —— 快照是给没有后端的只读环境用的，带上它等于把一个云端用户 ID 连同文章一起公开',
-          '测试：新增 51 号（25 条）覆盖四层 —— 产出自洽（格式/非空/图片索引与文件一致/引用已解析/owner_id 已裁）、实现纪律（只包读路径/错误优先级/置位时机/dims 同步）、导出脚本自保（单一配置来源/空数据保护/引用收集/旧图清理）、行为（云端不可用→回退返回同形状数据 + 图片走相对路径 + 并发去重 + 云端可用时不碰快照）',
-          '反向验证 5/5 全中。其中变异 3 当场揭出一处**假绿**：只断言产物「没有 owner_id」而没断言生产者会剥 —— 改掉脚本里的裁剪，已有文件当然不变、断言照样绿；补丁后又发现只钉了函数定义没钉**调用点**（把 posts.map(slimPost) 改回 posts 仍绿），与项目此前多次踩的是同一个坑，最终以「函数真跑 + 调用点在位」两条合围',
-          '门禁 1069 → 1094/1094 全绿。配套：.nojekyll（跳过 Jekyll 处理）、.gitignore、README',
-          '⚠ 写路径的固有限制如实记录：静态环境无后端，登录/发文/上传/电台必然失败，应用显示既有错误提示；此处刻意不假装成功'
-        ]
-      },
-      {
-        version: '4.5.0',
-        date: '2026-09-30',
-        title: '4.5.0 出厂色相 184（青）→ 285（紫）：一行默认值 + 一套存量迁移',
-        items: [
-          '站长在配色面板里挑中「紫」（285）并拍板定为全站出厂色相 —— 视觉身份从青转向紫；184 仍是九档快捷第一格，能力只换默认、不减项',
-          '真正的工作量在存量迁移：老用户浏览器里存着 neon_hue=184，那是旧默认值，与「用户真的动手挑了青」在存储里长得一模一样 —— 只改 HUE_DEFAULT 的话所有人（含站长的浏览器）打开还是青，等于没改',
-          '迁移判据：值 === 旧默认 184 且无 neon_hue_pick 标记 ⇒ 视为「从未选过」→ 落回新默认 285。用「显式挑选标记」（由 setHue 唯一写入，含色卡点击 / 滑杆松手 / 终端 hue 命令）而非一次性迁移标记 —— 后者解决不了「之后真去点青的人」，他的 184 会在下次开站又被判成没选过、静默弹回紫',
-          '判据必须三处同口径：theme-boot.js（首绘前，不写 --hue 让 CSS :root 默认生效）、app.js（运行时补正 getHue）、views.js（侧栏 BLOCK 03 色相读数）。任一处不同口径 ⇒「首绘紫、补正后跳青」的闪色，或「侧栏写 184° 而实物是紫」的读数与实物不符',
-          '滑杆初值由 HUE_DEFAULT 参数化生成（原写死 184）—— 避免日后改默认值时漏改这一处；面板滑杆 input 只预览（applyHue 不写存储，防拖钝手感）、change 才落存储（setHue，同时置挑选标记）',
-          '测试：新增 50 号（17 条）覆盖四层 —— CSS 默认值 / 三处同口径静态守卫 / 首绘前真跑 theme-boot（存量184、明选330、明选青184+标记、首访、存储被禁用 五态）/ setHue 写标记与 getHue 消费标记；反向验证 4/4 全中（theme-boot 去判据、setHue 不写标记、views 去判据、CSS 改回 184，每个变异恰好 1 项报红，还原即全绿）',
-          '真实浏览器验收：存量 184 无标记 → computed 285；明选 330 → 330 不误伤（色卡与滑杆同步选中 330）；184 有标记 → 184 留住；DB 门禁 1052 → 1069/1069 全绿',
-          '测试迁移：36 号 R172b（默认选中 184 → 285）、39 号 R175（--hue 默认值）、20 号色标求色的 --hue 兜底值 一并随默认值更新'
-        ]
-      },
-      {
-        version: '4.4.1',
-        date: '2026-09-30',
-        title: '4.4.1 数字雨换实现风格：Canvas 擦除法 → DOM 列法（拖尾长度/强度/密度全面收紧）',
-        items: [
-          '实现风格换血：数字雨从 Canvas + destination-out 半透明擦除（逐帧重绘、拖影「擦不干净」、长度随帧率漂移且残留累积）改为 DOM 列法 —— 每列一个 translateY 合成器动画，拖尾字符由 JS 精确生成 4~7 个（TAIL_MIN/MAX），离屏即随元素消失，物理上不可能残留',
-          '拖尾参数三降：长度 4~7 字符（旧法实测常见 10+，不可控）；列距 COL_W 26→34→46→58（三轮去密，视口约 22 列）；亮度梯度改为头亮尾暗（头 78%/0.85 单点小光晕 blur 5px、次 66%/0.52、三尾 0.55/0.35，整体压柔到 0.32）',
-          '性能实测定拐点（滚动帧率，基线去雨 162.6）：COL_W=46/28列→148.5（−8.7% 不可接受）、56/23列→160.8（−1.1%）、64/20列→164.1（+0.9% 零损耗）、80/16列→164.6；拐点在 56~64，取 58；三轮 A/B 复测 22 列稳态损耗≈0%（首轮冷启动噪声除外）',
-          '负结果入档：曾尝试「父层统一 will-change:transform + contain:strict」替代逐列提升，实测反而恶化到 −9.8%（父层 contain 后列动画无法共享合成上下文），已回退并在 CSS 注明 —— 逐列 will-change 是最优，COL_W 才是唯一有效主旋钮',
-          '字符流变降本：旧法每帧给全列重绘新字符，新法 setInterval 180ms 每 tick 只换 5 列头字符（35% 概率连换前一个）；页面隐藏时 setRainPaused 给层挂 .is-paused（CSS animation-play-state: paused），后台 tab 合成器零消耗',
-          '测试迁移：45 号 R211g 防御点改钉 if (!layer) return、R212f 改用 pollution 实例（并揭示旧「无 canvas 静默跳过」断言的历史假绿）；49 号 R242 升级为「全站零 Canvas」、R242c 加 rain-fall；门禁 1052/1052 全绿'
-        ]
-      },
-      {
-        version: '4.4.0',
-        date: '2026-09-30',
-        title: '4.4 B5「终审」：性能模型 + a11y 修复 + 11 场景矩阵 + 文档更新（4.0 大改版收官）',
-        items: [
-          '性能审计：九层氛围的分层成本模型（静态纹理≈0 / 光层低 / 星尘脉冲中 / 数字雨最高）+ 保底机制三件（45fps 探针、九级降档序、用户锁定）；⚠ 三档帧率实测因浏览器自动化通道故障未采到（os error 10060），待补（探针思路已成型）',
-          '无障碍复审：68 个交互元素全部有可访问名（修复后）；地标 / h1 唯一 / tabindex / 装饰 aria-hidden / 浮层语义全过；修复 17 处表单输入无程序化标签（登录 11 + 编辑器 3，用 aria-label 避开 tabs 重复 id 的坑）；遗留：tabs 表单重复 id（独立批次）',
-          '一致性终审：11 场景矩阵全过（8 直连 + 3 个设计内重定向/兜底：admin/edit→gate、未知路由→tower）；发现 lost 场景为休眠配置（如实记录）',
-          '文档：HANDOVER 更新到 4.4.0（13 文件树 / 门禁数 /「4.0 时代的新坑」九条 / 剩余项与已还债标注）+ 新增 B5-终审报告.md',
-          '测试：新增 49 号（13 条终审守卫：a11y/一致性/性能纪律/文档）—— 三份审计固化为**常驻守卫**；反向验证 5/5（修复一例「全文出现即可骗过版本检查」的假绿，R243 改钉头部格式）；门禁 1039 → 1052 全绿',
-          '4.0 大改版五批全部上线：B1 地基(4.0.0) → B2 门廊(4.1.0/4.1.1) → B3 阅读舱(4.2.0/4.2.1) → B4 控制台(4.3.0) → B5 终审(4.4.0)'
-        ]
-      },
-      {
-        version: '4.3.0',
-        date: '2026-09-30',
-        title: '4.3 B4「控制台」：命令终端 + 点击反馈 + 装置面板（三个新装置上线）',
-        items: [
-          '命令终端（装置③，Ctrl+`` 唤起）：九条命令（help/goto/search/hue/theme/atmo/radio/whoami/clear）+ 彩蛋（42/sudo/hello/coffee/rm）+ ↑↓ 历史（sessionStorage）；接线全部走既有系统 —— 路由改 hash、hue/theme/atmo 走 app.js 新导出的 window.NEONControls、radio 走 NEONRadio；无障碍三件：role=dialog / 输出区 role=log aria-live / 焦点归还 + Tab 面板内循环',
-          '点击反馈（装置④）：pointerdown 处扩散霓虹光环，三档强度（off/normal/heavy，出厂 normal）；仅 hover 类设备 + reduce 双闸直通；元素动画结束自清理',
-          '装置面板（罗盘三区化）：罗盘从两块扩为四组 —— 明度 / 色相 / 氛围（三档模式 + 九层手动开关 + 恢复场景自动）/ 装置（点击反馈三档 + 性能锁定 + 重播开机序列）；面板加高限滚',
-          '手动优先链（本批核心数据流）：neon_atmo_manual（九层开关的显式选择）> neon_atmo_mode（三档模式）> 场景温差；scene.js 新增 effectiveLayers/reapply（不换路由重算）；theme-boot 首绘前同样尊重手动列表；切模式自动清手动、恢复自动清键回落场景',
-          '快捷键扩编：Ctrl+`（ev.code=Backquote，在"放行 Ctrl 组合"之前特判）+ Esc 优先收终端 + 帮助面板新增条目',
-          '测试：新增 48 号（23 条：终端/反馈/面板/手动链/无障碍）；三处既有断言随面板三区化迁移（R49g 两组→四组、R170s 固定 2→动态每组恰一、R175r 修截取缺陷+return 判据收紧到行首）；反向验证 5/5（又一次实锤"钉定义不钉调用"——R231 的 reduce 双闸改钉调用形态）；门禁 1016 → 1039 全绿'
-        ]
-      },
-      {
-        version: '4.2.1',
-        date: '2026-09-30',
-        title: '4.2.1 B3 补正：迷你地图游标初始化（发布后线上验收发现）',
-        items: [
-          '问题：IntersectionObserver 只对"交叉变化"发事件 —— 直接打开文章页时若无标题元素进出视野，setTocActive 一次都不会被调用，游标滞留 CSS 默认位（top:0，与第一章位置有偏差）。降级路径的 onScroll 本就有初调，增强路径漏了对称的一步',
-          '修复：observer 建立后立即 setTocActive(items[0].id) —— 初始游标/高亮落在第一章；47 号 R221b 同步加"初始调用"断言（防回归）',
-          '发布后线上验收回执（4.2.0 已过）：阅读舱（行号机制激活 / 衬线 lead / byline hairline）/ 迷你地图（post/1：3 条 --seg 长度条 18%/18%/43%）/ 归档年份牌（描边 1px）/ About FILE 01~04 / 首页六街块 + 9 层氛围无回归'
-        ]
-      },
-      {
-        version: '4.2.0',
-        date: '2026-09-30',
-        title: '4.2 B3「阅读舱」：终端阅读框 + 迷你地图 + 时间线档案（借 Wired 与 Linear 的语法转译）',
-        items: [
-          '终端阅读框：正文外包「解码框」—— 工具条（▤ SIGNAL DECODED + 段数/字数读数 + 行号开关）+ 行号 gutter；读数在服务端渲染阶段从 renderedMd 本地算出（零 DOM 依赖、零网络）',
-          '行号（可开关）：CSS counter 给正文六类块（p/h2/h3/ul/ol/pre）编号，::before 进左侧 38px gutter；body:not(.linenum-off) 前缀一键关闭（localStorage 记忆 + aria-pressed 同步）；blockquote 不参与计数（它的 ::before 留给 O17 的装饰引号——两种伪元素语言互不干扰，R224 钉边界）',
-          'TOC 2.0 迷你地图：章节长度条（--seg = 该章节高度占全文比，夹取 6~100%）+ 游标骑在左轨上随活跃章节滑动——结构 + 位置一图看清',
-          '编辑级叙事（Wired 句法转译）：byline 上下 hairline 的呼吸感 / lead 首段改衬线提亮（中文=宋体系衬线）/ h2 章节上方发光 hairline',
-          '时间线档案（Linear changelog 句法转译）：归档页加年份牌（描边空心大字 + 光晕；跨年处插入、aria-hidden 防读屏重复播报）+ 贯穿发光轴 + 月份节点圆环',
-          '证件档案化：About 四张卡加 FILE 01~04 编号（装饰）+ 翻阅点亮（view timeline，reduce 停用）',
-          '测试：新增 47 号（18 条）；R220e 钉「调用点」而非只查函数定义（反向验证发现：删调用时行为断言能抓、源码断言会漏——已双查）；防御修复 postView 读数对 renderedMd 缺省兜底（29 号以不完整 state 调用时曾被击穿）；门禁 998 → 1016 全绿；反向验证 5/5'
-        ]
-      },
-      {
-        version: '4.1.1',
-        date: '2026-09-30',
-        title: '4.1.1 B2 补正：街区可见度加强（首版实机观感过于含蓄）',
-        items: [
-          '用户反馈「街区没看到」→ 诊断实测：街区元素在线上全部存在（DOM/计算样式正常），但首版视觉量级过小 —— 发光竖杆仅 2px、节点环 9px、母线 2px/32% 透明度、雨棚条纹 3px、编号是 10px 小贴片 —— 正常观看距离下几乎不可见',
-          '加强（光污染方向）：母线 2px/32% → 3px/60% + 光点放大到 13×64 带光晕；招牌从「细线 + 小字」升级为发光横匾（4px 光杆 + 右向渐隐光底 + 内发光）；编号 10 → 12px 灯箱化（描边/光晕加重）；名称 12 → 14px 加发光；节点环 9 → 13px；雨棚 3px/60% → 5px/85%；「沿街点亮」初始暗度 0.15 → 0.35（未点亮时仍可辨识块体存在）',
-          '教训（本批最值钱的一条）：DOM 探针与断言只能证明「元素存在且参数正确」——证明不了「人眼看得见」；可见度必须用真实渲染验收。此后街区块的视觉量级以「实机可辨」为准',
-          '门禁 998/998 不变（纯样式值调整，全部按 var(--hue) 派生与 WCAG 护栏约束）；BUILD 4.1.1'
-        ]
-      },
-      {
-        version: '4.1.0',
-        date: '2026-09-30',
-        title: '4.1 B2「门廊」：霓虹字标 + 开场序列 + 街区化',
-        items: [
-          '霓虹字标（Hero 主视觉）：Sarasa 字形转曲生成「NEON://DIARY」的 12 条 SVG 轮廓（js/wordmark-paths.js 为生成物）；双 g 层（主描边 + 品红残影）；描边动画全 CSS —— pathLength=100 归一化免 JS 测长，0.6s/字 + 0.24s 错峰（借 taozhiyy 技法）；单字母强调（R）升级为「故障的那一个字母」（品红描边）；数据缺失时 h1 回退纯文字',
-          '开场序列 Boot（首访约 1.7s 终端自检）：theme-boot 首绘前打 .boot-first（仅「未看过 + 落首页」两条件）→ boot.js 逐行点亮 + 进度条 → 淡出移除；点击/任意键跳过；reduce 直通；CSS 的 boot-failsafe 兜底自退场（没 JS 也不会卡在开机屏）',
-          '街区化（bento → district）：六个街块 = 建筑立面 —— 灯牌招牌（挂架节点 + 左缘发光竖杆 + 灯箱编号 BLOCK 01~06）+ 雨棚条纹 + 街道母线（内容左缘发光数据线 + 流动光点，768 以下隐藏）；入场从「错峰淡入」升级为「沿街点亮」（animation-timeline: view()，降级 = 原错峰阶梯）；12 列骨架不变（紧凑性是首页的优点，不砸）',
-          '测试：40 号就地迁移（bento→district 全量重命名 28 条）+ 新增 46 号（16 条：字标/Boot/街区设施/迁移完整性）；反向验证 5/5 —— 其中抓到一例「注释字面命中判据」假绿（实现注释里写着 wordmark-echo 的标签字面，删代码后注释仍命中；判据已全部改跑 stripComments 之后）；门禁 982 → 998',
-          'CSS 4726 → 4915 行；新增 js/boot.js（85 行）与 js/wordmark-paths.js（字体转曲生成物）；views.js +51 行（字标组装 + 街区招牌）'
-        ]
-      },
-      {
-        version: '4.0.0',
-        date: '2026-09-30',
-        title: '4.0 B1「地基重铸」：场景框架 + 氛围系统 + 排版 2.0',
-        items: [
-          '场景框架（js/scene.js 全新）：每个路由 = 一个场景（13 个视图 → 11 场景 + 2 电台装置），写 body[data-scene] 与 html[data-atmo]；场景温差（塔台最满 / 阅读舱与装配间专注档）；apply 在 route 分发处调用，惰性取用 + 异常降级',
-          '氛围系统（9 层注册 · 出厂光污染全开）：材质 3（噪点/扫描线/网格）+ 光 6（光晕/光溢出/霓虹招牌/星尘/脉冲扫掠/数字雨）。开关 = html[data-atmo] 层列表，三处同一契约：theme-boot 首绘前写入 → scene.js 路由校正 → atmo.js 帧率降档；silent/standard/pollution 三模式（neon_atmo_mode 存储键控制）',
-          '氛围运行时（js/atmo.js 全新）：数字雨 Canvas（进入含 rain 场景启动、离开即停、页面隐藏暂停）+ 帧率保底（<45fps 连续 4 样本自动降档，从雨到噪点依序关，toast 告知）+ 用户锁定开关 neon_atmo_lock',
-          '光污染边界（方案红线落地）：材质层低强度（噪点 ≤5% / 扫描线 ≤16% —— 颗粒纹理加深只会变花屏）；闪烁守 WCAG 2.3.1（≤3Hz）；reduce 下动画层不渲染、静态层保留；正文层级护栏不动',
-          '排版 2.0：Sarasa Mono SC 子集自托管（7619 字符 / 957KB woff2，--mono 栈插在 Courier New 之后 —— 中文从新宋体修复为等宽更纱，英文观感不变）+ 字号刻度体系（24 种 → 18 种，半像素仅剩 14.5/16.5 两种有据可查）+ 滚动条美化（标准属性 + WebKit 双通道）',
-          '测试：新增 45 号 case（19 条，场景/氛围/排版三层守卫）；基座纳入 scene/atmo（与线上加载序一致）；20 号两处「文件头到第一个 }」启发式改为显式 rootBlock 提取（@font-face 加入文件顶部时被切坏）；39 号 R175o 迁移为 @font-face 白名单化（判据升级非放松）。反向验证 5/5；门禁 963 → 982 全绿'
-        ]
-      },
-      {
-        version: '3.7.0',
-        date: '2026-09-30',
-        title: '小工具可折叠（3.0 方案 §9.8 遗留项）',
-        items: [
-          '.widget 通用壳新增折叠能力：标题行包进原生 button（data-widget-toggle + aria-expanded + aria-controls 与正文 id 配对），正文与脚注收进 .widget-body；折叠态由 [data-collapsed=1] 驱动（整块隐藏 + 标题行底距归零 + caret 旋转指示）',
-          '折叠状态按 data-widget 名持久化（键 neon_widget_collapsed）；恢复在渲染后同帧完成，无先展开后折叠的闪烁；存储损坏/被禁/配额满一律静默降级（当次会话仍可折叠，仅不持久）',
-          '顺手清理内容：删除 2 条「测试」残留文章（posts 8/9）——数据与引用图片均有本地备份；标签「测试」随之消失（本站标签由 posts.tags 本地聚合，无独立 tags 表）；feed.xml 随本次发布重新生成',
-          '新增 44 号 case（15 条断言：结构/外观/行为三层 + 持久化恢复 + 存储异常降级）；反向验证 5/5 命中（含「绑定调用被注释掉」一例，判据已统一跑在 stripComments 之后）；门禁 948 → 963',
-          '踩坑：测试基座 bootDom 的 opts.storage 预置在 if (opts.themeBoot) 分支内——不传 themeBoot:true 时写入被静默跳过（本 case 初版持久化恢复路径曾假绿）；已在测试内留注记'
-        ]
-      },
-      {
-        version: '3.6.1',
-        date: '2026-09-30',
-        title: '氛围层移除的补正：清理漏掉的 6 处孤儿规则',
-        items: [
-          'v3.6.0 移除氛围层时，媒体查询内 / reduce 块 / print 块里还漏了 6 处指向已删层的规则（.wrap::before 的 background-size、print 块的 body::before+body::after、reduce 块的 .scanlines/.grid-bg/body::before × 2）—— 它们指向不存在的元素，是死代码。本次一并删净（复查已为空）',
-          '连带作废 6 条守卫已删层的断言：17 号 R78/R78b（从装饰层清单去掉 body::before 与 .wrap::before）、R72m/R72m2（body::before 的 blur 降级）；23 号 R66c（.scanlines 关闭）；34 号 R125c（打印隐藏装饰层）。23 号 R66p 的引擎样本改为块内仍在的 .type-cursor::after 与 .logo:hover .logo-mark（三条样本的形态不变）',
-          '教训（已记入项目笔记）：删一批元素时要搜「选择器 + {」而不是只搜选择器名 —— 只按名字搜会把注释里的提及当成已清理，而媒体查询内/分组选择器里带缩进的规则容易漏',
-          '门禁 948/948；CSS 4432 行'
-        ]
-      },
-      {
-        version: '3.6.0',
-        date: '2026-09-30',
-        title: '氛围层大改：网格 / 噪点 / 扫描线 / 极光全部移除',
-        items: [
-          '按用户要求移除全部氛围层：.grid-bg（地平线网格）、.bg-noise（胶片噪点）、.scanlines（扫描线 + 暗角）、body::before（全息极光带）、body::after（顶部光幕 + 双角辉光）、.wrap::before（星点符号），以及 body 自身的 3 处 radial 晕斑 —— 底色回归纯粹的 --bg-0',
-          '⚠ 这三处晕斑是 v2.6.x 专为修复「短页面黑漆漆」（用户当时的反馈）而加的，移除后深色档会重新显得空旷。如要氛围，建议改用 Hero 背景图（一层，图片是主角）',
-          '连带清理：删零引用变量 --grid-line / --deco-faint / --t-drift 与孤儿动画 aurora-drift；删 reduce 块内针对已删层的关闭规则；撤下解释这两层作法的失效注释；标注其余历史对照提及',
-          '测试连带处理：删 33 号 case（背景专项，31 条断言，守卫对象已全部不存在）、17 号 decoSels 去掉两层 + R80b 作废、43 号 P5.5 段作废（2 条）、39 号 R175d 清单去掉 --grid-line。断言数 988 → 954',
-          'CSS 净减约 130 行（4575 → 4441）；门禁 954/954'
-        ]
-      },
-      {
-        version: '3.5.2',
-        date: '2026-09-30',
-        title: '英文 UI 中文化（导航与页面标题）',
-        items: [
-          '顶栏导航改纯中文：首页 归档 搜索 标签 收藏 关于（登录后：控制台 标签管理 退出 / 登录 ▸）。中文比英文短，顺带减轻窄屏顶栏的溢出压力',
-          '页面大标题改中英混排（与站内既有的「精选信号 / FEEDATURED」风格一致）：标签矩阵 / TAG MATRIX、搜索 / SEARCH、归档 / ARCHIVE、关于 / ABOUT、控制台 / CONSOLE、收藏夹 / STASH、标签管理 / TAG CONTROL、新广播 / NEW SIGNAL、编辑广播 / EDIT SIGNAL；404 页 SIGNAL LOST → 信号丢失',
-          '首屏占位 BOOTING TERMINAL → 正在启动终端；浏览器标签页标题映射同步中文化',
-          '刻意保留英文：MODULE 01~06 / SECTOR 07~13 / TIER 01（装饰性编号，翻译既丢气质又没更好懂）、品牌词 NEON://DIARY、空态 code 行（LOADING... / NO SIGNAL 等本来就有中文提示跟随）',
-          '断言演进 2 处：40 号 R185a / R187h 用 TAG // 作为识别标签页的标志，随文案改为 标签 //'
-        ]
-      },
-      {
-        version: '3.5.1',
-        date: '2026-09-30',
-        title: '中文排版与灰字对比度（外部评审的两项「立刻」）',
-        items: [
-          '灰字 --text-dim 三档提到 AA 达标：深色 #5f7391(4.19)→#657a9a(4.65)、浅色 #64778f(4.08)→#5d6e84(4.63)、暖色 #7d6a55(4.52，只过线 0.02)→#7b6954(4.61)；只动明度，与 --text 的 13.76/10.26/9.53 仍保持充分层次',
-          '顺带移除 .foot-col-label 上叠加的 opacity: 0.75 —— 它会把刚提上去的对比度打回约 3.4:1，等于让「提对比度」只做了一半',
-          '正文排版走中文的「零缩进 + 大间距」路线：.md-body p 段间距 0.7em(11.55px)→1.1em(18.15px)，列表同步 1.1em、列表项 0.3em→0.45em。原值下换段只比换行多三分之一行高（行高 31.35px），段落几乎分不开',
-          '补上测试盲区：新增 R59f（--text-dim 三档 ≥4.5）、R59g（段间距 ≥1em）、R59h（灰字不得叠 opacity，禁用态豁免）—— 此前 20 号只测「频段墨色」（我自己设计的色标体系），从未测全站 74 处引用的灰字',
-          '反向验证 3/3（灰字回落 / 段间距回落 / opacity 叠加回流）；门禁 988/988',
-          '本次发布同时带上 v3.5.0 的三批修复（P1 手机顶栏 + P2 主题按钮 nowrap + 断点收敛 + P5.5 浅底扫描线 + P5.7 页脚 STASH）'
-        ]
-      },
-      {
-        version: '3.5.0',
-        date: '2026-09-30',
-        title: '响应式修复（外部审计 P1/P2/P5.5/P5.7）+ 断点收敛',
-        items: [
-          'P2：.theme-toggle 加 white-space: nowrap —— 此前它作为 flex item 被压缩（flex-shrink:1）且默认 normal，导致「☾ DARK」在空格处折成两个行盒（实测 8x14 + 32x14），按钮 65x38 而同级导航项都是 62px 单行；该问题桌面端同样存在',
-          'P1：新增 ≤480 小屏档 —— 此前**没有任何小屏断点**，≤420px 时导航项总宽约 775px，超出部分被 body{overflow-x:hidden} 静默裁掉（STASH/ABOUT/ACCESS/主题按钮全部点不到）。现改为导航换行两行 + --topbar-h 同步调高（顶栏是 sticky，变高不压正文，但 4 处 sticky 辅助栏读该变量）',
-          '断点收敛：720/860/1000/640 共 8 处并入体系值 768/1024；宽度断点从 9 种收到 5 种（480/768/1024/1600 + 有意保留的 1400）',
-          '1400 档有意保留并注明理由：它是右侧竖排名言的**版面空间阈值**（.wrap 1120 需两侧各留 ~140px），不是设备档 —— 强行并入 1280 会挤坏它',
-          'P5.7：页脚导航补 STASH（顶栏 6 项、页脚原先只有 5 项）',
-          'P5.5：浅色/暖色档把扫描线压到 0.22/0.26（原 0.55）—— mix-blend-mode: multiply 在深底含蓄、在浅底（#eef2f8）会显影成可见横条纹（实测每 3px 约 8/255 明暗差）',
-          'P5.1 结论修正：**当前管线是正确的**（drawAndEncode 用同一个 type 既 canvas.toDataURL 又声明 content_type，不可能不符）；审计看到的是早期版本留下的历史数据 ⇒ 不改代码，但新增 R205 把这个不变量钉住',
-          '测试：新增 43 号用例 14 条（全部是防回流型判据）；断言演进 3 处（17 号 R83b、31 号 nav720/m1000 跟随断点收敛）；反向验证 6/6；门禁 985/985'
-        ]
-      },
-      {
-        version: '3.4.2',
-        date: '2026-09-30',
-        title: '批 B：token 接入 + 空态收敛',
-        items: [
-          '兑现 B1 承诺：--grid-line 与 --head-glow 从「定义了却零引用」变为**真正接入** —— 网格线（.grid-bg）与顶栏亮线（.topbar）从此跟随色相变化；顺带修掉一个真实缺陷：亮色主题下网格线原本**没有**按注释所说的压暗到 5%（因为 .grid-bg 用的是硬编码 0.075），接入后自动生效',
-          '--w-read 接入 .md-body（值等价 760px）；--banner-h / --banner-h-home 改义为「窄屏/宽屏 Hero 高度上限」（560/720）并接入 Hero —— Hero 高度从此是可调旋钮，不再是散在两条规则里的魔数',
-          '删除 --w-page：它是 --w-read + 240 + 44 的派生量，做成 :root 旋钮会让人误以为调它能动详情页外壳宽度',
-          '空态收敛：loading / error 两种空态此前在 9 个视图里各写一遍（16 处超长单行），收敛为 loadingBlock / errorBlock 两个函数 —— 措辞集中到一处（原先三种说法散落各处），产出 HTML 逐字节不变',
-          '断言演进四条：R95/R98b（限宽走变量且变量值须为 760px）；R116（两条网格线**同源**走变量 + 值 0.075）；R175l（容器两档 + --w-page 不得回流）；R175d 收紧为「变量既走派生**又确实被引用**」（此前只查定义 —— 正是这个缺口让 --grid-line 零引用了整轮）',
-          '新增护栏 R194g：空态不得再内联拼接（防重构被顺手展开回去）',
-          '反向验证 5/5：网格线回退硬编码 / --w-read 值被改 / --w-page 回流 / 空态展开回去 / .topbar 丢掉 --head-glow，五条均能报红'
-        ]
-      },
-      {
-        version: '3.4.1',
-        date: '2026-09-29',
-        title: '批 A：代码审计清理（死代码 + 未用变量 + 两条护栏）',
-        items: [
-          '删除零引用样式：.btn-yellow（按钮变体从未使用）、.tag-badge-hot（views 生成的是 tag-item-hot，两者是不同类）、.loading-bar 整段与其 keyframes（无任何 JS 生成，且 reduce 块还为它留着关闭规则）、.radio-form-msg 的 is-ok/is-err 状态类（radio.js 零引用）',
-          '删除零引用变量 --deco-line；CSS 净减 37 行',
-          '新增护栏 R175u：引导脚本与运行时的 localStorage 键名必须一致（neon_theme/neon_hue 两处硬编码，漏改一处会静默导致「刷新闪回默认配色」）',
-          '新增护栏 R175v：批 A 清理过的 5 个死代码名不得回流（只钉已核实零引用的名字，不做宽泛禁止，避免误伤正常演进）',
-          '判据演进两条：R66d 由「跑马灯在 reduce 下停动」升级为「旧跑马灯已整体移除（防回流）」；R66p 的引擎样本由 .loading-bar 换成 body::before（块内唯一带 !important、技术代表性更强）',
-          '反向验证 4/4：回流 .btn-yellow / 回流 --deco-line / 回流 .loading-bar / 键名漏改，四条均能报红'
-        ]
-      },
-      {
-        version: '3.4.0',
-        date: '2026-09-29',
-        title: '色相自由滑杆（A3 拍板项）',
-        items: [
-          '色相从九档预设放开为**自由滑杆**（0~359 任意整数）：面板内新增原生 range + 度数读数，九档色卡保留为快捷档（点一下跳过去、滑杆同步）',
-          '拖动用 input 事件实时改 --hue（不写存储，避免逐帧同步写把手感拖钝），松手用 change 落存储 —— 拖动轻、落点重',
-          '滑杆刻意不放进 radiogroup（slider 与单选是两回事）；键盘方向键在滑杆上交给原生行为，不被组内换档劫持',
-          '校验从「九档白名单」升级为**范围校验**（hueValid + theme-boot 的 HUE_MIN/HUE_MAX 两处一致），防脏色相让 hsl 派生整体失效',
-          '新增**全色相对比度护栏**：每 15° 采样、亮档与暖档的频段墨色对比度必须 ≥ 4.5:1（96 个采样点）。它当场抓出真问题 —— 辅助紫按 +96° 偏移派生，主色相落在 330°~45° 时会漂进黄绿区，40% 明度下只有 2.97 ⇒ 亮档收到 28%、暖档收到 32%（最差 5.31 / 5.25）',
-          '修复两个 Python 文本模式写回导致的 **CRLF 行尾污染**（js/app.js、js/views.js 被静默转成 \\r\\n，使依赖 \'\\n\' 精确匹配的判据失配、R122h 因此变红）；新增 R175t 全局行尾健康检查',
-          '测试：36 号 40→48（滑杆 6 条）、39 号 19→20、20 号 45→46；反向验证 7/7；门禁 968/968'
+      /* ---------- v5.6.3：历史流水账已裁掉，改成「事故索引」 ----------
+         ⚠ 这里原先是 1.0.0 → 5.5.1 共 88 条逐版工程日志（约 900 行、占本文件 3/4）。
+         它们是"踩过的坑"的原始记录，但对**当前维护者**来说，真正需要的不是流水账，
+         而是"哪些事故可能重演、怎么避免"。故裁成下面这一条索引：
+           · 只留最近 4 版（上方的 5.6.3 / 5.6.2 / 5.6.1 / 5.6.0）的完整记录；
+           · 再往前的历史里，凡是**有复发风险**的教训全部汇总在这里，按主题归类；
+           · 完整历史在 git（仓库 `1liiang/cyberpunk-blog`）里逐版可查，本文件不再背负它。
+         维护约定：新改动照旧"最前面加一条"；只有当某条教训会成为长期判据时，
+         才值得往下面这张索引里补一行（别把索引又写回流水账）。 */
+      {
+        version: '≤5.5.1',
+        date: '历史',
+        title: '历史事故索引（1.0.0 ~ 5.5.1 的 88 条日志已裁，只留教训）',
+        items: [
+          '【发布与缓存】?v= 是唯一缓存击穿手段：改了 js/ 或 css/ **必须 bump**，否则用户拿旧文件。真实事故：改了 js/ 忘 bump → 浏览器复用旧 cloud.js（指向旧后端）→ 登录报 Failed to fetch。⚠ index.html 自己没有版本号可击穿 → 大改动后 Ctrl+F5。',
+          '【发布与缓存】bump 的 --title / --item 里一律用「」，不要用双引号 —— 嵌套双引号会让 shell 提前闭合引号、参数错乱、**bump 静默失败**（版本号没变）→ 发布 = ?v= 未变 = 缓存击不穿。bump 后必须校验 BUILD。',
+          '【发布与验证】发布后必须用 GET（禁用 curl -I）并带 --compressed；verified: true ≠ 已传播 —— 必须核对 ?v= 与 BUILD_ID。发布返回的 shareLink 是根路径遗留快照，正确地址永远带 /cyberpunk-blog/。',
+          '【快照确定性】exportedAt 每次运行都变 → workflow 每 6 小时产出一次"只有时间戳变化"的提交，污染历史。修法：writeSnapshotIfChanged 比对时忽略 exportedAt，无实质变化不碰文件（提交历史里的时间戳因此等于"最后一次真正变化"）。',
+          '【数据层/库结构】读/写字段清单**必须分开**：视图算出来的列（当年的 has_data）混进基表 INSERT…RETURNING 会报 42703「column … does not exist」，上传直接失败而列表读取一切正常 —— 症状极具误导性。',
+          '【数据层/库结构】create or replace view **不能改列序**：加列必须追加到 SELECT 末尾，否则 42P16。视图重建后**必须补回 GRANT**（grant select … to anon, authenticated），忘了就是"匿名访客读不到、页面全空"。',
+          '【数据层/云存储】云存储只服务登录用户（官方原文：Storage is for signed-in users，不暴露公开 URL/Bucket）⇒ 匿名访客调 createSignedUrl 直接 MISSING_CREDENTIALS。所以"所有人可见"的内容一律走数据库 + 公开视图，不要走 storage。',
+          '【数据层/音频】base64 存库时代：解码 data URL 前**必须先剥 `data:…;base64,` 前缀**，否则前缀里的合法 base64 字符会被一并解码，凭空多出 15 字节前导垃圾（全部 .mp3 的 ID3 魔数从偏移 0 漂到 15）。该管道已在 v5.0.0 整体退役（见 HANDOVER §6）。',
+          '【降级与快照】快照也拿不到时要抛**原始错误**，不能抛兜底的错误 —— 根因（如"SDK 未就绪"）被盖成后果（"快照坏了"）会让排查方向整体偏移。',
+          '【降级与白屏】所有渲染路径必须包在 safeRoute/fatalPanel 里：任何视图异常都不允许白屏（27 号用例守着）。视图函数出错的最可能位置是"首绘时数据还没到"。',
+          '【首绘前的事】主题 / 色相 / 氛围三件必须写在 theme-boot.js（同步脚本、早于 CSS 应用）；app.js 里的同名逻辑只是补正，跑的时候首绘早发生了 —— 顺序反了会"先裸后亮"闪一下。',
+          '【无障碍】焦点归还要在元素移除**之前**做（顺序反了目标就丢了）；range 上的方向键必须放行给原生行为（否则滑杆沦为只能鼠标拖）；动效一律在 reduce 块显式归零 —— 裸时长 animation 不受 transitions 收敛管辖（R66m 只扫 transition、R72k 只认 --t-*）。',
+          '【测试基建】异步断言必须 await：写在"没有 await 的 async IIFE"里的断言会**静默蒸发**（拆分实测 453 → 451）。故有断言数对账（manifest.json 基线）与 lintFloatingAsync 两道自审。',
+          '【测试基建】"钉产物不钉生产者"会假绿：只断言生成出来的 JSON/文件，改坏生成脚本照样全绿（本项目栽过三次：owner_id 裁剪、slimPost 调用点、导出器 file 字段）。凡是"产物 + 生产者"两层的，都要分别钉。',
+          '【测试基建】正则要锚定行首：/item.file = file;/ 无锚点会匹配到被注释掉的那行（反向验证实锤的假绿）。同理：源码注释里写了某标识符，会让"清理守卫"类断言自我判红 —— 守卫必须扫**剥过注释**的源码。',
+          '【CSS】清代码时"只删到第一个右花括号"会留下半截规则：浏览器静默忽略，而所有既有断言照样全绿（它们只查"某条规则在不在"）。实测两次（v3.6.0 孤儿 `}`、v5.6.2 半截 @keyframes）—— 现由 49 号 R244/R244b 直接盯括号配平与顶层孤儿声明。',
+          '【CSS】提取 @media 块必须按花括号配平，不能贪婪到文件末尾：@media print 不在末尾，贪婪会把后面整段样式吞进来 → 假绿。',
+          '【样式与主题】颜色一律走 --hue/--cyan/--magenta 等变量；硬编码霓虹色换主题就露馅。但"模拟实体机器"的组件（常驻电台控制台的木纹/金属）**刻意**用局部变量、不跟主题翻。',
+          '【文字排版】--mono 必须用带中文字形的等宽（现为 Sarasa Mono SC 子集自托管）；字号体系守 18 种（曾经 24 种含半像素）。',
+          '【随机数】任何会写进 URL / 快照 / 缓存键的值都不许带随机或时间（快照必须确定性那条同理）。',
+          '【构建产物】js/wordmark-paths.js 是字体转曲的**生成物**，勿手改；data/ 是快照产物，勿手改（由 tools/export-static.js 生成）。'
         ]
       },
-      {
-        version: '3.3.0',
-        date: '2026-09-29',
-        title: '3.0 B4 控制台仪表盘 + 归档热力图',
-        items: [
-          '控制台仪表盘化：左 220px 导航（TIER 01/02 分组 + aria-current 标记当前位置）+ 右侧统计块（已广播/草稿/本月/频段，全部本地聚合）与记录列表；1024 导航转横向',
-          '归档页改双栏：左侧时间线 + 右侧发文热力图小工具（固定 12 格含空月，断更月份一眼可见；0~4 级亮度全由 --cyan 派生，换色相时整块跟着变）',
-          '新增统一的 .widget 小工具壳（人味层圆角 + 等宽标题），后续小工具沿用；print 隐藏控制台导航',
-          '兼容：控制台记录行（.admin-item/.admin-title[data-edit]）与归档月份分组（.archive-group/.archive-month/.archive-item[data-tone]）的类名一个未动',
-          '测试：新增 42 号用例 18 条；反向验证 9/9 命中（其中 R196d 因「只查基类与 lv=4」漏掉中间级硬编码而当场收紧为「所有变体都不许硬编码」）'
-        ]
-      },
-      {
-        version: '3.2.0',
-        date: '2026-09-29',
-        title: '3.0 B3 阅读与列表：TOC 辅助栏 + 页脚三栏 + 编号体系 + 搜索吸附',
-        items: [
-          '详情页改为阅读栅格：正文列 + 右侧 240px TOC 辅助栏（sticky 四件套齐备：align-self/top/max-height/overflow）。TOC 的 DOM 在正文之后 —— Tab 顺序是「读完正文再到目录」，不靠 tabindex 硬掰',
-          '超宽屏（≥1600px）目录浮到视口右侧空白区（全站唯一允许 position:fixed 的元素）；≤1024 辅助栏收起回文档流；打印隐藏目录',
-          '页脚改为三栏（身份 / 导航矩阵 / 元信息）+ 名言独立成行走系统衬线；.foot-grid 不吞名言 —— 它仍是 .site-footer 的直接子元素（R70/R85c 依赖）',
-          '页面编号体系：归档/标签/搜索/收藏/关于/管理台/标签管理 依次为 SECTOR 07~13，接首页 MODULE 01~06，全站连成一条编号线；编号标是 h1 的兄弟节点，页头文案断言不受影响',
-          '搜索条吸附（top: var(--topbar-h) + z-index 20，贴在页头下方）+ 快捷频段芯片（数据取自已加载候选集，零新增请求；点击改 hash 与手输走同一路径）',
-          '测试：新增 41 号用例 27 条；反向验证 10/10 命中（其中两条判据因变异未报红而当场收紧 —— 「名言是否被包进网格」用 div 配平、搜索委托要钉住赋值形式与使用）',
-          '修正 40 号一条脆弱判据：print 断言原要求 .hero-bg 与 .hero-scroll 在选择器列表里相邻，B3 往同一规则里插入 .toc 就假红 —— 改为顺序无关写法'
-        ]
-      },
-      {
-        version: '3.1.0',
-        date: '2026-09-29',
-        title: '3.0 B2 首页：Hero + bento 六模块 + 错峰入场',
-        items: [
-          '首页由单列列表改为 Hero + bento：首屏 Hero 占一屏（文档流，滚过即结束），下方 12 列网格六个模块（精选信号通栏 / 信号流 8 列 / 站台状态 · 标签频段 · 归档节奏 · 身份卡 各 4 列）',
-          'Hero 复用 .page-head（保留全站页头装饰与既有判据），品牌字标做单字母强调（NEON://DIA·R·Y，整屏一处）；滚动引导只是提示不做锚点 —— hash 路由下任何 #xxx 都会被当路由解析',
-          '墨色盘 --ink-1..6 由主色相做色相偏移派生：一个模块一种墨色，换色相时六块一起沿色环平移；浅底/暖底档另行覆盖为高明度版本',
-          '站台状态/标签频段/归档节奏三项全部由**已加载文章本地聚合**得出，不新增任何网络请求（面板渲染绝不 await 网络）',
-          '错峰入场：0→250ms 阶梯 delay（一格 50ms）+ Hero 同步入场；滚动引导用原生 scroll-driven 动画并在滚出一屏后淡出（@supports 能力检测，不支持则常显）',
-          '兼容策略生效：标签过滤页仍走连续列表；.page-head / .post-list / .post-card / #btn-load-more 全部保留 —— 既有 871 条断言一条未红',
-          '修复工程缺口：baseline 工具新增「未登记 case 检测」—— 此前新增用例若不手动登记进 manifest 就永不进入全量门禁（39 号曾因此漏跑），现会当场报错阻断',
-          '测试：新增 40 号用例 28 条；反向验证 9/9 命中；门禁 915/915（功能回归 871 + 故障注入 26 + 行为沙箱 18）'
-        ]
-      },
-      {
-        version: '3.0.0',
-        date: '2026-09-29',
-        title: '3.0 B1 地基：配色旋钮（明度 × 色相）+ tokens 层',
-        items: [
-          '配色改为单变量派生：--hue（0~360）驱动主色/线/辉光/网格/辅助紫；旧变量名（--cyan / --line / --glow-cyan…）保留为别名 —— 全站 800+ 处引用一行未改，却随色相整体变色',
-          '语义色固定不旋转（品红=流逝·警示 / 绿=在线 / 黄=高亮）：用户能调气质，不能调语义',
-          '主题罗盘升级为二维：明度 3 档 + 色相 9 档（青/电蓝/靛/紫/品红/桃/橙/琥珀/苔绿）。两块各自 role=radiogroup，roving tabindex 与方向键按组隔离；色相切换后面板保持展开（试色是连续行为）',
-          '首绘前由 theme-boot.js 同块写入 data-theme 与 --hue（去掉原 early return —— 它会让选过主题色的用户永远拿不到自己的色相）；两处白名单逐值一致，防「刷新闪回默认色」',
-          '亮色/暖色档改为覆盖派生参数（--hue-s / --hue-l / --vio-*）而非逐个硬编码霓虹；亮档 --hue-l 取 24%，与原 #007a91 的观感及 WCAG 对比度持平',
-          'tokens 层补齐：间距九级刻度（4px 基准）、容器三档（760/1000/1240）、Banner 高度、人味层圆角 --r-soft 14px（与切角同值）、系统衬线栈、断点四值登记（1280/1024/768/480）',
-          '测试：新增 39 号用例 19 条（B1 地基）；36 号扩色相维度 7 条（33 → 40）；20 号对比度断言支持派生色求解（真算 WCAG AA，实测 cyan 6.4 / violet 8.5）；15 号与 36 号 4 条判据随二维化演进；反向验证 10/10 命中'
-        ]
-      },
-      {
-        version: '2.9.10',
-        date: '2026-09-29',
-        title: '计时数字上色：光谱渐变 + 呼吸辉光 + 悬停电光炸裂',
-        items: [
-          '数字改为光谱渐变文字（青→紫→品红，秒位重心后移到品红），background-clip:text 纯 CSS 实现',
-          '呼吸辉光：一套 keyframes 服务两处语义，色相经 --breathe-c 注入（累计位青/秒位品红），只动 filter 不动 opacity —— 光在呼吸，字始终清晰',
-          '悬停电光炸裂：爆环（圆环 + 三点火花碎屑外扩旋转）+ 电弧枝纹（青/品红双色斜纹 steps 硬切 + mask 边缘渐隐）+ ≤1px 电击抖动',
-          '渐变文字与 text-shadow 互斥（字形透明后阴影反成主体）⇒ 光晕全改 drop-shadow；零新增 DOM，纯伪元素',
-          'hover 电光整体包在 @media (hover: hover) 内，触屏不误触；reduce 停掉呼吸与电光（常驻循环更耗前庭耐受）',
-          '测试：38 号新增 R181 系列 7 条（渐变三件套/光晕载体/呼吸变量化/hover 铁律/爆环结构/reduce 停动/悬停不掐断呼吸），反向验证 8/8 命中；基线 817'
-        ]
-      },
-      {
-        version: '2.9.9',
-        date: '2026-09-29',
-        title: '在线时长 HUD 修正：真建站日 + 天/时/分/秒',
-        items: [
-          '修正：建站日期改为博主本人创建博客的时刻 2026-09-28 00:18（v2.9.8 误取最早广播日 2026.07.03），仍走 SITE_BORN 单一来源',
-          '修正：读数改为 天/时/分/秒 四段分解，时/分/秒补零两位；退役「累计总秒数+千分位」读法',
-          '测试：38 号用例 R180/R180b/R180c/R180e/R180f/R180g/R180h/R180i 随口径重写，反向验证 4/4 命中；R180i/R180k 补判空链（崩溃≠报红）'
-        ]
-      },
-      {
-        version: '2.9.8',
-        date: '2026-09-29',
-        title: 'ABOUT 在线时长 HUD（建站时间 / 距今天数 / 累计秒数）',
-        items: [
-          'ABOUT 页顶部新增 STATION UPTIME 仪表：建站日期、距今天数、累计秒数（每秒实时跳动）',
-          '建站时间取最早一条广播 2026.07.03，SITE_BORN 单一来源，改一处全站生效',
-          '电流赛博风格：HUD 对角角括号取景 + 电流弧扫过 + 色即信号（天数青光/秒数品红光）',
-          '进页开表离页停表，不残留定时器；数字锁定等宽不抖版面',
-          '减少动效下电流弧与 LIVE 点停动；打印时隐藏 HUD（纸面上秒数立刻失真）'
-        ]
-      },
-      {
-        version: '2.9.7',
-        date: '2026-09-29',
-        title: '面包屑行再放大并改为渐变文字',
-        items: [
-          '页面编号行字号 13px → 14px（上一档 13px 肉眼不可辨，用户反馈没变化）',
-          '该行改为青→紫渐变文字，background-clip:text 纯 CSS 实现，三主题自动适配',
-          '打印样式还原实色 —— 否则 color:transparent 在纸面上整行消失'
-        ]
-      },
-      {
-        version: '2.9.6',
-        date: '2026-09-29',
-        title: '可读性与氛围：页面编号行放大 + 电台跑马灯光效',
-        items: [
-          '全站页面顶部的档案编号行（.crumb）字号 12px → 13px，十个页面一并生效',
-          '电台迷你条 hover 时出现循环扫过的跑马灯光带，光效被 dock 自身切角裁住不外溢',
-          '减少动效下跑马灯直接不渲染（纯装饰，不承担信息职责）'
-        ]
-      },
-      {
-        version: '2.9.5',
-        date: '2026-09-29',
-        title: 'Uiverse 借法二：双色内发光卡片 / 旋转光晕搜索框 / 扫描线输入框',
-        items: [
-          '文章卡片 hover 增加青/品红对冲的双色内发光，三主题自动适配',
-          '搜索页聚焦时输入框背后出现缓转的双色光晕（青+品红各一段弧，7s 一圈）',
-          '搜索输入框加 .search-field 宿主层，用于承载伪元素光晕',
-          '编辑器四个文本输入铺上低透明度扫描线 + 小号装甲切角，聚焦时叠青色扫光',
-          '刻意不搬原组件的 backglitch 高频抖动与 blinkShadowsFilter 跳变阴影（光敏风险/阅读噪音）'
-        ]
-      },
-      {
-        version: '2.9.4',
-        date: '2026-09-29',
-        title: 'Uiverse 借法：主题罗盘与充能光条',
-        items: [
-          '主题控点由「单按钮循环」改为「三档罗盘单选」——点开即见三档，点哪个是哪个，不再盲转',
-          '罗盘支持方向键换档、Escape 收起并归还焦点、点击外部收起；选中态走 roving tabindex',
-          '按钮 hover 改为对向充能光条：上缘向右、下缘向左同时充能，移开反向收回',
-          '光条用两个 background 层实现，零新增 DOM，颜色随四个按钮变体自动适配',
-          '减少动效下罗盘停转、光条瞬时到位；打印时隐藏罗盘面板'
-        ]
-      },
-      {
-        version: '2.9.3',
-        date: '2026-09-29',
-        title: '电台进度显示修复',
-        items: [
-          '修复：进度条与时间标签在整个播放过程中冻住（UI 从未订阅内核的 timeupdate）',
-          '修复：切歌后总时长停在上一首的值（paintPanelProgress 现同步维护 [data-radio-dur]）',
-          '测试：新增 R168 系列 3 条 + 反向验证 4/4（含「大窗口懒匹配跨出函数边界」这一新假绿形态）'
-        ]
-      },
-      {
-        version: '2.9.2',
-        date: '2026-09-29',
-        title: '修复上传失败（视图专有列混进写路径）',
-        items: [
-          '修复：create 入库用 RADIO_WRITE_FIELDS（基表列）而非 RADIO_FIELDS —— has_data 是视图 public_radio 里算出来的列，混进 INSERT … RETURNING 会报 42703「column radio_tracks.has_data does not exist」，上传直接失败而列表读取却正常',
-          '新增 RADIO_VIEW_ONLY 登记「视图专有列」，基表字段清单由 RADIO_FIELDS 减去它**自动推导**，避免后人再加算出来的列时重蹈覆辙',
-          '修复：入库返回行补 has_data=true，与列表行同形，调用方无需按来源分支判断',
-          '测试：电台 case 新增 5 条断言（真跑常量块求值，不扫字面），反向验证 4/4 命中；基线 720 → 725'
-        ]
-      },
-      {
-        version: '2.9.1',
-        date: '2026-09-29',
-        title: 'CSP 放行媒体 data:/blob:（电台音频真正能播）',
-        items: [
-          '修复：CSP 补 media-src \'self\' data: blob: —— 缺失时回落 default-src \'self\'，data URL 音频被静默拦下（Chromium 只报 code 4「Media load rejected by URL safety check」，看起来像文件损坏）',
-          '修复：blob: 同步放行 —— 读时长 probeDuration 用 createObjectURL 喂临时 Audio，否则时长静默丢失',
-          '测试：CSP case 新增 2 条 media-src 断言（反向验证 2/2 命中），基线 718 → 720'
-        ]
-      },
-      {
-        version: '2.9.0',
-        date: '2026-09-29',
-        title: '电台改存库（所有人可听）',
-        items: [
-          '修复：播放不了——音频改存数据库并走公开视图，匿名访客也能收听',
-          '修复：签名 URL 有效期曾写 7200 超出平台硬上限 3600，点播放毫无反应',
-          '数据：radio_tracks.data 列 + public_radio 读取视图（含 has_data），存储路径列已可空',
-          '数据：单曲上限维持 24MB（base64 存库的体积代价是「整首一次性传输」）；列表查询绝不携带音频本体',
-          '体验：音频数据 LRU 缓存（条数 2 / 字符 40M 双限，重播与来回切歌不重下）；旧记录明确禁用播放并说明原因',
-          '体验：面板提示改为「所有人（含未登录访客）都可直接收听」'
-        ]
-      },
-      {
-        version: '2.8.0',
-        date: '2026-09-29',
-        title: '电台播放器',
-        items: [
-          '新增：左上角常驻迷你播放器（播放/暂停/上一首/下一首/音量/静音/循环/随机）',
-          '新增：展开面板含曲目列表、当前曲目信息、进度条拖动与时间显示',
-          '新增：云存储音频上传与曲目管理（仅作者可管，所有人可听）',
-          '数据：radio_tracks 表 + 4 道 RLS 策略，播放走签名 URL',
-          '修复：面板渲染不再等待网络（先出骨架再补数据，避免点了没反应）'
-        ]
-      },
-      {
-        version: '2.6.2',
-        date: '2026-09-29',
-        title: '修复：卡片标签与收藏按钮重叠',
-        items: [
-          '.card-meta 预留右侧 46px 空间，标签不再压住收藏按钮',
-          '新增 R128 系列断言守住避让，反向验证 4 场景全过'
-        ]
-      },
-      {
-        version: '2.6.1',
-        date: '2026-09-29',
-        title: '修复：STASH / FREQ 白屏',
-        items: [
-          'safeRoute 接住 async 渲染的 rejection，不再卡在 BOOTING',
-          'V() 用必需函数清单识别半新半旧的 views 层，缺函数即降级并提示强刷',
-          '版本号变更使 ?v= 缓存键刷新，老用户无需强刷即可拿到新视图层'
-        ]
-      },
-      {
-        version: '2.6.0',
-        date: '2026-09-29',
-        title: '伪更新：详情页三件套 · 本地收藏 · 标签管理',
-        items: [
-          'C18 阅读时长：卡片与详情页显示「约 N 分钟」（400 字/分钟，代码块不计入）',
-          'C14+ 详情页三件套：相关信号（标签重合度）+ 上一篇/下一篇 + 返回信号流，断头路补通',
-          'C19 本地收藏：卡片与详情页可收藏，新增 #/marks 收容所（localStorage，换设备会丢）',
-          'C16 标签管理：新增 #/tagadmin，可把旧标签整体重命名为新标签（含影响篇数预告与失败明细）',
-          'C12 暖色档：主题三档 dark → light → warm，warm 为暖纸色不刺眼',
-          'C15 打印样式：补齐 @media print（白底黑字、隐藏装饰层与交互件、展开链接 URL）',
-          '──────── 以下为 2.6.0 原内容（版本号保持不变）────────',
-          '背景增亮：网格线 0.045 → 0.075、rotateX 56° → 48°、body 三处 radial 增亮',
-          '--deco-faint 0.035 → 0.07；新增 body::after 顶部光幕 + 双角辉光（screen 加法）'
-        ]
-      },
-      {
-        version: '2.5.1',
-        date: '2026-09-29',
-        title: '短内容页背景观感对齐',
-        items: [
-          '.wrap 最小高度 calc(100vh - 200px) → calc(100vh - 120px)：短内容页（搜索/标签/关于）也撑满一屏，进入可滚动状态',
-          '.grid-bg 纵向 mask 顶端渐隐收窄（0% → 8% 起显），首屏即可见网格虚影，中段峰值/底端渐隐保持'
-        ]
-      },
-      {
-        version: '2.5.0',
-        date: '2026-09-29',
-        title: '背景丰富化：极光光晕 / 透视网格 / 胶片噪点',
-        items: [
-          'body::before 复用晕斑层加 aurora-drift 漂移动画（--t-drift 22s，不新增合成层）',
-          '.grid-bg 加 perspective(520px) rotateX(56deg) 地平线透视（不上溯 html/body，避免破坏 fixed 定位）',
-          '新增 .bg-noise 纯 CSS 噪点层（opacity 0.035 + soft-light，索引页挂载）',
-          'reduce 块：停极光动画 + 压掉 blur + --t-drift 归零'
-        ]
-      },
-      {
-        version: '2.4.1',
-        date: '2026-09-29',
-        title: '修复封面底部亮线',
-        items: [
-          'background-clip 收进 padding-box：图像底行不再垫入半透明 border 下（暗罩盖不到的唯一未压暗像素）'
-        ]
-      },
-      {
-        version: '2.4.0',
-        date: '2026-09-29',
-        title: 'UI 提案板插单：按键取景框/故障色散 + 封面 HUD/标题压字',
-        items: [
-          'E6 双层取景框 · E7 故障色散 · F4 封面 HUD 读数 · F5 标题压字'
-        ]
-      },
-      {
-        version: '2.3.0',
-        date: '2026-09-28',
-        title: 'P1 体验批次：字号/键盘/触屏/编辑器/反馈',
-        items: [
-          'C1 全局字号 16/16.5/14.5',
-          'F1 卡片键盘可达（tabindex+Enter/Space 代理）',
-          'E1 强 hover 包 hover:hover 媒体（12 组）',
-          'E2 tag-chip 与移动端 nav 触控热区',
-          'A3 窄屏编辑器输入/预览切换',
-          'E3 load-more 等待态'
-        ]
-      },
-      {
-        version: '2.2.2',
-        date: '2026-09-28',
-        title: 'P0 可用性补丁',
-        items: [
-          'B1 亮色硬编码色变量化（--md-h4/--md-em/--md-quote）',
-          'A1 正文限宽 760px',
-          'A2 标题锚点 scroll-margin 兜底',
-          'E4 toast 类型前缀符号（✕/✓/⚠/▸）'
-        ]
-      },
-      {
-        version: '2.2.1',
-        date: '2026-09-28',
-        title: '封面清晰度统一标准',
-        items: [
-          '缩略图标准 256→1280（单一来源常量）；新增体积兜底阶梯；存量 256px 缩略图停用回退原图'
-        ]
-      },
-      {
-        version: '2.2.0',
-        date: '2026-09-28',
-        title: 'P1 内容项收口',
-        items: [
-          'C8：404 页面包屑改为「信号丢失」（loading 态仍保持中性）',
-          'B3：正文图补 width/height 占位与异步解码，防加载跳动',
-          'C11：编辑器加自动保存时间、字数与超限预警',
-          'C11：补齐 Ctrl+K 链接 / Ctrl+Shift+C 代码块（复制键不抢）'
-        ]
-      },
-      {
-        version: '2.1.3',
-        date: '2026-09-28',
-        title: 'D3 测试架构拆分',
-        items: [
-          '测试：功能回归 2702 行单体拆成 28 个 tests/cases/*.js，每个可独立运行',
-          '测试：新增行为沙箱套件，sandbox-p2.js 18 条真交互断言接入门禁',
-          '测试：新增 O18 防白屏 11 条、O19 编辑器文本 14 条断言',
-          '修复：L 图片收口 R34/R34b 异步断言未 await，拆分后暴露（453→451 已修回）',
-          '防线：断言数对账 + 悬浮异步 IIFE 静态检查 + 跨文件重名检测'
-        ]
-      },
-      {
-        version: '2.1.2',
-        date: '2026-09-28',
-        title: '装饰层 P1 修复',
-        items: [
-          '竖排名言按视口高度自适应字号，修复 800~900px 高窗口下被截断 11%~44%',
-          '竖排名言补 px 兜底字号，旧浏览器不致回落到 16px 撑爆视口',
-          '极矮窗（<=640px）隐藏竖排名言，兜住字号下限的边界',
-          '--t-sweep 纳入 reduced-motion 归零名单，消除无障碍时长逃逸',
-          'reduced-motion 归零变量加 !important，摆脱对声明顺序的隐式依赖',
-          '全屏晕斑 blur 在减少动效下降级，省低端设备重绘开销',
-          '修正星点阵列注释（intersect 产出方点而非十字）'
-        ]
-      },
-      {
-        version: '2.1.1',
-        date: '2026-09-28',
-        title: '赛博朋克装饰层',
-        items: [
-          '新增 O17 装饰层：符号图案 / 名言文字 / 花纹光效三类，纯 CSS 伪元素实现',
-          '分区域布置：背景晕斑与星点、标题斜纹、卡片四角标与全息 hover 辉光、文章左缘信号标尺、关于卡角标、页脚全息分隔条与名言引号',
-          '光效三式：霓虹发光（走 --glow-* 变量）、扫描线（既有 .scanlines 保留）、全息渐变（--deco-holo 四色 + color-mix 派生）',
-          '可读性：全部装饰 pointer-events:none 且透明度 ≤0.22，背景层 z-index 0 恒在内容之下',
-          '适配：装饰色全走变量（亮色自动收敛）、新增动画纳入 reduced-motion 块、窄屏隐藏竖排名言与标尺、触屏关闭 hover 增强'
-        ]
-      },
-      {
-        version: '2.1.0',
-        date: '2026-09-28',
-        title: '可访问性与导航体验（P0 批）',
-        items: [
-          '尊重系统的减少动效偏好：关扫描线、停跑马灯与故障抖动，过渡时长归零（前庭功能障碍用户不再受持续动画影响）',
-          '全站键盘可达：补 :focus-visible 霓虹焦点环、跳转到主内容链接、快捷键（/ 搜索 · g 前缀跳转 · ? 帮助 · Esc 关闭）',
-          '弹窗焦点陷阱：打开时焦点入框、Tab 在框内循环、关闭后归还触发元素',
-          '首屏请求改为 allSettled 语义：计数接口挂掉不再连带丢掉已取到的文章列表',
-          '阅读进度条（transform 驱动，不触发重排）+ 回到顶部按钮',
-          '配色收口为 DARK ⇄ LIGHT 两态，摘除名存实亡的 AUTO'
-        ]
-      },
-      {
-        version: '2.0.3',
-        date: '2026-09-28',
-        title: '暗色优先：默认暗色，不再跟随系统',
-        items: [
-          '应用启动与打开时默认以暗色运行，不依赖系统配色设置',
-          '新增 js/theme-boot.js：同源同步脚本在首绘前定色，消除「先亮后暗」闪烁',
-          '移除 @media (prefers-color-scheme: light) 分支——它会让系统偏好绕过用户意愿',
-          '三态循环顺序改为 dark→light→auto，默认态与按钮文案一致',
-          '存量 auto 偏好平滑兼容：不崩、不误判为亮色',
-          '存储被禁用（隐私模式）时静默降级为暗色，不抛异常',
-          '测试新增场景 O11（28 项），并补齐「剥注释」公共工具'
-        ]
-      },
-      {
-        version: '2.0.2',
-        date: '2026-09-28',
-        title: '内容分类标识：标签频段色标',
-        items: [
-          '改进对象：文章标签在列表中的视觉区分度，区分维度=类型',
-          '原先归档页条目只有标题+日期，无标签、无状态，同类条目无法区分',
-          '色号由标签名 FNV-1a 哈希推导，同一标签恒定同色，与列表顺序无关',
-          '复用站点既有 5 个霓虹色相，不引入新色',
-          '空标签显示中性灰「未分类」，不再留白',
-          '补强可读性：色相之外叠加图标（◆▲■⬢●）与下划线，色盲/灰度下仍可区分',
-          '归档条目加左侧色条；卡片标签与标签总览同步配色',
-          '修正亮色主题下青色对比度 4.46:1 的临界问题，墨色掺入主体文字色后升至 5.70:1',
-          '门禁新增场景 O9 共 51 项断言，22 类注入反向验证全部可捕获'
-        ]
-      },
-      {
-        version: '2.0.1',
-        date: '2026-09-28',
-        title: '页头分隔线：上下区域边界可视化',
-        items: [
-          '新增 .page-head::after 赛博朋克横向分隔线（渐变主线 + 左端扫描段），.page-head::before 加品红菱形锚点',
-          '纯 CSS 实现（零 JS、零内联样式），挂载在通用 .page-head 上 —— ARCHIVE/SEARCH/TAGS/ABOUT/CONSOLE 全站页面同享',
-          '配色全走 CSS 变量，亮色主题自动适配（不硬编码霓虹色，否则浅底会刺眼）',
-          '测试：场景 O8 新增 R56–R56i 共 9 项断言（结构/渐变/菱形锚/变量化/全站复用），门禁扩至 226 项'
-        ]
-      },
-      {
-        version: '2.0.0',
-        date: '2026-09-28',
-        title: '2.0 收尾批：构建 · 错误上报 · RSS · 亮色主题',
-        items: [
-          'E2 最小构建流程：新增 package.json / package-lock.json / tools/check-version.js，npm run build = 门禁 + 生成 feed；刻意不引入 webpack/Vite —— 本项目的价值就是打开就能跑的静态站',
-          'E1 前端错误上报：新增 error_logs 表（只授 INSERT + 本人 SELECT，无 UPDATE/DELETE，日志只能追加），cloud.js 新增 Errors 模块，URL/邮箱/令牌三类脱敏后入库，单会话上限 10 条',
-          'C4 RSS 订阅：tools/gen-feed.js 从云端拉已发布文章生成静态 feed.xml（由 npm run feed 产出），index.html 加 alternate 发现声明；所有 URL 带 /cyberpunk-blog/ 前缀 —— 根域只是跳转页',
-          'C6 亮色主题：CSS 变量全量覆盖亮色档（霓虹色压暗一档保证对比度），导航栏三态循环 auto→light→dark，跟随系统走纯 CSS media query 零闪烁；代码块保持深色但改走变量',
-          '修复 L-3 真实未闭环项：parseHash 裸调 decodeURIComponent，遇 #/% 这类畸形编码抛 URIError 导致空白页（此前设计表误标已修）；新增 safeDecode 逐段安全解码',
-          'CRUD 边界补齐：新增 normalizeTags 统一处理标签（去空 / 大小写归一去重 / 中英文逗号与分号 / 超 8 截断 / 单标签 24 字符），增删改查空值与未命中全部显式报错',
-          '测试：场景 O 新增 R42–R51 共 15 项断言（畸形路由 / 构建脚本 / 错误脱敏 / RSS 前缀 / 主题三态 / 标签归一化）；门禁扩至 206 项全绿'
-        ]
-      },
-      {
-        version: '1.8.0',
-        date: '2026-09-28',
-        title: '第三批 P2：目录 · 搜索 · 归档',
-        items: [
-          'C2 文章 TOC 目录（h2/h3 抽取 + 滚动高亮）与代码块复制按钮（clipboard API + execCommand 双路降级）',
-          'C1 文章搜索：新增 #/search 路由，纯前端过滤 title/summary/tags，不引入库层全文检索（设计表约定过 50 篇再评估）',
-          'C3 归档页：新增 #/archive 路由，按 created_at 月份分组倒序，与搜索同源复用 listPublished',
-          'C4 RSS 保持挂起：静态站生成 feed.xml 需构建步骤或云函数，受 E2 阻塞，本批不实施',
-          '测试：场景 N 新增 R37–R41 共 15 项断言（TOC/复制/搜索/归档/不越界）；common.js fixtures 扩至 6 篇跨 3 个月；marked 桩支持 h2/h3 与围栏代码块'
-        ]
-      },
-      {
-        version: '1.7.0',
-        date: '2026-09-28',
-        title: 'P1 二批：图片收口 · CSP 闸门 · 版本脚本',
-        items: [
-          '安全：post_images 读取收口到视图 public_images——匿名查基表由 HTTP 200 泄露变为 42501 拒绝，owner_id / storage_path 不再对外暴露',
-          '安全：content_type 加数据库级 MIME 白名单 CHECK（jpeg/png/gif/webp），前端 toDataUrl 再做一层 safeMime 纵深防御',
-          '安全：index.html 落地 CSP（default-src self / script-src self+jsdelivr / img-src self+data+blob / object-src none），给 XSS 补上 DOMPurify 之外的第二道闸门',
-          '工程：新增 tools/bump.js——一条命令原子完成 version.js BUILD + LOG unshift + index.html 全部 ?v= 三处联动，自带 diff 预览与 --dry-run',
-          '工程：回归套件扩至 7 场景故障注入 + 91 项断言，新增 bump 脚本 / 图片收口 / CSP 三组（含 bump 真跑 dry-run 与视图读取行为验证）'
-        ]
-      },
-      {
-        version: '1.6.0',
-        date: '2026-09-28',
-        title: 'P1 三连：字段长度护栏 · 草稿自动保存 · 分享卡片',
-        items: [
-          '安全：posts / post_images 共 6 条 CHECK 约束落地——标题≤200 / 摘要≤500 / 正文≤200000 / 标签≤10 个；图片 base64≤3.6MB / 缩略图≤400KB（长度边界从"前端 maxlength"下沉到"库层拒绝"）',
-          '体验：编辑器草稿自动保存——输入停顿 3 秒即把标题/正文/标签/封面快照进 localStorage，离开页面（hashchange）强制落盘',
-          '体验：再次进入编辑页检测到未恢复的快照会弹窗询问"恢复 / 丢弃"；与库内内容一致时静默清除，不打扰',
-          '体验：正式保存 / 发布 / 删除成功后自动清除对应快照，草稿不残留',
-          '健壮：快照超 4MB 安全线时按比例截断正文并标记 truncated，读取损坏快照返回 null 而不抛错',
-          '分享：补全站点级 Open Graph / Twitter Card meta，新增 1200×630 专属分享图（121KB），微信 / QQ / 社交平台发链接可渲染大图卡片',
-          '工程：回归套件扩至 7 场景故障注入 + 62 项断言，新增长度约束 / OG 卡片 / 草稿快照三组（含 localStorage 沙箱实测）'
-        ]
-      },
-      {
-        version: '1.5.0',
-        date: '2026-09-28',
-        title: 'P0 三连：供应链加固 · 图片瘦身 · 测试常驻',
-        items: [
-          '安全：CDN 依赖锁定精确版本（marked@12.0.2 / dompurify@3.4.16 / highlight.js@11.12.0）并加 SRI 完整性校验',
-          '安全：云 SDK 本地托管到 js/vendor/，摆脱 @dev 漂移标签，数据通道代码所有权回归本站（审计 H-1 收口）',
-          '性能：图片加载重构——列表页封面只拉 256px 缩略图，首页流量降一个数量级',
-          '性能：视口懒加载（IntersectionObserver），按需请求图片；旧图无缩略图自动回退原图',
-          '工程：验证脚本固化为 tests/ 常驻套件（7 场景故障注入 + 33 项功能回归），全绿才允许发布',
-          '工程：post_images 表新增 thumb 列（可空，旧行为完全兼容）',
-          '修复：首页封面从未渲染（views.js 误用 coverRef，正确字段为 cover_ref）——测试矩阵钓出的存量 bug',
-          '修复：启动降级横幅被路由重渲染抹掉，改挂 body'
-        ]
-      },
-      {
-        version: '1.4.0',
-        date: '2026-09-28',
-        title: '修复错误处理路径自身的崩溃',
-        items: [
-          '修复：cloud.js 加载失败时，loadHome 的 catch 分支调用不存在的 NEON.errMsg 导致二次崩溃，整页白屏',
-          '改进：新增数据层安全取用 NEON()，缺失时返回 null 而不抛 ReferenceError',
-          '改进：新增本地 errMsg() 降级实现，保证任何异常都能转成一句可读提示',
-          '改进：后端调用统一走 need() 守卫，缺失时给出明确的「数据层未就绪」提示',
-          '验证：7 个故障注入场景（含 cloud.js / views.js / version.js / SDK / CDN 缺失）全部不再白屏',
-          '部署：index.html 本地资源引用统一带 ?v= 版本参数，发布后 CDN 缓存键随版本失效，杜绝旧文件滞留'
-        ]
-      },
-      {
-        version: '1.3.0',
-        date: '2026-09-28',
-        title: '健壮性加固 · 消除白屏风险',
-        items: [
-          '修复：views.js 加载失败会导致整页白屏（V 取值改为惰性 + 降级兜底）',
-          '修复：app.js 任何渲染异常都会中断启动，改为逐层捕获并显示可读错误',
-          '改进：版本号改由 version.js 直接写入页脚，不再依赖 app.js，即使 app.js 崩溃也能看到版本',
-          '改进：路由与导航渲染加安全包装，异常时显示「RENDER FAULT」面板而非空白页'
-        ]
-      },
-      {
-        version: '1.2.0',
-        date: '2026-09-28',
-        title: '版本自证机制 · 缓存排查支持',
-        items: [
-          '新增 BUILD_ID 构建标识，可在控制台确认实际加载的版本',
-          '新增 ?diag=1 诊断横幅，页面上直接显示当前版本与加载状态',
-          '版本号显示不再被旧缓存静默掩盖，加载失败时会明确报错'
-        ]
-      },
-      {
-        version: '1.1.0',
-        date: '2026-09-28',
-        title: '登录欢迎语个性化 · 版本号与工程日志',
-        items: [
-          '登录成功后弹窗改为「欢迎 <用户名> 回来」，动态展示当前用户实际名称',
-          '新增统一用户名解析器，三条登录路径（密码 / 验证码 / 注册）行为一致',
-          '页脚显示当前构建版本号',
-          '新增「工程日志」按钮，可查看历次版本变更内容'
-        ]
-      },
-      {
-        version: '1.0.0',
-        date: '2026-09-28',
-        title: '首次上线',
-        items: [
-          '赛博朋克风格博客上线：文章列表 / 详情 / 标签分类 / 关于页',
-          '云端数据库存储文章，云端存储托管图片与附件',
-          'Markdown 渲染 + 代码高亮 + XSS 清洗',
-          '邮箱注册登录（密码 / 验证码 / 找回密码）',
-          '完成安全性审计，输出审计报告'
-        ]
-      }
     ]
   };
 
   window.NEONVersion = VERSION;
 
-  /* ---------- 自证：控制台打印（永远执行，便于事后排查） ---------- */
+  /* ---------- 自证：控制台打印（永远执行，便于事后排查） ----------
+     ⚠ v5.6.2（审计清单 ⑤「5 处 console.log 待逐条判断」）——**结论：全部保留**。
+     逐条判断的依据：
+       · 它们不是遗留的调试打印，而是本文件开头写的「自证机制」的**实现**：
+         排查"页面是不是旧版 / 浏览器吃了缓存"时，控制台这几行就是第一手证据
+         （尤其 BUILD_ID 与"若版本号不是最新的请强制刷新"那句提示）。
+       · 删掉的代价是真实存在的：§5 的发布纪律里就有一次「改了 js/ 却忘了 bump，
+         浏览器复用旧 cloud.js → 登录报 Failed to fetch」的事故，
+         当时正是靠"控制台版本号对不对"快速定性的。
+       · 输出量恒定 5 行、只在加载时打一次，不随交互增长，也不含用户数据。
+     ⚠ 真正该守的纪律是**别新增**：本项目的审计脚本会把 console.log 计数报出来
+       （残留在 version.js 之外的一律要当场说清理由）。 */
   try {
     console.log(
       '%c NEON://DIARY ' + '%c v' + VERSION.BUILD + ' ',

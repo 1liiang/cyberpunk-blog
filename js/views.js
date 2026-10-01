@@ -1303,252 +1303,21 @@
   }
 
   /* ============================================================
-     v2.8.0：电台（RADIO）视图
+     v2.8.0 → v5.1.0：电台（RADIO）视图
      ------------------------------------------------------------
-     两个渲染出口：
-       radioDockView(st)   —— 左上角常驻迷你条（收起态）
-       radioPanelView(st)  —— 展开面板（曲目列表 + 完整控制 + 管理区）
+     ⚠ v5.6.1 清理：v2.8.0 那套「迷你条 dock + 展开面板 panel」的视图出口
+     （radioDockView / radioTrackRow / radioPanelView / audioLimitText 与 R_ICON）
+     随 HANDOVER §6 审计清单 ② 一并删除 ——
+     容器（index.html 的 #radio-dock / #radio-panel-host）早在 v5.2.0 就没了，
+     这些函数体也已是死代码；它们还是 RADIO_FIELDS 之外唯一还在读
+     `window.NEON.AUDIO_MAX`、`has_data`、`duration_sec`、`cover_url`、
+     `radio-track-*` 类名的地方。播放界面现在在 #radio-stage（app.js 的 paintStage）。
 
      ⚠ 纯渲染，不含事件绑定 —— 绑定在 app.js 里做（事件代理），
        这样本文件保持"数据 → HTML 字符串"的纯函数约定，便于测试。
      ⚠ CSP 禁内联事件：这里绝不出现内联事件属性，全部靠 data-radio-* 属性 + 代理。
      （注：本行刻意不写出被禁属性的字面形式 —— 源码扫描类断言会把它当真实用法。）
      ============================================================ */
-
-  /* 播放/暂停/上一首/下一首等图标用字符，避免额外资源 */
-  var R_ICON = {
-    play: '▶', pause: '❚❚', prev: '⏮', next: '⏭',
-    vol: '🔊', mute: '🔇', repeat: '↻', one: '↻¹', shuffle: '⇄',
-    list: '☰', up: '⇧', down: '⇩', del: '✕', radio: '◉'
-  };
-
-  /* 迷你条（左上角常驻）。st 为 NEONRadio.state() 的快照 */
-  function radioDockView(st) {
-    st = st || {};
-    var cur = st.current;
-    var title = cur ? (cur.title || '未命名曲目') : '电台待命';
-    var artist = cur && cur.artist ? ' · ' + cur.artist : '';
-    var playing = !!st.playing;
-    var count = st.count || 0;
-    var cls = 'radio-dock-inner' + (playing ? ' is-playing' : '') +
-      (st.error ? ' has-error' : '');
-
-    return '' +
-      '<div class="' + cls + '" data-radio-open="1" role="button" tabindex="0"' +
-        ' aria-label="电台：' + esc(title) + '，' + (playing ? '正在播放' : '已暂停') + '，回车展开">' +
-        '<button type="button" class="radio-btn radio-btn-play" data-radio-act="toggle"' +
-          ' aria-label="' + (playing ? '暂停' : '播放') + '">' +
-          '<span class="radio-glyph" aria-hidden="true">' + (playing ? R_ICON.pause : R_ICON.play) + '</span>' +
-        '</button>' +
-        '<div class="radio-dock-info">' +
-          '<div class="radio-dock-title" title="' + esc(title + artist) + '">' +
-            '<span class="radio-mark" aria-hidden="true">' + R_ICON.radio + '</span> ' +
-            esc(title) + esc(artist) +
-          '</div>' +
-          '<div class="radio-dock-sub">' +
-            (st.error ? '<span class="radio-err">' + esc(st.error) + '</span>'
-              : (count ? ('RADIO // ' + (st.index + 1) + ' / ' + count +
-                 (st.loading ? ' · 缓冲中…' : (playing ? ' · ON AIR' : ' · PAUSED')))
-                : 'RADIO // 暂无曲目')) +
-          '</div>' +
-        '</div>' +
-        '<span class="radio-dock-arrow" aria-hidden="true">' + R_ICON.list + '</span>' +
-      '</div>';
-  }
-
-  /* 单曲体积上限文案：从数据层常量读。
-     ⚠ 别在视图里写死数字 —— 否则改了 cloud.js 的 AUDIO_MAX 而这里忘改，
-     就会出现"提示 24MB、实际挡 10MB"这种文案与实现脱节的经典坑。 */
-  function audioLimitText() {
-    var max = (typeof window !== 'undefined' && window.NEON && window.NEON.AUDIO_MAX)
-      ? Number(window.NEON.AUDIO_MAX) : 0;
-    if (!(max > 0)) return '';
-    return Math.round(max / 1048576) + 'MB';
-  }
-
-  /* 曲目行 */
-  function radioTrackRow(row, st) {
-    var isCur = !!(st.current && st.current.id === row.id);
-    var dur = row.duration_sec ? NEONRadio.fmtTime(row.duration_sec) : '--:--';
-    /* ⚠ 旧版（云存储时代）上传的记录没有音频本体（视图的 has_data 为 false）。
-       这类行点了必报错 —— 明确禁用并说清原因，别给"点了没反应"的按钮。 */
-    var playable = row.has_data !== false;
-    return '' +
-      '<li class="radio-track' + (isCur ? ' is-current' : '') + (playable ? '' : ' is-dead') +
-        '" data-track-id="' + row.id + '">' +
-        '<button type="button" class="radio-track-play" data-radio-act="playat" data-id="' + row.id + '"' +
-          (playable ? '' : ' disabled') +
-          ' aria-label="' + esc((playable ? '播放 ' : '') + (row.title || '未命名曲目')) + '">' +
-          '<span aria-hidden="true">' + (isCur && st.playing ? R_ICON.pause : R_ICON.play) + '</span>' +
-        '</button>' +
-        '<span class="radio-track-info">' +
-          '<span class="radio-track-title">' + esc(row.title || '未命名曲目') + '</span>' +
-          (row.artist ? '<span class="radio-track-artist">' + esc(row.artist) + '</span>' : '') +
-          (playable ? '' : '<span class="radio-track-warn">暂无音频数据 · 请删除后重新上传</span>') +
-        '</span>' +
-        '<span class="radio-track-dur">' + dur + '</span>' +
-        (row._manage ?
-          '<span class="radio-track-ops">' +
-            '<button type="button" class="radio-op" data-radio-act="up" data-id="' + row.id + '"' +
-              ' aria-label="上移" title="上移">' + R_ICON.up + '</button>' +
-            '<button type="button" class="radio-op" data-radio-act="down" data-id="' + row.id + '"' +
-              ' aria-label="下移" title="下移">' + R_ICON.down + '</button>' +
-            '<button type="button" class="radio-op radio-op-del" data-radio-act="del" data-id="' + row.id + '"' +
-              ' aria-label="删除" title="删除">' + R_ICON.del + '</button>' +
-          '</span>' : '') +
-      '</li>';
-  }
-
-  /* 展开面板 */
-  function radioPanelView(st) {
-    st = st || {};
-    var cur = st.current;
-    var canManage = !!st.canManage;
-    var q = (st.queue || []).map(function (r) {
-      var copy = Object.create(r);
-      copy._manage = canManage;
-      return copy;
-    });
-
-    var listHtml;
-    if (q.length) {
-      listHtml = '<ul class="radio-list">' + q.map(function (r) { return radioTrackRow(r, st); }).join('') + '</ul>';
-    } else if (st.listLoading) {
-      /* 面板先开、数据后到：骨架期给明确的「正在调频」而不是"没有曲目"，
-         否则网络慢时会误报空库（2026-09-29 实测点开半天没反应）。 */
-      listHtml = '<div class="radio-empty radio-loading">' +
-          '<span class="radio-empty-glyph" aria-hidden="true">◌</span>' +
-          '<span>调频中 · 正在拉取曲目…</span>' +
-        '</div>';
-    } else {
-      listHtml = '<div class="radio-empty">' +
-          '<span class="radio-empty-glyph" aria-hidden="true">◌</span>' +
-          '<span>频段静默 · 还没有曲目</span>' +
-          (canManage ? '<span class="radio-empty-hint">用下方「+ 添加曲目」上传音频文件</span>' : '') +
-        '</div>';
-    }
-
-    var repeatLabel = st.repeat === 'one' ? R_ICON.one + ' 单曲'
-      : (st.repeat === 'all' ? R_ICON.repeat + ' 循环' : R_ICON.repeat + ' 关闭');
-
-    return '' +
-      '<div class="radio-panel" role="dialog" aria-modal="false" aria-label="电台播放器">' +
-        '<div class="radio-panel-head">' +
-          '<span class="radio-panel-title"><span aria-hidden="true">' + R_ICON.radio + '</span> RADIO</span>' +
-          '<button type="button" class="radio-btn" data-radio-act="close" aria-label="收起">✕</button>' +
-        '</div>' +
-
-        /* v4.9.9：当前曲目是网易云外链 → 直接摆官方播放器（在它自己的界面上点播放）。
-           ⚠ 不用 auto=1 自动播放：浏览器会自动播放策略会拦，且访客可能被吓一跳。
-           ⚠ 不放进 dock：那条横条只有几十像素高，塞一个 iframe 只会两边都难用。 */
-        (st.embedUrl
-          ? '<div class="radio-embed">' +
-              '<div class="radio-embed-hint">网易云音乐 · 官方外链播放器（在播放器里点播放）</div>' +
-              '<iframe class="radio-embed-frame" src="' + esc(st.embedUrl) + '"' +
-                ' width="330" height="' + (/type=0/.test(st.embedUrl) ? '430' : '66') + '"' +
-                ' frameborder="0" allow="autoplay"' +
-                ' title="网易云音乐外链播放器"></iframe>' +
-              /* 兜底：个别网络/地区可能加载不出来，给一条能直接打开的链接
-                 （外链播放器本身也是网易云官方页面，打开即为同一首歌） */
-              '<a class="radio-embed-fallback" href="' + esc(st.embedUrl) + '" target="_blank" rel="noopener noreferrer">' +
-                '播放器加载不出来？在新窗口打开 ↗</a>' +
-            '</div>'
-          : '') +
-        '<div class="radio-now">' +
-          '<div class="radio-now-cover' + (cur && cur.cover_url ? ' has-img' : '') + '"' +
-            (cur && cur.cover_url ? ' style="background-image:url(' + esc(cur.cover_url) + ')"' : '') + '>' +
-            (cur && cur.cover_url ? '' : '<span aria-hidden="true">' + R_ICON.radio + '</span>') +
-          '</div>' +
-          '<div class="radio-now-meta">' +
-            '<div class="radio-now-title">' + (cur ? esc(cur.title || '未命名曲目') : '未在播放') + '</div>' +
-            '<div class="radio-now-artist">' + (cur && cur.artist ? esc(cur.artist) : '—') + '</div>' +
-            '<div class="radio-now-album">' + (cur && cur.album ? esc(cur.album) : '') + '</div>' +
-          '</div>' +
-        '</div>' +
-
-        '<div class="radio-bar">' +
-          '<span class="radio-time" data-radio-time>0:00</span>' +
-          '<input type="range" class="radio-seek" data-radio-act="seek" min="0" max="1000" value="0"' +
-            ' aria-label="播放进度" step="1">' +
-          /* ⚠ 总时长这一格必须带 data-radio-dur：它在整面板重绘时只渲染一次，
-             而后由 paintPanelProgress 在 timeupdate 里持续纠正。
-             没有这个钩子的话，切歌后它会一直停在上一首的值（实测过）。 */
-          '<span class="radio-time" data-radio-dur>' + NEONRadio.fmtTime(st.duration) + '</span>' +
-        '</div>' +
-
-        '<div class="radio-ctrls">' +
-          '<button type="button" class="radio-btn" data-radio-act="prev" aria-label="上一首">' +
-            '<span aria-hidden="true">' + R_ICON.prev + '</span></button>' +
-          '<button type="button" class="radio-btn radio-btn-play radio-btn-lg" data-radio-act="toggle"' +
-            ' aria-label="' + (st.playing ? '暂停' : '播放') + '">' +
-            '<span aria-hidden="true">' + (st.playing ? R_ICON.pause : R_ICON.play) + '</span></button>' +
-          '<button type="button" class="radio-btn" data-radio-act="next" aria-label="下一首">' +
-            '<span aria-hidden="true">' + R_ICON.next + '</span></button>' +
-          '<button type="button" class="radio-btn' + (st.repeat !== 'off' ? ' is-on' : '') +
-            '" data-radio-act="repeat" aria-label="循环模式：' + repeatLabel + '">' +
-            '<span aria-hidden="true">' + (st.repeat === 'one' ? R_ICON.one : R_ICON.repeat) + '</span></button>' +
-          '<button type="button" class="radio-btn' + (st.shuffle ? ' is-on' : '') +
-            '" data-radio-act="shuffle" aria-label="随机播放' + (st.shuffle ? '（开）' : '（关）') + '">' +
-            '<span aria-hidden="true">' + R_ICON.shuffle + '</span></button>' +
-        '</div>' +
-
-        '<div class="radio-vol">' +
-          '<button type="button" class="radio-btn" data-radio-act="mute"' +
-            ' aria-label="' + (st.muted ? '取消静音' : '静音') + '">' +
-            '<span aria-hidden="true">' + (st.muted || st.volume === 0 ? R_ICON.mute : R_ICON.vol) + '</span></button>' +
-          '<input type="range" class="radio-volume" data-radio-act="volume" min="0" max="100"' +
-            ' value="' + Math.round((st.muted ? 0 : (st.volume || 0)) * 100) + '"' +
-            ' aria-label="音量">' +
-          '<span class="radio-vol-num">' + Math.round((st.muted ? 0 : (st.volume || 0)) * 100) + '%</span>' +
-        '</div>' +
-
-        '<div class="radio-list-head">' +
-          '<span>曲目 <b>' + q.length + '</b></span>' +
-          (canManage ? '<button type="button" class="btn btn-sm radio-add" data-radio-act="add">+ 添加曲目</button>' : '') +
-        '</div>' +
-        listHtml +
-        (canManage ? '<div class="radio-drop" data-radio-drop hidden>松手即上传到频段</div>' : '') +
-        /* 上传表单：默认隐藏，点「+ 添加曲目」后显示（避免隐藏的 file input 无法聚焦）
-           v4.9.5：音源改为**二选一** —— 音频文件（内链，base64 进库）
-           或 **https 直链（外链，库里只存这一条 URL）**。
-           ⚠ 两个字段都摆出来、不藏在模式切换后面：用户一眼就能看到"有两种加法"，
-             切换器反而多一层"我是不是点错了"的疑惑；二选一由提交时的校验兜住。 */
-        (canManage ? '' +
-          '<div class="radio-form" data-radio-form hidden>' +
-            '<label class="radio-field"><span>曲目名称 *</span>' +
-              '<input type="text" data-radio-field="title" maxlength="200" placeholder="例如：夜航西飞"></label>' +
-            '<label class="radio-field"><span>艺术家</span>' +
-              '<input type="text" data-radio-field="artist" maxlength="200" placeholder="可留空"></label>' +
-            '<label class="radio-field"><span>专辑</span>' +
-              '<input type="text" data-radio-field="album" maxlength="200" placeholder="可留空"></label>' +
-            '<div class="radio-src-head">网易云条目（<b>贴链接或 id，单曲/歌单都行</b>）</div>' +
-            /* v5.0.0：本地文件上传整条路已移除（站长拍板：只留网易云外链）。
-               贴歌曲页 / 歌单页 / outchain 页 / 裸 id 都认 —— 解析在数据层（parseNetease）。 */
-            '<label class="radio-field"><span>网易云链接或 id *</span>' +
-              '<input type="text" data-radio-field="url" inputmode="url" spellcheck="false"' +
-                ' placeholder="歌曲页 / 歌单页 / 裸 id，例如 2003621098 或 2867512990"></label>' +
-            '<label class="radio-field"><span>类型</span>' +
-              '<select data-radio-field="kind" class="radio-select">' +
-                '<option value="auto">自动识别（推荐）</option>' +
-                '<option value="song">单曲</option>' +
-                '<option value="playlist">歌单</option>' +
-              '</select></label>' +
-            '<div class="radio-form-ops">' +
-              '<button type="button" class="btn btn-sm" data-radio-act="cancel-add">取消</button>' +
-              '<button type="button" class="btn btn-sm btn-cyan" data-radio-act="submit-add">加入频段</button>' +
-            '</div>' +
-            '<div class="radio-form-msg" data-radio-msg hidden></div>' +
-          '</div>' : '') +
-        '<div class="radio-hint">' +
-          (canManage
-            ? /* v5.0.0：整站电台就是**网易云官方外链播放器** —— 音乐由网易云提供与播放，
-                 本站只存"哪一首/哪个歌单"。卡片里写清这一点，省得来人以为是自建播放器。 */
-              '提示：本站电台使用 <b>网易云音乐官方外链播放器</b>（单曲 66px / 歌单 430px），' +
-              '所有访客都能直接收听；播放与版权由网易云处理。'
-            : '提示：点条目即可收听。') +
-        '</div>' +
-      '</div>';
-  }
 
   /* ---------- v5.1.0：电台页面 ----------
      播放器本体**不在这里** —— 它在 #app 之外的 #radio-stage（常驻控制台），
@@ -1702,10 +1471,6 @@
     SITE_BORN: SITE_BORN,
     radioView: radioView,
     tagAdminView: tagAdminView,
-    /* v2.8.0：电台 */
-    radioDockView: radioDockView,
-    radioPanelView: radioPanelView,
-    R_ICON: R_ICON,
     aboutView: aboutView,
     loginView: loginView,
     adminView: adminView,

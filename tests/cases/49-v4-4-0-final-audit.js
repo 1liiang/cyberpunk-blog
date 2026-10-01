@@ -220,22 +220,87 @@ async function run() {
     var handover = '';
     try { handover = fs.readFileSync(path.join(ROOT, 'HANDOVER.md'), 'utf8'); } catch (e) { handover = ''; }
 
-    T(CN, 'R243 HANDOVER 已更新到 5.6.0（版本 / 门禁数 / 新文件树 / 新坑块）',
+    T(CN, 'R243 HANDOVER 已更新到 5.7.1（版本 / 门禁数 / 新文件树 / 新坑块）',
       /* ⚠ 版本号要钉**头部那一行**的格式：文件别处（如第 9/10 节注记）也会有 "v4.x.x"
          字样 —— 只查"全文出现过"会让"头部版本没改"的变异假绿（反向验证实锤）。
-         ⚠ v4.8.0 迁移时同步改这里（Supabase 迁移 + 门禁 1106 → 1135）——
-           文档更新后不同步断言，就会像这次一样在门禁上当场报红。 */
-      /\*\*版本\*\*：v5\.6\.0/.test(handover) &&
-      /1155\/1155/.test(handover) &&
+         ⚠ 每次 bump 都要同步改这里（v4.8.0 门禁 1106→1135、v5.6.1 1194→1157、
+            v5.6.2 1157→1153、v5.6.3 1153→1125、v5.6.5 1125→1127、v5.7.0 1127→1156、v5.7.1 保持）—— 文档更新后不同步断言，就会像这次一样在门禁上当场报红。
+           这条断言故意把"版本"与"门禁数"绑在一起：断言总数一变就必须回头改文档。 */
+      /* ⚠ 正则写成 [*][*] 而不是反斜杠星号星号：两个星号紧跟斜杠会**提前闭合注释**，
+         实测把整个文件带成语法错误、报错行还指向 20 行之外（很难查）。
+         这条注释本身也刻意不写出那两个字符的连写。 */
+      /[*][*]版本[*][*]：v5\.7\.1/.test(handover) &&
+      /1156\/1156/.test(handover) &&
       /scene\.js/.test(handover) && /console\.js/.test(handover) &&
       /4\.0 时代的新坑/.test(handover),
       handover ? '缺项或头部版本未更新' : 'HANDOVER 缺失');
 
-    var plan = '';
-    try { plan = fs.readFileSync(path.join(ROOT, 'docs/archive/4.0-改版方案.md'), 'utf8'); } catch (e) { plan = ''; }
-    T(CN, 'R243b 4.0 方案文件在位且含五批定义（B1~B5）',
-      /B1 · 地基重铸/.test(plan) && /B4 · 控制台/.test(plan) && /B5 · 终审/.test(plan),
-      plan ? '方案完整' : '方案文件缺失');
+    /* v5.6.3 改判：原先这条读 `docs/archive/4.0-改版方案.md` 并断言里面写着 B1~B5。
+       那份归档（15 份历史方案/报告，290KB）已按"只留当前需要的"整体删除，
+       于是改判为**守现在真正的记录处**：HANDOVER 的 4.0 完成注记里必须仍然
+       写清五个批次（B1 地基重铸 → B5 终审）—— 那是接手者能查到的唯一出处。 */
+    T(CN, 'R243b 4.0 五批定义仍记在 HANDOVER（归档方案已删，记录不能跟着丢）',
+      /B1 地基重铸/.test(handover) && /B4 控制台/.test(handover) && /B5 终审/.test(handover),
+      handover ? '五批注记在位' : 'HANDOVER 缺失');
+  }
+
+  /* ================= ⑤ CSS 结构性守卫（v5.6.3 新增） =================
+     为什么单独立一条：清代码时"只删到第一个 }"是**最隐蔽**的删法 —— 剩下的半截
+     规则浏览器会静默忽略，**所有既有断言照样全绿**（它们只查"某条规则在不在"）。
+     本轮实测两次：v3.6.0 删氛围层留下一个孤儿 `}`；v5.6.2 删 @keyframes radio-pulse
+     留下 `50% { … }` + `}` 两行。两次都让整份样式的括号配平长期差 1~2，没人发现。
+     这条守卫直接盯**结构本身**：括号必须配平，且顶层不许出现裸声明
+     （depth 0 处出现 `prop: value;` = 某条规则的壳被删了、身子留下了）。 */
+  {
+    const CN = 'v5.6.3 结构守卫';
+    const cssRaw = require('fs').readFileSync(require('path').join(ROOT, 'css/style.css'), 'utf8');
+    /* 逐字符扫描：跳过块注释与引号字符串，只统计代码区的花括号。
+       ⚠ 刻意**不用正则**剥注释 —— 这条守卫本身要检查的就是括号配平，
+         用正则处理「注释里出现花括号」这种情况反而容易把自己绕进去。 */
+    let depth = 0;
+    let firstBadLine = 0;
+    const orphans = [];
+    let line = 1;
+    let cur = '';
+    for (let i = 0; i < cssRaw.length; i++) {
+      const ch = cssRaw[i];
+      if (ch === '\n') {
+        /* 顶层出现 prop: value; ⇒ 孤儿声明（@ 开头的 at-rule 除外） */
+        const t = cur.trim();
+        if (depth === 0 && /^[a-z-]+\s*:\s*[^;{]+;$/i.test(t) && !/^@/.test(t)) {
+          orphans.push('行' + line + '：' + t.slice(0, 48));
+        }
+        cur = '';
+        line++;
+        continue;
+      }
+      if (ch === '/' && cssRaw[i + 1] === '*') {          /* 跳过块注释 */
+        const end = cssRaw.indexOf('*/', i + 2);
+        const stop = end === -1 ? cssRaw.length : end + 2;
+        for (let k = i; k < stop; k++) if (cssRaw[k] === '\n') line++;
+        i = stop - 1;
+        cur = '';
+        continue;
+      }
+      if (ch === '"' || ch === "'") {                     /* 跳过字符串 */
+        let k = i + 1;
+        while (k < cssRaw.length && cssRaw[k] !== ch) {
+          if (cssRaw[k] === '\\') k++;
+          k++;
+        }
+        i = k;
+        continue;
+      }
+      if (ch === '{') depth++;
+      else if (ch === '}') { depth--; if (depth < 0 && !firstBadLine) firstBadLine = line; }
+      cur += ch;
+    }
+    T(CN, 'R244 CSS 括号配平（删规则时只删到第一个 } 会留下孤儿片段）',
+      depth === 0 && firstBadLine === 0,
+      depth === 0 ? '配平' : ('depth=' + depth + (firstBadLine ? '，首次负深度在行 ' + firstBadLine : '')));
+    T(CN, 'R244b CSS 顶层无孤儿声明（规则的壳被删掉、身子留下）',
+      orphans.length === 0,
+      orphans.length ? orphans.join(' | ') : '干净');
   }
 
   return { pass: results.filter(function (r) { return r.pass; }).length,

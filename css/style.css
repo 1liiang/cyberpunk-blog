@@ -2472,9 +2472,10 @@ body {
 }
 
 /* v3.6.0：此段原在解释 body::before / body::after 两层氛围的作法，
-   两层已随氛围层整体移除，说明一并撤下（历史见 js/version.js 的 LOG）。 */
-
-}
+   两层已随氛围层整体移除，说明一并撤下（历史见 js/version.js 的 LOG）。
+   ⚠ v5.6.3：这里原还留着一个**孤儿 `}`** —— 删那两层时把规则体删了、右花括号漏了下来。
+   浏览器会静默忽略它，所以一直没人发现（全站的括号配平校验也因此长期是 -2）。
+   本次清理一并删除，现在整份样式的括号是配平的。 */
 
 /* ---------- 背景层：顶部环境光 + 角落辉光（v2.6.0 新增） ----------
    起因：用户反馈短内容页（搜索/标签/关于）「黑漆漆的，什么都没有」。
@@ -4164,7 +4165,6 @@ a:focus-visible { text-decoration: underline; }
    ============================================================ */
 @media print {
   /* ① 装饰层与背景 */
-  .grid-bg, .scanlines, .bg-noise,
   /* v4.9.3：搜索页的背景插画也不进纸 —— 深色霓虹图打印出来是一片灰污，
      而且它只是装饰（文字在 .search-hero-inner 里，照常打印）。 */
   /* v5.2.0：常驻电台控制台也不进纸（它是屏幕专属的实体机器造型）。 */
@@ -4188,7 +4188,8 @@ a:focus-visible { text-decoration: underline; }
   .card-mark, .btn-mark, .trail-back,
   .nav-user, .theme-toggle, .theme-menu, .toast-wrap,
   .search-bar, .load-more-wrap, #btn-theme,
-  .radio-dock, .radio-panel, #radio-panel-host,
+   /* v5.6.2：旧电台迷你条/面板的隐藏项已删（容器 v5.2.0 就没了）。
+      常驻控制台的隐藏项在上面 ① 装饰层那组（.radio-console）。 */
   .uptime-hud, .hero-bg, .hero-scroll, .toc, .console-nav,
   .boot-screen, .district-line, .wordmark-echo {
     display: none !important;
@@ -4229,379 +4230,28 @@ a:focus-visible { text-decoration: underline; }
 }
 
 /* ============================================================
-   v2.8.0：电台（RADIO）播放器
+   v2.8.0 ~ v5.1.0：电台（RADIO）
    ------------------------------------------------------------
-   两块：
-     .radio-dock   页面左上角常驻迷你条（收起态）
-     .radio-panel  展开面板（曲目列表 + 控制 + 管理）
-
-   ⚠ 定位：dock 固定在 topbar 下方左侧。**必须避开 topbar 高度**，
-     否则会被顶栏盖住（topbar 是 fixed + 有 z-index）。
-
-   ⚠⚠ 与正文的关系：dock 是 fixed 浮层，会**压住页面标题**。
-      实测 1258px 视口：.wrap 居中后左边缘 x≈69、内边距 20 → 正文从 x≈89 起，
-      而 dock 占 x 16~257 → 横向重叠 168px（截图里页面标题只剩 "IG"）。
-      仅靠调 dock 位置无法根治（窄视口下 wrap 会吃满整宽）。
-      → 给主内容顶部**让出 dock 的高度**（见下方 body.has-radio 规则）。
-      只在电台确实有内容/可管理时才让位，空库访客不受影响。
+   ⚠ v5.6.2 清理（审计清单 ④）：v2.8.0 那套「迷你条 dock + 弹出面板」的样式
+   已整段删除 —— `.radio-dock*` / `.radio-panel*` / `.radio-track*` /
+   `.radio-btn*` / `.radio-now*` / `.radio-seek` / `.radio-volume` / `.radio-bar` /
+   `.radio-time` / `.radio-ctrls` / `.radio-vol*` / `.radio-list*` / `.radio-empty*` /
+   `.radio-embed*` / `.radio-drop` / `.radio-hint` / `.radio-err` / `.radio-mark` /
+   `.radio-glyph` / `.radio-dock-arrow`，以及 `body.has-radio .wrap` 让位规则、
+   `@keyframes radio-pulse` / `radio-marquee`、reduce 块里为它们写的三条归零。
+   证据：这些类名在 views.js / app.js / index.html 里**零标记**（容器 v5.2.0 移除、
+   渲染函数 v5.6.1 删除），只剩 CSS 自己在引用自己。
+   ⚠ 还在用的两批，别误删：
+     · 电台页 → `.radio-page-tip` / `.radio-board` / `.radio-card*` / `.radio-compose`
+       / `.radio-field` / `.radio-select` / `.radio-src-head` / `.radio-form*` / `.radio-op*`
+     · 常驻控制台 → `.radio-console` / `.rc-*`（复古收音机那套，见下方 v5.1.0 段）
    ============================================================ */
 
-/* 让出左上空位：dock 底边 ≈ topbar(65) + 14 + 57 ≈ 136px，
-   正文起点原为 65 + 34 = 99px → padding-top 提到 84 可完全避让并留出间距。 */
-body.has-radio .wrap { padding-top: 84px; }
-
-/* ---------- 迷你条（左上角） ---------- */
-.radio-dock {
-  position: fixed;
-  left: 16px;
-  top: calc(var(--topbar-h, 64px) + 14px);
-  z-index: 60;               /* 高于内容，低于模态（模态用 200+） */
-  max-width: min(340px, calc(100vw - 32px));
-}
-.radio-dock[hidden] { display: none; }
-
-.radio-dock-inner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px 8px 8px;
-  background: color-mix(in srgb, var(--bg-1) 88%, transparent);
-  border: 1px solid var(--line);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  cursor: pointer;
-  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
-}
-.radio-dock-inner:hover {
-  border-color: var(--cyan);
-  box-shadow: var(--glow-cyan);
-}
-/* 播放中：左侧一条跳动的电平指示条，一眼看出"在响" */
-.radio-dock-inner.is-playing { border-color: color-mix(in srgb, var(--cyan) 55%, transparent); }
-.radio-dock-inner.is-playing::before {
-  content: "";
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 2px;
-  background: var(--cyan);
-  box-shadow: var(--glow-cyan);
-  animation: radio-pulse 1.1s ease-in-out infinite;
-}
-.radio-dock-inner { position: relative; }
-.radio-dock-inner.has-error { border-color: color-mix(in srgb, var(--magenta) 55%, transparent); }
-
-/* v2.9.6 跑马灯光效（hover 覆盖）：
-   一道斜向光带从 dock 左侧跑入、右侧跑出，循环往复 —— 剧场跑马灯的"扫场"语言。
-   实现要点：
-     · ::after（::before 已被电平脉冲占用），inset:0 让光带被 dock 自己的
-       clip-path 裁掉，光效精确"覆盖"在 dock 形状内，不会溢到页面上
-     · skewX 制造速度感，translateX 用百分比（相对自身宽度）跑全程
-     · 颜色走 color-mix(var(--cyan))，三个主题档都落在压暗后的同色系
-     · transition 只管淡入淡出（避免悬停瞬间闪现），跑动交给 animation；
-       而 animation 的裸时长不在 R66m 管辖内（它只扫 transition），
-       因此必须在下方 reduce 块里【显式】关掉，不能指望 * 通配兜底
-   ⚠ 只给 dock，不给展开面板 —— 面板是要读列表的界面，
-     常驻扫光会持续干扰阅读；dock 是一眼扫过的状态条，才压得住这个动效。 */
-.radio-dock-inner::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: linear-gradient(105deg,
-    transparent 0%,
-    color-mix(in srgb, var(--cyan) 16%, transparent) 42%,
-    color-mix(in srgb, var(--cyan) 34%, transparent) 50%,
-    color-mix(in srgb, var(--cyan) 16%, transparent) 58%,
-    transparent 100%);
-  transform: translateX(-110%) skewX(-18deg);
-  opacity: 0;
-  transition: opacity var(--t-fast) ease;
-}
-@media (hover: hover) {
-  .radio-dock-inner:hover::after {
-    opacity: 1;
-    animation: radio-marquee 1.9s linear infinite;
-  }
-}
-@keyframes radio-marquee {
-  from { transform: translateX(-110%) skewX(-18deg); }
-  to   { transform: translateX(210%) skewX(-18deg); }
-}
-
-.radio-dock-info { min-width: 0; flex: 1; }
-.radio-dock-title {
-  font-family: var(--mono);
-  font-size: 12px;
-  color: var(--text-bright);
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;   /* 长曲名截断，不撑破 dock */
-}
-.radio-mark { color: var(--cyan); }
-.radio-dock-sub {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.radio-err { color: var(--yellow); }
-.radio-dock-arrow { color: var(--text-dim); font-size: 13px; }
-
-/* ---------- 通用按钮 ---------- */
-.radio-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 auto;
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--text);
-  font-size: 12px;
-  line-height: 1;
-  cursor: pointer;
-  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
-}
-.radio-btn:hover { color: var(--cyan); border-color: var(--cyan); }
-.radio-btn:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
-.radio-btn.is-on { color: var(--cyan); border-color: color-mix(in srgb, var(--cyan) 60%, transparent); }
-.radio-btn-play {
-  border-color: color-mix(in srgb, var(--cyan) 45%, transparent);
-  color: var(--cyan);
-}
-.radio-btn-lg { width: 44px; height: 44px; font-size: 15px; }
-.radio-glyph { font-size: 11px; }
-
-/* ---------- 展开面板 ---------- */
-.radio-panel {
-  position: fixed;
-  left: 16px;
-  top: calc(var(--topbar-h, 64px) + 14px);
-  z-index: 70;
-  width: min(360px, calc(100vw - 32px));
-  max-height: calc(100vh - var(--topbar-h, 64px) - 40px);
-  overflow-y: auto;
-  overscroll-behavior: contain;   /* 滚到边界不穿透到页面 */
-  padding: 14px;
-  background: color-mix(in srgb, var(--bg-1) 96%, transparent);
-  border: 1px solid var(--line-strong);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 18px 50px var(--shadow-strong);
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
-}
-
-.radio-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
-}
-.radio-panel-title {
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 2px;
-  color: var(--cyan);
-  text-shadow: var(--glow-cyan);
-}
-
-/* 当前曲目信息 */
-.radio-now { display: flex; gap: 12px; margin-bottom: 12px; }
-.radio-now-cover {
-  width: 72px;
-  height: 72px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 26px;
-  color: color-mix(in srgb, var(--cyan) 60%, transparent);
-  background: var(--bg-3);
-  background-size: cover;
-  background-position: center;
-  border: 1px solid var(--line);
-}
-.radio-now-meta { min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 3px; }
-.radio-now-title {
-  font-size: 14px;
-  color: var(--text-bright);
-  line-height: 1.3;
-  /* 曲名最多两行，超出截断 */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-.radio-now-artist { font-family: var(--mono); font-size: 11px; color: var(--text); }
-.radio-now-album { font-family: var(--mono); font-size: 10px; color: var(--text-dim); letter-spacing: 1px; }
-
-/* 进度条 */
-.radio-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.radio-time { font-family: var(--mono); font-size: 10px; color: var(--text-dim); min-width: 38px; }
-.radio-time:last-child { text-align: right; }
-
-/* range 轨道统一美化（seek / volume 共用） */
-.radio-seek, .radio-volume {
-  -webkit-appearance: none;
-  appearance: none;
-  flex: 1;
-  height: 4px;
-  background: color-mix(in srgb, var(--line) 100%, transparent);
-  cursor: pointer;
-  min-width: 0;   /* flex 子项默认 min-width:auto 会撑破容器 */
-}
-.radio-seek::-webkit-slider-thumb,
-.radio-volume::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 12px;
-  height: 12px;
-  background: var(--cyan);
-  box-shadow: var(--glow-cyan);
-  cursor: pointer;
-}
-.radio-seek::-moz-range-thumb,
-.radio-volume::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
-  border: none;
-  border-radius: 0;
-  background: var(--cyan);
-  cursor: pointer;
-}
-
-/* 控制按钮组 */
-.radio-ctrls {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-/* 音量 */
-.radio-vol { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
-.radio-vol-num {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  min-width: 34px;
-  text-align: right;
-}
-
-/* 曲目列表 */
-.radio-list-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 6px;
-}
-.radio-list { list-style: none; margin: 0; padding: 0; }
-.radio-track {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 4px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 40%, transparent);
-}
-.radio-track:last-child { border-bottom: none; }
-.radio-track.is-current { background: color-mix(in srgb, var(--cyan) 7%, transparent); }
-.radio-track-play {
-  width: 26px;
-  height: 26px;
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--text-dim);
-  font-size: 10px;
-  cursor: pointer;
-  transition: color var(--t-fast), border-color var(--t-fast);
-}
-.radio-track-play:hover { color: var(--cyan); border-color: var(--cyan); }
-.radio-track.is-current .radio-track-play { color: var(--cyan); border-color: var(--cyan); }
-/* v2.9.0：旧版（云存储时代）上传的记录没有音频本体（has_data=false）——
-   明确禁用并说明原因，而不是给一个"点了报错"的按钮。
-   ⚠ 禁用态必须一并压掉 hover 高亮，否则看起来仍然像能点。 */
-.radio-track.is-dead .radio-track-play,
-.radio-track.is-dead .radio-track-play:hover {
-  opacity: 0.35;
-  cursor: not-allowed;
-  color: var(--text-dim);
-  border-color: var(--line);
-}
-.radio-track-warn {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--magenta);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.radio-track-info { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
-.radio-track-title {
-  font-size: 12px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.radio-track.is-current .radio-track-title { color: var(--cyan); }
-.radio-track-artist {
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.radio-track-dur { font-family: var(--mono); font-size: 10px; color: var(--text-dim); flex: 0 0 auto; }
-.radio-track-ops { display: flex; gap: 3px; flex: 0 0 auto; }
-.radio-op {
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-dim);
-  font-size: 10px;
-  cursor: pointer;
-  transition: color var(--t-fast), border-color var(--t-fast);
-}
-.radio-op:hover { color: var(--cyan); border-color: var(--line); }
-.radio-op-del:hover { color: var(--magenta); border-color: color-mix(in srgb, var(--magenta) 50%, transparent); }
-
-/* 空态 */
-.radio-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 22px 10px;
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-dim);
-  text-align: center;
-  letter-spacing: 1px;
-}
-.radio-empty-glyph { font-size: 22px; color: color-mix(in srgb, var(--cyan) 45%, transparent); }
-.radio-empty-hint { font-size: 10px; opacity: 0.75; }
+/* ---------- 条目表单（v5.0.0 起） ----------
+   ⚠ 下面这几个类是**电台页**新增条目表单在用的（views.js 的 radioView /
+     data-radio-compose）：.radio-form / .radio-form-msg / .radio-form-ops / .radio-field。
+   ⚠ v5.6.2 清理：.radio-embed*（旧面板里摆官方 iframe 的那套）已删 ——
+     现在 iframe 摆在常驻控制台里，走 .rc-frame / .rc-fallback（见下方 v5.1.0 段）。 */
 
 /* 上传表单 */
 .radio-form {
@@ -4614,31 +4264,6 @@ body.has-radio .wrap { padding-top: 84px; }
   gap: 9px;
 }
 .radio-form[hidden] { display: none; }
-/* v4.9.9：网易云官方外链播放器（iframe）。它自带完整控件与品牌，
-   所以这里只负责"摆正、给个说明" —— 不加滤镜、不改它的颜色，
-   那是人家的播放器（改样式既做不到，也不合适）。 */
-.radio-embed { margin: 10px 0 4px; }
-.radio-embed-hint {
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  margin-bottom: 6px;
-}
-.radio-embed-frame { display: block; border: 1px solid var(--line); background: #000; max-width: 100%; }
-.radio-embed-fallback {
-  display: inline-block;
-  margin-top: 6px;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 1px;
-  color: var(--text-dim);
-  text-decoration: none;
-  border-bottom: 1px dotted currentColor;
-}
-.radio-embed-fallback:hover { color: var(--cyan); }
-
-/* ============================================================
    v5.1.0：电台常驻控制台（复古收音机）+ 电台页
    样式参考 GitHub/Codeberg 上那批复古播放器（kitsune、Junk Phonic 9000、cliamp）：
    木纹外壳 + 金属面板 + 调谐刻度 + VU 电平表 + 旋钮，再叠本站霓虹点缀。
@@ -4760,8 +4385,7 @@ body.has-radio .wrap { padding-top: 84px; }
 }
 .radio-select:focus { outline: none; border-color: var(--cyan); }
 /* 电台页底部要给固定控制台留出空间，否则最后一条被盖住 */
-body.has-radio .radio-page-tip ~ * { scroll-margin-bottom: 200px; }
-.radio-console[data-mode="full"] ~ #app, #app.radio-open { padding-bottom: 240px; }
+.radio-console[data-mode="full"] ~ #app { padding-bottom: 240px; }
 
 /* reduce 块：控制台的装饰动画也归零（本文件末尾的 reduce 块会兜住动画，
    这里只处理 VU/指针那两个无限循环） */
@@ -4810,35 +4434,59 @@ body.has-radio .radio-page-tip ~ * { scroll-margin-bottom: 200px; }
   line-height: 1.5;
 }
 .radio-form-msg[hidden] { display: none; }
-.radio-hint {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px solid color-mix(in srgb, var(--line) 50%, transparent);
-  font-family: var(--mono);
-  font-size: 10px;
-  color: var(--text-dim);
-  line-height: 1.6;
-  letter-spacing: 0.5px;
-}
 
-/* 拖拽上传提示 */
-.radio-drop {
-  margin-top: 8px;
-  padding: 14px;
-  border: 1px dashed var(--cyan);
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--cyan);
-  text-align: center;
-  letter-spacing: 1px;
-}
-.radio-drop[hidden] { display: none; }
+/* ⚠ v5.6.3：这里原是 @keyframes radio-pulse（旧迷你条的电平脉冲）。
+   v5.6.2 删它时只删到第一个 `}`，把后半个 keyframe（`50% { … }` + 收尾 `}`）
+   落成了孤儿片段 —— 浏览器会静默忽略，但整份样式的括号配平因此一直差 1。
+   本次清理删净；门禁里也加了「CSS 结构性守卫」（见 49 号）防止再犯。 */
 
-/* 播放中的电平脉冲 */
-@keyframes radio-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.35; }
+/* ============================================================
+   v5.7.0（P2）：低端设备档 —— html[data-tier="low"]
+
+   起因（实测取证）：全站 64 条规则用了 box-shadow / filter:blur / backdrop-filter，
+   其中 35 条**常驻**（每帧都在付）。高端显卡无感，集显/老机器上就是拖帧主因 ——
+   赛博朋克的毛玻璃与霓虹光晕很费 GPU，这是美术代价，不是 bug。所以不删效果，
+   而是**按设备降一档**：低端机少付毛玻璃与重阴影，观感仍成立。
+
+   判定与写入在 js/theme-boot.js 的 isLowEnd()（首绘前写 data-tier，避免先卡后救）；
+   js/scene.js 的 trimForTier() 同步把最重的三层氛围（rain/stardust/signs）也去掉。
+
+   ⚠ 这里只覆盖「常驻 + 最贵」的那几类，**不动颜色与布局** ——
+     data-tier 是性能档，不是主题档；换肤、亮色档、色相都照旧生效。
+   ⚠ 也**不覆盖 reduce 块的既有归零**：那套是"尊重前庭偏好"，与本档位无关，
+     两边都命中时互不冲突（都是把效果归零/减弱，取更严的那个即可）。
+   ============================================================ */
+html[data-tier="low"] .topbar,
+html[data-tier="low"] .console-panel,
+html[data-tier="low"] .search-bar,
+html[data-tier="low"] .kbd-help,
+html[data-tier="low"] .modal {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
 }
+/* 常驻底栏与浮层仍要有"面"，去掉模糊后给一层更实的底色，避免文字糊在内容上 */
+html[data-tier="low"] .topbar,
+html[data-tier="low"] .modal {
+  background: var(--bg-1) !important;
+}
+/* 卡片的双色内发光（v2.9.5 的 9 层 inset 阴影）在 hover 时最贵 ——
+   低端机保留位移与边框反馈，只把多层阴影压成一条 1px 描边 */
+html[data-tier="low"] .post-card:hover,
+html[data-tier="low"] .tag-chip:hover,
+html[data-tier="low"] .tag-cloud .tag-item:hover {
+  box-shadow: none !important;
+}
+html[data-tier="low"] .toast,
+html[data-tier="low"] .md-body pre {
+  box-shadow: none !important;
+}
+/* 数字雨在低端机上已由 JS 去掉；这里再兜一层：即便被手动打开，也把它的
+   合成提示关掉（will-change 会让每列长期占一个合成层） */
+html[data-tier="low"] .atmo-layer[data-layer="rain"],
+html[data-tier="low"] .atmo-layer[data-layer="stardust"] {
+  will-change: auto !important;
+}
+/* 本档位规则到此结束（上面这段是 v5.7.0 P2 新增） */
 
 /* ============================================================
    v4.0 B1：氛围系统（Atmosphere）—— 出厂「光污染」
@@ -5623,13 +5271,11 @@ body:not(.linenum-off) .md-body > pre::before {
 
   /* 毛玻璃背景在滚动时每帧重算模糊，低端设备上是最容易掉帧的一项。
      覆盖 C9/C10 新增的浮层（帮助面板也是 backdrop-filter）。
-     v2.8.0：电台 dock 与面板同样用了 backdrop-filter，一并登记。 */
+     ⚠ v5.6.2：这里原先是 `.topbar, .kbd-help, .radio-dock-inner, .radio-panel` ——
+       电台那两项随审计清单 ④ 删除（旧浮层早没了）。电台现在的常驻控制台是
+       **不透明木纹外壳**，本来就没有 backdrop-filter，所以无需登记。 */
   .topbar,
-  .kbd-help,
-  .radio-dock-inner, .radio-panel { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
-
-  /* v2.8.0：电台的电平脉冲 —— 装饰性动效，直接关闭。 */
-  .radio-dock-inner.is-playing::before { animation: none !important; }
+  .kbd-help { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 
   /* v2.9.4：主题罗盘的三层虚线环 —— 纯装饰自转，停转。
      ⚠ 只能关动画，不能 display:none：这三层环同时是"当前档位"的指示物，
@@ -5645,12 +5291,6 @@ body:not(.linenum-off) .md-body > pre::before {
      当前预算为 0，多一行非单行规则就会把"减少动效"顶爆。 */
   .search-field:focus-within::before { animation: none !important; opacity: 0.5; }
 
-  /* v2.9.6：电台 dock 的跑马灯光效 —— 纯装饰且只在 hover 时出现，
-     减少动效下直接不渲染（它不承担任何信息职责，与光晕不同）。
-     ⚠ 1.9s 是裸时长写在 animation 里，R66m 只扫 transition、R72k 只认 --t-*，
-       谁都不会替我关掉它 —— 必须在这里显式写。
-     ⚠ 单行写法：R112e 数的是「reduce 块内不含 } 的行」，当前预算仍为 0。 */
-  .radio-dock-inner:hover::after { animation: none !important; opacity: 0 !important; }
 
   /* v2.9.8：ABOUT 在线时长 HUD 的两处动效 —— 电流弧停跑、LIVE 点停闪。
      LIVE 点虽小，steps(1) 的高频明暗切换对光敏人群同样是风险项。
@@ -5705,7 +5345,7 @@ body:not(.linenum-off) .md-body > pre::before {
   .holo-radar i { opacity: .6 !important; }
   .holo-bars i { height: 40% !important; }
   /* v5.4.0：首页全息面板的扫描线 / 故障字错位 / 呼吸灯一律归零 */
-  .holo-panel::after, .holo-uptime.glitch::before, .holo-uptime.glitch::after, .holo-live i { animation: none !important; }
+  .holo-uptime.glitch::before, .holo-uptime.glitch::after { animation: none !important; }
   .holo-card { transform: none !important; }
   /* v5.1.0：控制台的两个无限循环装饰动画（指针扫频 / VU 电平） */
   .rc-tune-needle, .rc-vu i { animation: none !important; }
@@ -5733,78 +5373,6 @@ body:not(.linenum-off) .md-body > pre::before {
   gap: 18px;
   margin: 0 0 26px;
 }
-
-/* ---------- 左：全息面板 ---------- */
-.holo-panel {
-  position: relative;
-  overflow: hidden;
-  border: 1px solid rgba(122, 92, 255, .45);
-  background:
-    radial-gradient(120% 120% at 0% 0%, rgba(122, 92, 255, .18), transparent 55%),
-    radial-gradient(120% 120% at 100% 100%, rgba(255, 42, 190, .16), transparent 55%),
-    linear-gradient(180deg, #0a0a18, #05050f);
-  padding: 18px 20px 20px;
-}
-/* 全息网格：纯 CSS 两层重复渐变，比 SVG 便宜 */
-.holo-panel::before {
-  content: '';
-  position: absolute; inset: 0;
-  background:
-    repeating-linear-gradient(0deg, rgba(140, 120, 255, .10) 0 1px, transparent 1px 26px),
-    repeating-linear-gradient(90deg, rgba(140, 120, 255, .10) 0 1px, transparent 1px 26px);
-  pointer-events: none;
-}
-/* 扫描线：一条缓慢下移的亮带 */
-.holo-panel::after {
-  content: '';
-  position: absolute; left: 0; right: 0; height: 34%;
-  background: linear-gradient(180deg, transparent, rgba(120, 240, 255, .07) 55%, transparent);
-  animation: holo-scan 7s linear infinite;
-  pointer-events: none;
-}
-@keyframes holo-scan { 0% { top: -34%; } 100% { top: 100%; } }
-.holo-head {
-  position: relative;
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  font: 11px/1 var(--mono); letter-spacing: 3px; color: #9f8cff;
-}
-.holo-live { display: inline-flex; align-items: center; gap: 6px; color: #45ffb0; letter-spacing: 1px; }
-.holo-live i { width: 7px; height: 7px; border-radius: 50%; background: #45ffb0; box-shadow: 0 0 10px #45ffb0; animation: holo-blink 2.4s ease-in-out infinite; }
-@keyframes holo-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
-
-/* 大字读数：故障字（glitch）技法来自 cyberpunk-css —— 双份伪元素错位 + 青/洋红分离 */
-.holo-uptime {
-  position: relative;
-  margin: 14px 0 4px;
-  font-family: var(--mono);
-  font-size: clamp(30px, 5.4vw, 54px);
-  font-weight: 700;
-  letter-spacing: 2px;
-  color: #eafcff;
-  text-shadow: 0 0 18px rgba(120, 240, 255, .55), 0 0 46px rgba(122, 92, 255, .35);
-}
-.holo-uptime.glitch::before, .holo-uptime.glitch::after {
-  content: attr(data-text);
-  position: absolute; left: 0; top: 0; width: 100%;
-  pointer-events: none;
-}
-.holo-uptime.glitch::before { color: #00f0ff; transform: translate(-2px, 1px); opacity: .8; animation: holo-glitch-a 3.6s steps(2, end) infinite; }
-.holo-uptime.glitch::after { color: #ff2abe; transform: translate(2px, -1px); opacity: .7; animation: holo-glitch-b 4.2s steps(2, end) infinite; }
-@keyframes holo-glitch-a { 0%, 92%, 100% { clip-path: inset(0 0 0 0); } 93% { clip-path: inset(12% 0 62% 0); } 96% { clip-path: inset(58% 0 18% 0); } }
-@keyframes holo-glitch-b { 0%, 90%, 100% { clip-path: inset(0 0 0 0); } 91% { clip-path: inset(70% 0 8% 0); } 95% { clip-path: inset(24% 0 46% 0); } }
-
-/* 四格读数：天/时/分/秒 */
-.holo-grid { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0 12px; }
-.holo-cell {
-  border: 1px solid rgba(122, 92, 255, .30);
-  background: rgba(10, 10, 26, .6);
-  padding: 9px 10px 10px;
-  text-align: center;
-}
-.holo-cell span { display: block; font: 10px/1 var(--mono); letter-spacing: 2px; color: #8d86b8; margin-bottom: 6px; }
-.holo-cell b { font-family: var(--mono); font-size: clamp(18px, 2.6vw, 26px); font-weight: 700; color: #cbb8ff; text-shadow: 0 0 14px rgba(122, 92, 255, .6); }
-.holo-cell.is-sec b { color: #ffd166; text-shadow: 0 0 14px rgba(255, 209, 102, .6); }
-.holo-foot { position: relative; font: 11px/1.6 var(--mono); color: #7e78a8; letter-spacing: 1px; }
 
 /* ---------- 右：身份卡（全息倾斜） ---------- */
 .holo-card {

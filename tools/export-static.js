@@ -18,9 +18,14 @@
 
    产出
    ------------------------------------------------------------
-     data/posts.json          已发布文章全文 + 图片索引 + 电台元数据
+     data/posts.json          已发布文章全文 + 图片索引 + 电台条目元数据
      data/images/<id>.<ext>   被文章引用到的图片（原图）
-     data/radio/<id>.<ext>    电台音频（文件落地，不进 JSON）
+
+   ⚠ v5.6.2（审计清单 D）：**电台音频不再落地** —— 曲目改成网易云条目后，
+     播放地址是行里的 `source_url`（官方 outchain 播放器 iframe），站点侧没有音频本体。
+     原来那套 base64 解码 + `data/radio/<id>.<ext>` + `--force-audio` 增量逻辑
+     已整块删除；`data/radio/` 目录与清理逻辑也一并去掉
+     （2026-09-30 站长已决定"不做歌曲部分"，3 首商业歌曲与其音频早已移出仓库）。
 
    设计取舍
    ------------------------------------------------------------
@@ -46,7 +51,6 @@ const ROOT = path.join(__dirname, '..');
 const CLOUD_JS = path.join(ROOT, 'js', 'cloud.js');
 const DATA_DIR = path.join(ROOT, 'data');
 const IMG_DIR = path.join(DATA_DIR, 'images');
-const RADIO_DIR = path.join(DATA_DIR, 'radio');
 
 const DRY = process.argv.includes('--dry-run');
 
@@ -63,8 +67,6 @@ const { endpoint: ENDPOINT, key: KEY } = readCloudConfig();
 /* Supabase 的 PostgREST 数据面。查询串语法与旧平台同源（都是 PostgREST），
    所以 ?select= / eq. / order= / limit= 这些一律照旧 —— 换的只是前缀与鉴权头。 */
 const REST = ENDPOINT + '/rest/v1';
-
-const FORCE_AUDIO = process.argv.includes('--force-audio');
 
 async function rest(pathAndQuery) {
   const res = await fetch(REST + pathAndQuery, {
@@ -86,10 +88,6 @@ async function rest(pathAndQuery) {
   return data;
 }
 
-function localFileSize(p) {
-  try { return fs.statSync(p).size; } catch (e) { return -1; }
-}
-
 /* 从文章正文与封面里抠出所有 cloudimg://N 引用 */
 const CLOUDIMG_RE = /cloudimg:\/\/(\d+)/g;
 function collectImageIds(posts) {
@@ -107,19 +105,12 @@ function collectImageIds(posts) {
 
 const EXT_BY_MIME = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' };
 
-/* v4.7.0：电台音频。与图片不同，音频**必须以文件形式落地** ——
-   云端存的是十几 MB 的 base64 data URL，塞进 posts.json 会让快照变成
-   一个 30MB 的 JSON（浏览器解析都费劲）。落成同源文件后，
-   playUrl 直接返回 `data/radio/4.mp3`，播放器照播，快照本体还是几十 KB。 */
-const AUDIO_EXT_BY_MIME = {
-  'audio/mpeg': 'mp3', 'audio/mp3': 'mp3', 'audio/mp4': 'm4a', 'audio/x-m4a': 'm4a',
-  'audio/aac': 'aac', 'audio/ogg': 'ogg', 'audio/opus': 'opus', 'audio/wav': 'wav',
-  'audio/x-wav': 'wav', 'audio/flac': 'flac', 'audio/x-flac': 'flac', 'audio/webm': 'webm'
-};
-
-/* 曲目列表字段（与 js/cloud.js 的 RADIO_FIELDS 同口径，但**不含 data** ——
-   正文级大字段绝不进列表，这是云端版本就定下的纪律） */
-const RADIO_FIELDS = 'id,title,artist,album,mime,duration_sec,size_bytes,sort_order,cover_url,has_data,created_at';
+/* 电台条目字段（与 js/cloud.js 的 RADIO_FIELDS **同口径** —— 两边不一致时，
+   快照里的条目就缺字段、界面渲染不出播放器形态）。
+   ⚠ v5.6.2：旧的音频字段（data / mime / duration_sec / size_bytes / cover_url /
+     has_data 与 album）都已从库与服务端删除，这里若继续 select 会整轮导出失败
+     （42703 未定义列）—— 这正是审计清单 D 要修的东西。 */
+const RADIO_FIELDS = 'id,title,artist,kind,netease_id,source_url,sort_order,created_at';
 
 /* 快照里**不该带**的字段：owner_id 只在登录后的编辑鉴权里用
    （app.js 的 "这条信号不属于你" 判断），公开渲染一律走 owner_name。
@@ -208,73 +199,28 @@ async function main() {
       (row.width && row.height ? row.width + 'x' + row.height : '尺寸未知'));
   }
 
-  /* ③ 电台：元数据全量 + 音频本体逐首落地。
-     ⚠ 音频**逐首单独拉**（select 只带 data）—— 一次性 select * 会把
-       27MB 全部读进内存再序列化；逐首拉既能控内存，也方便跳过无数据的旧行。 */
+  /* ③ 电台：**只导条目元数据**（v5.6.2 重写，审计清单 D）。
+     ⚠ 旧的音频落地那套（逐首拉 base64 → 剥前缀解码 → 写 data/radio/<id>.<ext>，
+       以及靠「本地同尺寸就跳过下载」省额度的增量逻辑）已整块删除：
+       v5 的条目播放地址就是行里的 source_url（网易云官方 outchain iframe），
+       站点侧没有音频本体可落地 —— 原实现还 select 了 data/mime/size_bytes/has_data
+       这些**服务端已删除的列**，一旦真去查询会整轮导不出快照。
+     ⚠ 条目必须**照原字段导出**（含 kind / netease_id / source_url）——
+       它们在云端不可达时是电台页与常驻控制台的唯一数据来源。 */
   const radioRows = await rest('/public_radio?select=' + RADIO_FIELDS +
     '&order=sort_order.asc,id.asc&limit=200');
-  const radio = [];
-  const radioFiles = [];
-  if (Array.isArray(radioRows) && radioRows.length) {
-    console.log('\n  电台  ' + radioRows.length + ' 首：');
-    for (const row of radioRows) {
-      const item = Object.assign({}, row);
-      if (row.has_data) {
-        const ext = AUDIO_EXT_BY_MIME[String(row.mime || '').toLowerCase()];
-        const file = ext ? 'radio/' + row.id + '.' + ext : null;
-        const localPath = file ? path.join(DATA_DIR, file) : null;
-
-        /* ⚠ 增量拉取（迁移到 Supabase 后新加的一层，直接关系到免费额度）：
-           云端每次拉音频都是十几 MB，而 workflow 每 6 小时跑一次 ——
-           三首全量 = 48MB/轮 ≈ 5.8GB/月，**光同步就把 5GB/月的免费额度吃光**。
-           故：本地已有同名文件且字节数与云端 size_bytes 一致时，跳过下载。
-           （曲目被换成"尺寸恰好相同"的另一首歌才会漏判，概率极低；
-             真遇到时跑 `node tools/export-static.js --force-audio` 强制全量。） */
-        if (ext && !FORCE_AUDIO) {
-          const localSize = localFileSize(localPath);
-          if (localSize >= 0 && row.size_bytes && localSize === Number(row.size_bytes)) {
-            item.file = file;
-            /* 仍要把本地文件登记进 radioFiles：下面的"清理旧曲"是按
-               radioFiles 决定留谁，漏登记会把好好的文件当残留删掉。 */
-            radioFiles.push({ path: localPath, buf: fs.readFileSync(localPath) });
-            console.log('        #' + String(row.id).padEnd(4) + ' ' + String(row.title).slice(0, 24).padEnd(26) +
-              (localSize / 1048576).toFixed(1) + ' MB  （与云端同尺寸，跳过下载）');
-            radio.push(item);
-            continue;
-          }
-        }
-
-        const dr = await rest('/public_radio?select=id,data&id=eq.' + row.id + '&limit=1');
-        const drow = Array.isArray(dr) ? dr[0] : null;
-        if (drow && drow.data) {
-          if (!ext) {
-            console.warn('        ⚠ #' + row.id + ' MIME 不受支持（' + row.mime + '），只导元数据');
-          } else {
-            /* ⚠ 修复（2026-09-30，迁移包内）：drow.data 是 **data URL**
-               （`data:audio/mpeg;base64,…`），必须**先剥前缀再解码**——
-               直接 Buffer.from(dataUrl, 'base64') 会让前缀里的字母字符
-               （data / audio / mpeg / base64 都是 base64 合法字符）被一并解码，
-               凭空多出 15 字节前导垃圾（实测：旧版产出的全部 .mp3 都带 15B 垃圾，
-               ID3 魔数从偏移 0 漂到 15）。Chromium 解码器能容错（已实测可播），
-               但那是**非规范 MP3**，严格解码器/工具可能拒播或识别错误。 */
-            const b64 = String(drow.data).replace(/^data:[^,]*,/, '');
-            const buf = Buffer.from(b64, 'base64');
-            item.file = file;
-            radioFiles.push({ path: path.join(DATA_DIR, file), buf: buf });
-            console.log('        #' + String(row.id).padEnd(4) + ' ' + String(row.title).slice(0, 24).padEnd(26) +
-              (buf.length / 1048576).toFixed(1) + ' MB');
-          }
-        } else {
-          console.warn('        ⚠ #' + row.id + ' 标记 has_data 但取不到音频本体');
-        }
-      } else {
-        console.log('        #' + String(row.id).padEnd(4) + ' ' + String(row.title).slice(0, 24).padEnd(26) + '（无音频数据）');
-      }
-      radio.push(item);
-    }
+  const radio = Array.isArray(radioRows) ? radioRows : [];
+  if (radio.length) {
+    console.log('\n  电台  ' + radio.length + ' 条：');
+    radio.forEach(function (row) {
+      console.log('        #' + String(row.id).padEnd(4) + ' ' +
+        String(row.title || '').slice(0, 24).padEnd(26) +
+        (row.kind === 'playlist' ? '歌单 ' : '单曲 ') + String(row.netease_id || ''));
+    });
   } else {
-    console.log('\n  电台  （无曲目）');
+    console.log('\n  电台  （无条目）');
   }
+
 
   /* ④ 组装快照 */
   const snapshot = {
@@ -288,10 +234,9 @@ async function main() {
   const json = JSON.stringify(snapshot, null, 2);
 
   const totalImg = files.reduce(function (s, f) { return s + f.buf.length; }, 0);
-  const totalAud = radioFiles.reduce(function (s, f) { return s + f.buf.length; }, 0);
   console.log('\n  产出  data/posts.json  ' + (Buffer.byteLength(json) / 1024).toFixed(0) + ' KB');
   console.log('        data/images/     ' + files.length + ' 个文件  ' + (totalImg / 1024).toFixed(0) + ' KB');
-  console.log('        data/radio/      ' + radioFiles.length + ' 个文件  ' + (totalAud / 1048576).toFixed(1) + ' MB');
+  /* ⚠ v5.6.2：不再打印 data/radio/ 那行 —— 音频落地已取消（条目只存元数据） */
 
   if (DRY) {
     console.log('\n  --dry-run：未写入任何文件。\n');
@@ -299,8 +244,7 @@ async function main() {
   }
 
   fs.mkdirSync(IMG_DIR, { recursive: true });
-  fs.mkdirSync(RADIO_DIR, { recursive: true });
-  /* 先清掉旧图 —— 图片被文章取消引用后，残留文件会一直躺在仓库里 */
+  /* 清掉旧图 —— 图片被文章取消引用后，残留文件会一直躺在仓库里 */
   fs.readdirSync(IMG_DIR).forEach(function (f) {
     if (/^\d+\.(png|jpg|gif|webp)$/.test(f)) {
       const keep = files.some(function (x) { return path.basename(x.path) === f; });
@@ -310,19 +254,10 @@ async function main() {
       }
     }
   });
-  /* 电台同理：曲目被删后，27MB 的音频不该永远留在仓库里。
-     ⚠ 这条比图片更要紧 —— 音频单文件大，残留一个就是十几 MB。 */
-  fs.readdirSync(RADIO_DIR).forEach(function (f) {
-    if (/^\d+\.(mp3|m4a|aac|ogg|opus|wav|flac|webm)$/.test(f)) {
-      const keep = radioFiles.some(function (x) { return path.basename(x.path) === f; });
-      if (!keep) {
-        fs.unlinkSync(path.join(RADIO_DIR, f));
-        console.log('        清理旧曲 ' + f);
-      }
-    }
-  });
+  /* ⚠ v5.6.2：电台那条"清理旧曲"已删除（不再落地音频）。
+     若 data/radio/ 目录里还有历史残留文件，那是 2026-09-30 之前的东西，
+     **不要**在本脚本里顺手删 —— 删仓库文件是独立的一次性动作，不该藏在快照导出里。 */
   files.forEach(function (f) { fs.writeFileSync(f.path, f.buf); });
-  radioFiles.forEach(function (f) { fs.writeFileSync(f.path, f.buf); });
   const snapChanged = writeSnapshotIfChanged(path.join(DATA_DIR, 'posts.json'), snapshot);
   console.log(snapChanged
     ? '  快照有实质变化 → 已更新'

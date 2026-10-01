@@ -2,19 +2,21 @@ name: 同步静态快照
 
 # 为什么需要这个 workflow
 # ------------------------------------------------------------
-# GitHub Pages 读的是仓库里的 data/ 静态快照（见 README 的「两套部署」）。
-# 那个快照不会自己变 —— 云端数据库里发了新文章、加了新歌，
-# Pages 上不会知道。本 workflow 就是那座桥。
+# 站点内容存在 Supabase；Pages 读的也是 Supabase（v4.8.0 起 CSP 已放行 supabase 域，
+# 而 Supabase 不设 Origin 白名单 —— 所以浏览器**能**直连，这与旧平台不同）。
 #
-# ★ 为什么 GitHub 的服务器能读到云端，而 Pages 网页读不到：
-#   CORS 是**浏览器**才有的限制。云端点按 Origin 白名单放行，浏览器里
-#   跨源请求会被拒（*.github.io → 403）；但本 workflow 跑在 GitHub 的
-#   服务器上，用 Node 直接发起请求 —— 没有 Origin 这个头，也就没有那道闸。
-#   这是"让 Pages 成为对外主站"能成立的关键前提。
+# 那这个 workflow 还干什么？**维护那份兜底快照。**
+#   data/ 快照的职责从"Pages 唯一的内容来源"退化为"云端不可达时的兜底"：
+#   免费档长期无请求会被暂停、额度可能用尽、网络也会抖 —— 那时站点会自动
+#   改读同源的 data/，界面与文章照常在。本 workflow 保证那份兜底是新鲜的。
+#
+# ★ 顺带说明为什么它跑在服务器上更省事：
+#   浏览器受 CORS / CSP 约束（虽然 Supabase 不设 Origin 白名单，但仍受本站 CSP 约束）；
+#   而本 workflow 用 Node 直接请求，没有 Origin 那道闸，导出逻辑与本地跑完全一致。
 #
 # 触发方式
 #   · schedule          每 6 小时自动跑一次
-#   · workflow_dispatch 手动点（Actions 页面 → Run workflow）—— 发完文想立刻同步时用
+#   · workflow_dispatch 手动点（Actions 页面 → Run workflow）—— 发完文想立刻刷新兜底时用
 #
 # ⚠ 刻意**不**监听 push：本 workflow 自己会产生推送，
 #   监听 push 会形成"提交→触发→再检查→无变更→结束"的空转环。

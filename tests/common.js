@@ -25,7 +25,6 @@ const SRC = {
   keys: fs.readFileSync(path.join(ROOT, 'js/keys.js'), 'utf8'),
   app: fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8'),
   /* v2.8.0：电台播放器内核（纯逻辑、零 DOM，可单独 eval 后沙箱实测） */
-  radio: fs.readFileSync(path.join(ROOT, 'js/radio.js'), 'utf8'),
   /* v4.0 B1：场景框架（路由 → 场景 → 氛围层集）与氛围运行时（数字雨 + 帧率保底）。
      与线上 index.html 的加载顺序一致（都在 app.js 之前）。 */
   scene: fs.readFileSync(path.join(ROOT, 'js/scene.js'), 'utf8'),
@@ -113,12 +112,67 @@ function project(row, fields) {
 }
 
 /* ---------- 云 SDK 桩：按表分派 + 记录查询 ---------- */
-function makeCloudStub(fixtures, queries) {
+function makeCloudStub(fixtures, queries, win) {
   const posts = fixtures.posts, images = fixtures.images;
   /* v4.9.0：收藏是**账号数据**，桩里维护一份可变数组 ——
      这样"点收藏 → 再读回来 → 取消 → 再读回来"整条链路都能被断言，
      而不是只验证"函数被调用过"。 */
   const bookmarks = fixtures.bookmarks || (fixtures.bookmarks = []);
+
+  /* ⚠ v5.7.0：hangCloud —— 把每个查询变成"挂住直到超时才失败"的 thenable，
+     用来复现"跨境线路挂住"这一真实故障：挂住 ≠ 失败，所以 withFallback 的
+     catch 兜底**不会**立刻介入（这正是首屏能无限转圈的原因）。
+     ⚠ 它必须**尊重时限**：真实 window.fetch 在 signal abort 时会 reject，
+       桩若永不 settle 就不忠实（55 号 R303 一版就栽在这：页面确实没恢复，
+       但原因是桩不守契约，不是实现有问题）。
+       时限来源与实现同一处：window.__NEON_REQ_TIMEOUT_MS（默认 8000）。 */
+  if (fixtures.__hangCloud) {
+    const hung = {};
+    /* 时限在**每次请求时**现读 —— 因为 createClient（进而 makeCloudStub）是在
+       cloud.js 求值时被调的，而 bootDom 可能更晚才写 __NEON_REQ_TIMEOUT_MS。
+       ⚠ 必须读**传进来的那个 jsdom window**：common.js 自身跑在测试进程里，
+         `typeof window` 在那里是 undefined（Node 没有 window），
+         一读就会落到 8000 默认值 —— 实测踩到（用例设 400ms，桩却等 8 秒）。 */
+    const readMs = function () {
+      const src = win || (typeof window !== 'undefined' ? window : null);
+      const v = Number(src && src.__NEON_REQ_TIMEOUT_MS);
+      return (isFinite(v) && v > 0) ? v : 8000;
+    };
+    function hang() {
+      const ms = readMs();
+      return new Promise(function (_, reject) {
+        setTimeout(function () {
+          const err = new Error('Aborted');
+          err.name = 'AbortError';
+          reject(err);
+        }, ms);
+      });
+    }
+    ['select', 'eq', 'in', 'contains', 'order', 'range', 'limit', 'update', 'insert',
+      'upsert', 'delete', 'maybeSingle', 'single'].forEach(function (k) {
+      hung[k] = function () { return hung; };
+    });
+    hung.then = function (res, rej) { return hang().then(res, rej); };
+    hung.catch = function (rej) { return hang().catch(rej); };
+    hung.finally = function (f) { return hang().finally(f); };
+    return {
+      auth: {
+        getSession: function () { return hang(); },
+        getUser: function () { return hang(); },
+        onAuthStateChange: function () { return { data: { subscription: { unsubscribe: function () {} } } }; },
+        signInWithOtp: function () { return hang(); },
+        verifyOtp: function () { return hang(); },
+        updateUser: function () { return hang(); },
+        signOut: function () { return hang(); }
+      },
+      /* ⚠ 形状必须与真桩一致：cloud.js 走的是 `ensure().database.from(t)`
+         （不是 sb.from(t)）—— 少了 database 这一层就会在**进网络之前**
+         抛 TypeError，于是测出来的不是"悬挂"而是"缺字段"（实测踩到一次）。 */
+      database: { from: function () { return hung; } },
+      from: function () { return hung; },
+      storage: { from: function () { return hung; } }
+    };
+  }
 
   function resolve(state) {
     queries.push({
@@ -398,6 +452,13 @@ function bootDom(opts) {
   }
   if (!opts.noPurify) w.DOMPurify = { sanitize: function (x) { return String(x || ''); } };
   if (!opts.noHljs) w.hljs = { highlightElement: function () {} };
+  /* v5.7.0：出网超时可由用例缩短（生产默认 8s，见 cloud.js 的 REQ_TIMEOUT_MS）。
+     时限只有一个来源：window.__NEON_REQ_TIMEOUT_MS —— cloud.js 读它，
+     __hangCloud 桩也读它，两边不会漂移。 */
+  if (opts.timeoutMs) w.__NEON_REQ_TIMEOUT_MS = Number(opts.timeoutMs);
+  /* v5.7.0：氛围探针的采样间隔也可缩短（默认 1000ms，见 atmo.js 的 SAMPLE_MS）。
+     只影响"多久量一次"，不改"量到什么才降档"，故源码契约断言仍钉真实值。 */
+  if (opts.atmoSampleMs) w.__NEON_ATMO_SAMPLE_MS = Number(opts.atmoSampleMs);
 
   /* 监听器计数：只为测「跨页是否累积 scroll 监听」这类生命周期问题。
      只统计 scroll 类型，其余类型原样透传，不影响既有断言。
@@ -427,7 +488,7 @@ function bootDom(opts) {
   if (!opts.noSDK) {
     w.supabase = {
       createClient: function () {
-        var s = makeCloudStub(opts.fixtures || FIXTURES, queries);
+        var s = makeCloudStub(opts.fixtures || FIXTURES, queries, w);
         return { from: s.database.from, auth: s.auth, storage: s.storage };
       }
     };
@@ -504,18 +565,9 @@ function bootDom(opts) {
     }
   }
 
-  /* v4.9.5：radio.js —— **按需装载**（传 opts.radio: true）。
-     背景：index.html 里本来就有 js/radio.js，桩却一直漏了它 —— 于是 window.NEONRadio
-     恒为 undefined、paintDock() 直接 return、电台面板永远画不出来，
-     "电台界面"的行为断言根本无从写起（v4.9.5 写外链音源的界面用例时才发现）。
-
-     ⚠ 为什么不做成默认装载：试过，会踩到既有降级用例里"没有 document"的那条路 ——
-       radio.js 就位后 paintDock() 会往下走到 paintPanelProgress()，而它直接读 document。
-       那是**测试环境的产物**（真实浏览器里 document 永远存在），不是线上缺陷；
-       但为了不惊动既有 1155 条断言，这里做成 opt-in，谁要测电台界面谁显式打开。
-     ⚠ 必须在 app.js **之前**求值：app 求值即绑 dock，而 paintDock 需要
-       window.NEONRadio 已经存在（否则首绘就是空的，dock 点开也没内容）。 */
-  if (opts.radio) w.eval(SRC.radio);
+  /* v5.6.3：radio.js（<audio> 内核）已删除 —— index.html 不再加载它，
+     运行时代码里也无人调用（整个文件是死代码）。
+     原 opts.radio「按需装载」随之移除；电台播放现在由网易云官方 iframe 承担。 */
   if (!opts.skipApp) w.eval(SRC.app);
   /* v4.3：装置（与 index.html 一致：app 之后）——console 的 DOM 惰性，
      eval 时只加载历史与定义接口，不触碰页面 */

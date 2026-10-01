@@ -2,11 +2,14 @@
    console.js — 命令终端（v4.3 B4 / 装置③）
    ------------------------------------------------------------
    Ctrl+` 唤起/收起。命令：help / goto / search / hue / theme / atmo /
-   radio / whoami / clear，另有彩蛋（不进帮助）。
+   whoami / clear，另有彩蛋（不进帮助）。
    · 历史 ↑↓（sessionStorage 记本会话）
    · 接线：路由直接改 location.hash（走现有 parseHash）；
-     hue/theme/atmo 走 window.NEONControls（app.js 导出，惰性取用）；
-     radio 走 window.NEONRadio —— 全部沿用既有系统，终端不重写任何逻辑。
+     hue/theme/atmo 走 window.NEONControls（app.js 导出，惰性取用）——
+     一律沿用既有系统，终端不重写任何逻辑。
+     ⚠ v5.6.3：原先还有一条 `radio` 命令走 window.NEONRadio（<audio> 内核）。
+       那个内核已成死代码（index.html 不再加载、运行时无人调用），连同命令一起删除。
+       电台播放改由常驻控制台的网易云官方 iframe 承担，终端不再插手。
    · 无障碍：role=dialog + 输出区 role=log aria-live=polite（读屏播报）；
      焦点管理：打开记 lastFocus、关闭归还；Tab 在面板内三件（输入/清屏/关闭）循环；
      reduce 下动效由 CSS 归零。
@@ -131,7 +134,6 @@
     hue: { desc: 'hue <0-359>    换色相（例：hue 280）' },
     theme: { desc: 'theme <档>     dark / light / warm' },
     atmo: { desc: 'atmo <模式>    pollution / standard / silent' },
-    radio: { desc: 'radio          电台 播放 / 暂停' },
     whoami: { desc: 'whoami         当前身份' },
     clear: { desc: 'clear          清屏' }
   };
@@ -192,13 +194,9 @@
     print('▸ 氛围模式 → ' + m + '（当前 ' + n + ' 层）', 'ok');
   }
 
-  function cmdRadio() {
-    var R = window.NEONRadio;
-    if (!R || typeof R.toggle !== 'function') { print('电台模块未加载', 'err'); return; }
-    R.toggle();
-    var st = (typeof R.state === 'function') ? R.state() : null;
-    print('▸ 电台 ' + (st && st.playing ? '▶ 播放中' : '⏸ 已暂停'), 'ok');
-  }
+  /* v5.6.3：cmdRadio() 已删除 —— 它调用的 window.NEONRadio（<audio> 内核）
+     随 radio.js 一并移除。控制台不再提供播放控制，点电台页/控制台里的
+     官方播放器界面即可（那是网易云自己的 iframe）。 */
 
   function cmdWhoami() {
     var scene = document.body.getAttribute('data-scene') || 'unknown';
@@ -259,7 +257,6 @@
       case 'hue': return cmdHue(rest);
       case 'theme': return cmdTheme(rest);
       case 'atmo': return cmdAtmo(rest);
-      case 'radio': return cmdRadio();
       case 'whoami': return cmdWhoami();
       case 'clear': out.innerHTML = ''; return;
       default:

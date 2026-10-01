@@ -6,7 +6,7 @@
    独立运行：node tests/cases/05-e-供应链.js
    ============================================================ */
 const { makeSuite, standalone } = require('../case-runner');
-const { SRC } = require('../common');
+const { SRC, stripComments } = require('../common');
 const fs = require('fs');
 const crypto = require('crypto');
 
@@ -19,6 +19,7 @@ async function run() {
   /* ================= 场景 E：A1 供应链加固（静态断言） ================= */
   {
     const html = SRC.html;
+    const appSrc = SRC.app;
     /* v4.8.1：三个库从 CDN 改为**本地托管**（js/vendor/）。
        判据随之从「CDN 精确版本 + SRI + crossorigin」改为「本地引用 + 不再走 CDN + 档案哈希」——
        每库仍 3 条断言，另新增 1 条"全站零外部脚本"（故本 case 由 13 条变 14 条，已重刷基线）。
@@ -48,6 +49,19 @@ async function run() {
       T('E 供应链', 'R16c ' + lib.name + ' 文件非空且 sha384 与 vendor 档案一致', okSize && hashOk,
         (size / 1024).toFixed(0) + 'KB' + (hashOk ? '' : '（档案哈希不符！）'));
     });
+    /* ⚠ v5.6.5 新增守卫：启动阶段**不许**再对"还没用到的库"下结论。
+       实测事故：截图里一条「以下 CDN 组件加载失败：Markdown、DOMPurify、highlight.js」
+       常驻在页面顶部 —— 它同时错在两点：文案（库早已本地托管，不是 CDN）
+       与时机（v5.3.0 起三个库改成渲染正文时才按需注入，启动那刻必然"缺失"）。
+       真实失败提示在 renderMarkdownInto() 里，就地渲染、带原文兜底。
+       ⚠ 必须扫**剥过注释**的源码：本文件上方那段说明里就写着那句过期文案（留痕），
+         用原文扫会让守卫自己判红 —— 这个坑本项目已踩过三次（35 号 R143/R146b、这里）。 */
+    const appCode = stripComments(appSrc);
+    T('E 供应链', 'R16e 启动阶段不再做"缺失组件"检查（那三个库是渲染正文时才加载的）',
+      !/CDN 组件加载失败/.test(appCode) &&
+      /Markdown 引擎加载失败/.test(appCode) &&
+      /loadVendors/.test(appCode),
+      /CDN 组件加载失败/.test(appCode) ? '❌ 过期假警报又回来了' : 'ok');
     T('E 供应链', 'R16d 全站零外部脚本（CSP script-src 不必再放开任何 CDN 域）',
       !/src="https:\/\//.test(html),
       /src="https:\/\//.test(html) ? '仍有外部 <script src>' : '全部本地');

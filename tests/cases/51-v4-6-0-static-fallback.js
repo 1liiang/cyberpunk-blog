@@ -139,10 +139,16 @@ async function run() {
   {
     const CN = 'v4.6 回退纪律';
 
-    T(CN, 'R250 cloud.js 提供回退包装 withFallback（先真身、抛错才落快照）',
+    /* ⚠ v5.7.0 补充：withFallback 现在还有**竞速上限**这一层（FALLBACK_RACE_MS）——
+       因为"挂住"不算失败，只挂 catch 的兜底永远不介入（实测：请求悬挂时首屏
+       12 秒仍无内容）。这条断言顺带钉住"竞速不能把正常慢请求抢先"
+       （竞速上限必须大于请求超时），细节见 55 号用例。 */
+    T(CN, 'R250 cloud.js 提供回退包装 withFallback（先真身、抛错才落快照；且带竞速上限）',
       /function withFallback\(/.test(cloud) &&
       /real\[k\]\.apply\(real, arguments\)/.test(cloud) &&
-      /backup\[k\]\.apply\(backup, arguments\)/.test(cloud),
+      /backup\[k\]\.apply\(backup, arguments\)/.test(cloud) &&
+      /var FALLBACK_RACE_MS = (\d+);/.test(cloud) &&
+      /Promise\.race\(\[/.test(cloud),
       'withFallback 结构');
 
     T(CN, 'R250b 只包读路径：listPublished / get / tagStats / fetchMany 四个，写路径不被包',
@@ -308,54 +314,71 @@ async function run() {
 
     /* 5.1 ⚠ 2026-09-30 站长决定：**不做歌曲部分**。
        3 首商业歌曲（夜航星 / 孤勇者 / 苦昼短）的音频已从仓库移除 ——
-       GitHub Pages 上不再公开分发，新库也不导入电台；界面保留（点开是空态）。
-       本断言随之从"快照含电台"翻转为**决策锁**：
-         · 快照的 radio 必须是数组（形状不能坏）
-         · 当前必须为空 —— 将来若有人把音频导回来，这里当场报红，
-           提醒同时确认版权与仓库体积（这批音频是 27MB）
-         · 万一真有曲目，每条 has_data 的音频文件必须真的落地（旧判据保留） */
-    const radio = (snap && snap.radio) || [];
-    const missingAudio = [];
-    radio.forEach(function (r) {
-      if (r.has_data && (!r.file || !fs.existsSync(path.join(DATA_DIR, r.file)))) {
-        missingAudio.push('#' + r.id);
-      }
-    });
-    T(CN, 'R253 快照已无曲目（2026-09-30 决定不做歌曲部分；若残留则音频须落地）',
-      Array.isArray(radio) && radio.length === 0 && missingAudio.length === 0,
-      radio.length ? '⚠ 竟有 ' + radio.length + ' 首：' + radio.map(function (r) { return '#' + r.id; }).join(',')
-                   : '0 首（音频已退役）');
+       GitHub Pages 上不再公开分发，新库也不导入那批音频；界面保留。
 
-    /* 5.2 ★ 关键设计守卫：音频**不许**塞进 JSON。
-           云端存的是十几 MB 的 base64；若照搬进快照，posts.json 会变成 30MB，
-           浏览器解析都费劲。这条把"走文件"钉死。 */
+       ⚠ v5.6.2 改判（审计清单 D）：这条从"快照必须 0 首**音频**"改成
+       "快照里的电台必须是 **v5 条目形状**"。理由：
+         · 「电台不做歌曲」指的是**不再公开分发商业音频**，而 v5 的条目根本不带音频
+           （播放地址是指向网易云的 outchain iframe），所以条目本身不涉版权与体积；
+         · 而"快照 radio 恒为空"是个**会过期的产物判据** —— 云端现在真有条目
+           （实测两首），导出器一旦重跑就会把它们写进快照，这条会无缘无故爆红。
+       现在守的是两条真契约：
+         · radio 必须是数组（形状不能坏）
+         · 每条只许带 v5 的八个字段 —— **绝不许**再出现 data / mime / size_bytes /
+           cover_url / file 这类音频时代的东西（那才是"音频又回来了"的信号） */
+    const radio = (snap && snap.radio) || [];
+    const RADIO_OK_FIELDS = ['id', 'title', 'artist', 'kind', 'netease_id',
+      'source_url', 'sort_order', 'created_at'];
+    const strayFields = [];
+    radio.forEach(function (r) {
+      Object.keys(r).forEach(function (k) {
+        if (RADIO_OK_FIELDS.indexOf(k) < 0) strayFields.push('#' + r.id + '.' + k);
+      });
+    });
+    T(CN, 'R253 快照电台只含 v5 条目字段（不该再出现 data / mime / file 等音频时代字段）',
+      Array.isArray(radio) && strayFields.length === 0,
+      strayFields.length ? '⚠ 越界字段：' + strayFields.join(', ')
+                         : (radio.length + ' 条，字段干净'));
+
+    /* 5.2 ★ 关键设计守卫：大对象**不许**进 JSON。
+           base64 时代的音频（每首十几 MB）若照搬进快照，posts.json 会变成 30MB，
+           浏览器解析都费劲。v5 之后条目只有一条 URL，这条守卫仍然值钱 ——
+           它挡的是"以后有人又把大字段塞回来"。 */
     const jsonBytes = fs.statSync(SNAPSHOT).size;
-    T(CN, 'R253b 快照本体保持轻量（音频走文件，不塞 base64 进 JSON）',
+    T(CN, 'R253b 快照本体保持轻量（大对象不进 JSON）',
       jsonBytes < 200 * 1024,
       (jsonBytes / 1024).toFixed(1) + ' KB（上限 200KB）');
 
-    /* ⚠ R253 只证明**产物**自洽，证明不了**生产者**会写 file 字段。
-       反向验证实锤：把 `item.file = file;` 注释掉，R253 照样绿 ——
-       已生成的文件当然不会变。这是本项目第三次栽在"钉产物不钉生产者"上
-       （前两次：owner_id 裁剪、slimPost 调用点），所以这次一次补齐两层。
+    /* ⚠ R253 只证明**产物**自洽，证明不了**生产者**写对了字段。
+       反向验证实锤过：改坏生产者，产物当然不会变。这是本项目第三次栽在
+       "钉产物不钉生产者"上（前两次：owner_id 裁剪、slimPost 调用点），
+       所以这里继续盯着导出脚本的**源码**。
 
-       ⚠⚠ 正则必须**锚定行首**：首版写成 /item\.file = file;/（无锚点），
-       于是 `// item.file = file;`（注释掉）照样匹配 —— 反向验证第二次抓出假绿。
-       `^\s*` 保证那行**真的是可执行语句**，不是注释。 */
-    const fileAssign = /^\s*item\.file = file;\s*$/m.test(exp);
-    T(CN, 'R253c 导出脚本为每条有音频的曲目写上 file 引用（钉赋值点，不只钉产物）',
-      fileAssign && /^\s*radioFiles\.push\(\{/m.test(exp),
-      fileAssign ? '赋值点在位' : '⚠ 脚本不写 file，Pages 上电台将播不了');
+       ⚠ v5.6.2 改判：原判据（`item.file = file;` + `radioFiles.push({`）钉的是
+       "音频文件必须落地"——那条路已删除。改为钉 v5 的真契约：
+       导出脚本 select 的电台字段必须与 cloud.js 的 RADIO_FIELDS **逐字一致**，
+       否则快照条目会缺字段（界面渲染不出播放器形态）。 */
+    const expRadioFields = (/const RADIO_FIELDS = '([^']+)'/.exec(exp) || [, ''])[1];
+    const cloudRadioFields = (/var RADIO_FIELDS = '([^']+)'/.exec(cloud) || [, ''])[1];
+    T(CN, 'R253c 导出脚本的电台字段与 cloud.js 的 RADIO_FIELDS 逐字一致（钉生产者）',
+      !!expRadioFields && expRadioFields === cloudRadioFields &&
+      /kind/.test(expRadioFields) && /netease_id/.test(expRadioFields) &&
+      /source_url/.test(expRadioFields) &&
+      !/\bdata\b/.test(expRadioFields) && !/has_data/.test(expRadioFields),
+      'exp=' + expRadioFields + ' / cloud=' + cloudRadioFields);
 
-    /* 5.3 回退覆盖了电台的两条读路径 */
-    T(CN, 'R254 cloud.js 为 Radio 提供同源回退（list + playUrl）',
+    /* 5.3 回退覆盖了电台的读路径
+       ⚠ v5.6.1：回退键从 ['list', 'playUrl'] 收成 ['list'] ——
+       条目自带 source_url（网易云官方播放器地址），播放在界面侧渲染 iframe，
+       不再有"取可播放地址"这一步；StaticRadio.playUrl 随审计清单 ① 一并删除。 */
+    T(CN, 'R254 cloud.js 为 Radio 提供同源回退（list）',
       /var StaticRadio = \{/.test(cloud) &&
-      /Radio: withFallback\(Radio, StaticRadio, \['list', 'playUrl'\]\)/.test(cloud),
+      /Radio: withFallback\(Radio, StaticRadio, \['list'\]\)/.test(cloud),
       'Radio 回退');
 
     /* 5.4 行为：云端不可用时的电台读路径。
        ⚠ 音频退役后这条反而更值钱了：**空列表是现在线上的常态** ——
-         面板点开没东西，读路径绝不能因此抛错或返回坏形状。 */
+         页面打开没东西，读路径绝不能因此抛错或返回坏形状。 */
     const ctx = bootDom({ url: 'https://x.test/#/', noSDK: true });
     ctx.w.fetch = function (url) {
       if (String(url).indexOf('data/posts.json') === 0) {
@@ -365,16 +388,13 @@ async function run() {
     };
     let rows = null, rerr = null;
     try { rows = await ctx.w.NEON.Radio.list(); } catch (e) { rerr = String(e && e.message || e); }
-    T(CN, 'R254b 云端不可用 → Radio.list() 仍走快照且不抛错（无曲目时给空数组）',
+    T(CN, 'R254b 云端不可用 → Radio.list() 仍走快照且不抛错（无条目时给空数组）',
       !rerr && Array.isArray(rows) && rows.length === 0,
-      rerr || (rows ? rows.length + ' 首' : 'null'));
+      rerr || (rows ? rows.length + ' 条' : 'null'));
 
-    /* playUrl 在无曲目时必须**明确失败**：withFallback 的纪律是"快照也接不住就抛原始错误"，
-       绝不能静默返回一个坏地址 —— 播放器拿到坏地址只会更难排查。 */
-    let perr = null;
-    try { await ctx.w.NEON.Radio.playUrl(4); } catch (e) { perr = String(e && e.message || e); }
-    T(CN, 'R254c 快照无曲目时 playUrl 明确报错（不静默返回坏地址）',
-      !!perr, perr || '⚠ 竟然返回了结果');
+    /* v5.6.1 退役：R254c「快照无曲目时 playUrl 明确报错」——
+       playUrl 已随审计清单 ① 删除（条目自带 source_url，不再需要取址入口）。
+       它守的"withFallback 不许静默返回坏值"这条纪律由上面的 R254b 继续守着。 */
 
     /* 5.5 自动同步 workflow：结构三要素 */
     const wfPath = path.join(ROOT, '.github', 'workflows', 'sync-snapshot.yml');

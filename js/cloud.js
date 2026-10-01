@@ -27,6 +27,64 @@
   var cloud = null;
   var sdkReady = false;
 
+  /* ============ v5.7.0：出网请求统一超时（P0 性能硬化） ============
+     ⚠ 修的到底是什么（实测取证，别改回去）：
+       · supabase-js 只在 **Realtime**（_fetchWithTimeout）与 **Auth 路径**
+         （默认 timeout 10s）上带时限；**PostgREST（文章列表 / 标签统计 / 电台条目）
+         走的是 postgrest-js，全文没有任何 signal/timeout** —— 跨境线路一抖，
+         这些请求会一直挂到浏览器 TCP 超时（几十秒~2 分钟）。
+       · 更致命的是**挂住 ≠ 失败**：withFallback 的兜底挂在 catch 上，
+         "抛错"才切快照，"一直 pending"永远不切 ⇒ 首屏骨架屏可以挂到天荒地老。
+       · 实测（jsdom + 永不 resolve 的请求桩）：6 秒过去仍然 0 张卡片、一直骨架态。
+     所以这一层的意义不是"省那几秒"，而是**把"无限等待"变成"有界失败"** ——
+     超时抛 AbortError → PostgREST 冒泡 → withFallback 接住 → 自动改读本地快照。
+
+     ⚠ 为什么包在这里，而不是给每个请求加 AbortController：
+       那是"钉调用点"。cloud.js 里有十几条出网路径（listPublished / get / tagStats /
+       list / add / removeTrack / reorder / fetchMany / 认证四件…），逐个加必漏，
+       以后新增一条又漏一条。挂在 createClient 的 `global.fetch` 上只改一处，
+       且 Auth / PostgREST / Storage **全部**走它（已核对我们 vendor 的那份 bundle：
+       postgrest-js 构造吃 fetch 选项、supabase-js 把 global.fetch 透传下去）。 */
+  var REQ_TIMEOUT_MS = 8000;   /* 跨境往返正常是几十~几百毫秒；8s 已是"明显异常" */
+
+  /* 带超时的 fetch。返回 undefined 表示"本环境没有可包装的 fetch"，
+     此时**照旧不传** global.fetch，让 SDK 走它自己的默认实现（不改变原行为）。 */
+  function makeTimeoutFetch(ms) {
+    if (typeof window === 'undefined' || typeof window.fetch !== 'function') return undefined;
+    var baseFetch = window.fetch.bind(window);
+    return function (input, init) {
+      init = init || {};
+      /* ⚠ 不能无脑覆盖调用方传进来的 signal：SDK 自己也会用它做取消。
+         两个信号都要生效 ⇒ 优先用 AbortSignal.any（现代浏览器），
+         否则退化成"把调用方的 signal 接到我们的 controller 上"。 */
+      var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+      var timer = setTimeout(function () { if (ctl) ctl.abort(); }, ms);
+      var signal = init.signal;
+      if (ctl) {
+        if (signal) {
+          if (typeof AbortSignal !== 'undefined' && typeof AbortSignal.any === 'function') {
+            signal = AbortSignal.any([signal, ctl.signal]);
+          } else if (typeof signal.addEventListener === 'function') {
+            if (signal.aborted) ctl.abort();
+            else signal.addEventListener('abort', function () { ctl.abort(); });
+          }
+        } else {
+          signal = ctl.signal;
+        }
+      }
+      var opts = {};
+      Object.keys(init).forEach(function (k) { opts[k] = init[k]; });
+      opts.signal = signal;
+      return baseFetch(input, opts).then(function (r) {
+        clearTimeout(timer);
+        return r;
+      }, function (e) {
+        clearTimeout(timer);
+        throw e;
+      });
+    };
+  }
+
   /* ---------- 初始化（必须在 SDK 脚本加载后调用一次） ---------- */
   function init() {
     if (sdkReady) return cloud;
@@ -34,7 +92,13 @@
       console.error('[NEON] 数据层 SDK（supabase-js）未加载');
       return null;
     }
-    var sb = supabase.createClient(PUBLIC_CONFIG.endpoint, PUBLIC_CONFIG.publishableKey, {
+    /* 出网统一超时（v5.7.0）。也允许外部覆盖时限 —— 测试用它把窗口缩到毫秒级，
+       从而能真的观测到"超时 → 抛错 → 切快照"这条链（否则要等 8 秒）。 */
+    var timeoutMs = (typeof window !== 'undefined' && window.__NEON_REQ_TIMEOUT_MS)
+      ? Number(window.__NEON_REQ_TIMEOUT_MS) : REQ_TIMEOUT_MS;
+    if (!isFinite(timeoutMs) || timeoutMs <= 0) timeoutMs = REQ_TIMEOUT_MS;
+    var timeoutFetch = makeTimeoutFetch(timeoutMs);
+    var clientOpts = {
       auth: {
         persistSession: true,        /* 会话存 localStorage，刷新不掉登录 */
         autoRefreshToken: true,
@@ -42,7 +106,10 @@
            故关掉 URL 里的 token 嗅探 —— 否则 #access_token=… 会被路由当成页面地址 */
         detectSessionInUrl: false
       }
-    });
+    };
+    if (timeoutFetch) clientOpts.global = { fetch: timeoutFetch };
+    var sb = supabase.createClient(PUBLIC_CONFIG.endpoint, PUBLIC_CONFIG.publishableKey, clientOpts);
+    clientOpts = null;
     cloud = {
       raw: sb,                                  /* 需要底层客户端时用（storage / functions） */
       database: { from: function (t) { return sb.from(t); } },
@@ -726,50 +793,33 @@
   };
 
   /* ============================================================
-     v2.9.0：电台（RADIO）数据层 —— 音频以 base64 存库（不再是云存储）
+     v2.9.0 起的电台（RADIO）数据层
      ------------------------------------------------------------
      表 radio_tracks（RLS：读全开，增/改/删仅本人）：
-       id / title / artist / album / data / duration_sec / size_bytes
-       / mime / cover_url / sort_order / owner_id / created_at
-     读取视图 public_radio（前端列表与播放都读它，**含 data 列**）。
+       id / title / artist / kind / netease_id / source_url
+       / sort_order / owner_id / created_at
+     读取视图 public_radio。
 
-     ⚠⚠ 为什么音频不能放云存储（2026-09-29 真实故障，血泪）：
-        云存储**只服务登录用户**（官方文档原文：
-          「Storage is for signed-in users. Public Bucket/public URL access
-            is not exposed.」）
-        ⇒ 未登录访客调 createSignedUrl 直接 `MISSING_CREDENTIALS`。
-        而电台的需求是「**所有人**可听」—— 两者互斥，无解。
-        改存数据库 + 公开视图后匿名访客也能读到（图片一直就是这么做的，
-        所以封面自古就能匿名显示，音频当初却选了存储 —— 这就是分叉点）。
-
-     ⚠ 代价（必须知道）：base64 比二进制大 33%，且**整首一次性传输**
-       （不是流式，没有 Range 请求，拖动需先下完）。故：
-         · 单曲上限维持 24MB（与 v2.8.0 存储方案一致，不缩用户的曲库）；
-           24MiB 的 base64 最坏 33.55M 字符 ⇒ 库层 CHECK 取 36M（余量 ~7%）
-         · list() **绝不带 data** —— 否则开个面板要下全库音频
-         · 播放时按 id 单行取，并做**带上限**的 LRU 缓存（条数 + 字符总量双限）
-     ⚠ 体积上限是「三保险」：客户端 readAudio 挡一次、读出的 data URL
-       再量一次长度、库层 CHECK 兜底（防绕过前端直传）。
+     v5.6.1 清理：base64 时代（v2.9.0~v4.9.x）的那套 API 已成死代码，
+     按 HANDOVER §6 审计清单 ① 删除 —— readAudio / probeDuration / trackData /
+     create / addTrack / probeSourceUrl / neteaseEmbedUrl / isEmbedUrl /
+     addByUrl / playUrl，以及只为它们存在的 AUDIO_* 常量与音频 LRU 缓存。
+     ⚠ 历史教训仍要留在这里，别删：
+       ⚠⚠ 为什么音频不能放云存储（2026-09-29 真实故障，血泪）：
+          云存储**只服务登录用户**（官方文档原文：
+            「Storage is for signed-in users. Public Bucket/public URL access
+              is not exposed.」）
+          ⇒ 未登录访客调 createSignedUrl 直接 `MISSING_CREDENTIALS`。
+          而电台的需求是「**所有人**可听」—— 两者互斥，无解。
+       ⚠ 为什么 list() **绝不带 data**：否则开一次面板等于下整个曲库
+          （单行 base64 最坏 33.55M 字符）。
+     ⚠ v4.9.5 的外链音源时代还留过一条教训：官方外链播放器是**一整个 iframe**，
+       不是"一条音频地址" —— 入库前**不能**拿 <audio> 去校验它（必然误判成坏链接），
+       播放也**不得**走 <audio>。现在整条电台就是网易云条目，这两条由
+       buildEmbedUrl + 界面 iframe 天然满足。
      ⚠ owner_id 是 **text** 不是 uuid —— 与 posts.owner_id 保持一致，
        RLS 里 auth.uid() 返回 text，类型不匹配会报 42883。
      ============================================================ */
-  var AUDIO_MAX = 24 * 1024 * 1024;      /* 单曲二进制上限 24MB */
-  /* base64 后最坏长度 = ceil(n/3)*4 + 前缀。24MiB → 33554432 + ~24 ≈ 33.55M 字符。
-     库层 CHECK 取 36,000,000 ⇒ 余量约 7%（沿用图片那套「贴上限留 5~6%+」）。 */
-  var AUDIO_DATA_MAX = 36000000;
-  var AUDIO_TYPES = [
-    'audio/mpeg', 'audio/mp3', 'audio/mp4', 'audio/x-m4a', 'audio/aac',
-    'audio/ogg', 'audio/wav', 'audio/x-wav', 'audio/flac', 'audio/x-flac',
-    'audio/webm', 'audio/opus'
-  ];
-  /* 扩展名兜底：部分系统对 .m4a/.flac 给不出 MIME（type 为空串） */
-  var AUDIO_EXT = /\.(mp3|m4a|aac|ogg|oga|opus|wav|flac|webm)$/i;
-  /* 扩展名 → MIME（浏览器给不出 type 时按扩展名补，存 data URL 需要正确的头） */
-  var AUDIO_MIME_BY_EXT = {
-    mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', ogg: 'audio/ogg',
-    oga: 'audio/ogg', opus: 'audio/opus', wav: 'audio/wav', flac: 'audio/flac',
-    webm: 'audio/webm'
-  };
   /* ⚠⚠ 签名 URL 有效期有**平台硬上限 3600 秒**（1 小时）—— SDK 源码里
      `validateSignedURLTTL` 对越界直接抛
      "Signed URL expiry must be an integer between 1 and 3600 seconds."
@@ -793,83 +843,12 @@
   var RADIO_READ_TABLE = 'public_radio';
   var RADIO_WRITE_TABLE = 'radio_tracks';
   /* ⚠ 白名单**故意不含 data** —— 列表只取展示必需字段。
-     带上 data 会让「打开面板」变成「下载整个曲库」，是致命的性能陷阱。
-     v4.9.5：带上 source_url（外链音源）—— 它只是一条几十字符的 URL，
-     与 data 完全不同量级；列表靠它区分"内链 / 外链"，也给 playUrl 走捷径。 */
+     带上 data 会让「打开列表」变成「下载整个曲库」，是致命的性能陷阱。
+     ⚠ 完整的 base64 退场纪要见本模块顶部注释（v5.6.1 清理）。 */
   /* v5.0.0：电台改为「网易云条目」——只有单曲与歌单两种，不再有 base64 音频。
      字段就这八个，列表请求因此极轻（旧版里 data 一列单行可达 36MB 字符）。 */
   var RADIO_FIELDS = 'id,title,artist,kind,netease_id,source_url,sort_order,created_at';
-  /* v5.0.0：has_data 这个概念没了 —— 现在每条条目都必然可播（网易云官方播放器）。
-     ⚠ 这行注释保留在此仅为说明历史：老代码里的 RADIO_VIEW_ONLY / RADIO_WRITE_FIELDS
-       与音频 LRU 缓存都由「base64 存库」那套演变而来，已于 v5.0.0 一并删除。 */
-  /* ⚠⚠ 视图**算出来**的列（基表没有），只在读视图时可用。
-     has_data = (data IS NOT NULL OR source_url IS NOT NULL)，是为了让列表能判断
-     "能不能播"而不必拉 data（v4.9.5 起把外链也算作可播）。
-     把它混进基表（写路径）会让 PostgREST 生成
-     `INSERT ... RETURNING …, has_data` → 42703：
-     「column radio_tracks.has_data does not exist」——上传直接失败。 */
-  var RADIO_VIEW_ONLY = ['has_data'];
-  /* 基表（写路径）可返回的列 = 视图字段减去视图专有列。
-     ⚠ 写路径**必须**用它，别图省事复用 RADIO_FIELDS。 */
-  var RADIO_WRITE_FIELDS = RADIO_FIELDS.split(',').filter(function (c) {
-    return RADIO_VIEW_ONLY.indexOf(c) < 0;
-  }).join(',');
-  /* ---------- v4.9.9：网易云官方外链播放器 ----------
-     它不是"一条音频地址"，而是**一整个官方播放器**（iframe）。所以：
-       · 入库前不做音频校验（<audio> 当然加载不了它，会被误判为坏链接）
-       · 播放时不走 <audio>，由界面渲染 iframe（见 radio.js / views.js）
-     地址一律**规范化成 outchain 形式**后再存 —— 库里只有一种形态，判断逻辑才简单。 */
-  var NETEASE_EMBED_BASE = 'https://music.163.com/outchain/player?type=2&id=';
-  var NETEASE_EMBED_TAIL = '&auto=0&height=66';
 
-  /* 单曲音频数据的读取字段（与上互斥，只给 playUrl 用） */
-  var RADIO_DATA_FIELDS = 'id,data,mime';
-  /* 已取回的 data URL 缓存：重播 / 上下一首来回切换不必重下整首。
-     ⚠ 必须**双限**（条数 + 字符总量）：单首 data URL 最坏 33.5M 字符
-     （约 33MB 内存），只限条数的话「3 条」就是 100MB，移动端直接崩。
-     字符上限 40M ≈ 40MB 内存，与「条数 ≤2」共同兜住上界。 */
-  var RADIO_CACHE_MAX_ITEMS = 2;
-  var RADIO_CACHE_MAX_CHARS = 40000000;
-  var radioCache = [];
-  function radioCacheTotal() {
-    var n = 0;
-    for (var i = 0; i < radioCache.length; i++) n += (radioCache[i].url || '').length;
-    return n;
-  }
-  function radioCacheGet(id) {
-    for (var i = 0; i < radioCache.length; i++) {
-      if (radioCache[i].id === id) {
-        var hit = radioCache.splice(i, 1)[0];
-        radioCache.push(hit);          /* 命中即置为最近使用 */
-        return hit.url;
-      }
-    }
-    return null;
-  }
-  function radioCachePut(id, url) {
-    radioCache = radioCache.filter(function (e) { return e.id !== id; });
-    radioCache.push({ id: id, url: url });
-    while (radioCache.length > 1 &&
-           (radioCache.length > RADIO_CACHE_MAX_ITEMS ||
-            radioCacheTotal() > RADIO_CACHE_MAX_CHARS)) {
-      radioCache.shift();
-    }
-  }
-  function radioCacheDrop(id) {
-    radioCache = radioCache.filter(function (e) { return e.id !== id; });
-  }
-  /* 由文件推断音频 MIME（浏览器给空 type 时用扩展名兜底） */
-  function audioMime(file, name) {
-    if (file && file.type) return String(file.type).slice(0, 120);
-    var ext = String(name || (file && file.name) || '').split('.').pop().toLowerCase();
-    return AUDIO_MIME_BY_EXT[ext] || 'audio/mpeg';
-  }
-  /* 是否白名单内的音频（MIME 或扩展名任一命中即可） */
-  function isAudioFile(file) {
-    if (!file) return false;
-    if (AUDIO_TYPES.indexOf(file.type) >= 0) return true;
-    return AUDIO_EXT.test(file.name || '');
-  }
 
   var Radio = {
     /* 曲目列表（匿名可读，按 sort_order 再按 id 升序 —— 稳定不跳动）
@@ -881,173 +860,6 @@
         .order('id', { ascending: true });
       if (res.error) throw new Error(errMsg(res.error, '曲目列表加载失败'));
       return res.data || [];
-    },
-
-    /* 把音频文件读成 data URL（base64）。**不写云存储**：
-       云存储只服务登录用户，匿名访客拿不到可播地址，与「所有人可听」互斥。
-       返回 { data, size, mime, name }；data 即 `data:audio/mpeg;base64,...`。 */
-    readAudio: function (file) {
-      return new Promise(function (resolve, reject) {
-        function bail(msg) { reject(new Error(msg)); }
-        if (!file) { bail('请选择音频文件'); return; }
-        if (!isAudioFile(file)) {
-          bail('仅支持 MP3 / M4A / AAC / OGG / WAV / FLAC 音频'); return;
-        }
-        if (file.size > AUDIO_MAX) {
-          bail('单个音频不能超过 ' + Math.round(AUDIO_MAX / 1048576) + 'MB');
-          return;
-        }
-        if (typeof FileReader === 'undefined') {
-          bail('当前浏览器不支持本地文件读取，请换新版浏览器'); return;
-        }
-        var fr = new FileReader();
-        fr.onerror = function () { bail('音频读取失败（文件可能已损坏）'); };
-        fr.onload = function () {
-          var url = String((fr.result === null || typeof fr.result === 'undefined') ? '' : fr.result);
-          if (url.indexOf('data:') !== 0 || url.indexOf('base64,') < 0) {
-            bail('音频读取结果异常'); return;
-          }
-          /* 第二道体积关：真实字符串长度（不是估算）也要过库上限 */
-          if (url.length > AUDIO_DATA_MAX) {
-            bail('音频体积超出库上限（约 ' + Math.round(AUDIO_DATA_MAX / 1048576) + 'MB 字符），请压缩后重试');
-            return;
-          }
-          resolve({ data: url, size: file.size, mime: audioMime(file), name: String(file.name || '') });
-        };
-        fr.readAsDataURL(file);
-      });
-    },
-
-    /* 读时长（可选步骤，失败返回 null 且**不阻断上传**）。
-       做法：objectURL + 临时 Audio 只取元数据，拿到就 revoke。
-       ⚠ 必须有超时兜底 —— 个别格式浏览器解析不出元数据会一直不触发事件。 */
-    probeDuration: function (file) {
-      return new Promise(function (resolve) {
-        var A = (typeof window !== 'undefined') ? window.Audio : null;
-        var U = (typeof window !== 'undefined') ? window.URL : null;
-        if (!A || !U || typeof U.createObjectURL !== 'function') { resolve(null); return; }
-        var objUrl = null, audio = null, timer = null, done = false;
-        function finish(v) {
-          if (done) return;
-          done = true;
-          if (timer) { clearTimeout(timer); timer = null; }
-          try { if (objUrl) U.revokeObjectURL(objUrl); } catch (e) {}
-          if (audio) { try { audio.removeAttribute('src'); } catch (e) {} }
-          resolve(v);
-        }
-        try {
-          objUrl = U.createObjectURL(file);
-          audio = new A();
-          audio.preload = 'metadata';
-          audio.addEventListener('loadedmetadata', function () {
-            var d = audio.duration;
-            finish((isFinite(d) && d > 0) ? Math.round(d) : null);
-          });
-          audio.addEventListener('error', function () { finish(null); });
-          timer = setTimeout(function () { finish(null); }, 4000);
-          audio.src = objUrl;
-        } catch (e) { finish(null); }
-      });
-    },
-
-    /* 单曲音频数据（data URL）。**单行拉取** —— 这正是「所有人可听」的关键：
-       匿名访客从公开视图读到音频本体，不需要任何登录态或签名 URL。
-       ⚠ 返回体量可达十几 MB，调用方务必只取当前要播的那一首。 */
-    trackData: async function (id) {
-      if (id === null || typeof id === 'undefined' || id === '') {
-        throw new Error('缺少曲目标识');
-      }
-      var res = await ensure().database.from(RADIO_READ_TABLE)
-        .select(RADIO_DATA_FIELDS)
-        .eq('id', id)
-        .limit(1);
-      if (res.error) throw new Error(errMsg(res.error, '音频读取失败'));
-      var r = (res.data && res.data[0]) || null;
-      if (!r) throw new Error('该曲目不存在或已被移除');
-      if (!r.data) {
-        throw new Error('该曲目暂无音频数据（多半是旧版上传），请删除后重新上传');
-      }
-      return r.data;
-    },
-
-    /* 入库一条曲目记录。⚠ 音频本体走 meta.data（data URL），不再有 storage_path。 */
-    /* 入库一条曲目。**两种音源二选一**（v4.9.5 起）：
-         · meta.source_url —— 外链音源（https 直链，库里只存这一条 URL）
-         · meta.data       —— 内链音源（base64 data URL 全文，兼容既有记录）
-       ⚠ 两者都没有 = 一条"看着能播、点了没声"的记录，必须在入口就挡住。 */
-    create: async function (meta) {
-      meta = meta || {};
-      var title = String(meta.title || '').trim();
-      if (!title) throw new Error('请填写曲目名称');
-      if (title.length > 200) throw new Error('曲目名称不能超过 200 字');
-      var srcUrl = Radio.normalizeSourceUrl(meta.source_url);
-      if (!srcUrl && !meta.data) throw new Error('缺少音源：请上传音频文件，或填写 https 直链');
-      if (meta.data && !srcUrl && String(meta.data).length > AUDIO_DATA_MAX) {
-        throw new Error('音频体积超出库上限，请压缩后重试');
-      }
-
-      var row = {
-        title: title,
-        artist: meta.artist ? String(meta.artist).trim().slice(0, 200) : null,
-        album: meta.album ? String(meta.album).trim().slice(0, 200) : null,
-        /* 音源二选一：外链走 source_url（data 留 null），内链走 data。
-           storage_path 一律 null（旧云存储方案遗留，让新旧记录在库层面一眼可分）。 */
-        data: srcUrl ? null : String(meta.data),
-        source_url: srcUrl,
-        storage_path: null,
-        duration_sec: (typeof meta.duration_sec === 'number' && meta.duration_sec >= 0)
-          ? Math.round(meta.duration_sec) : null,
-        size_bytes: (typeof meta.size_bytes === 'number' && meta.size_bytes >= 0)
-          ? Math.round(meta.size_bytes) : null,
-        mime: meta.mime ? String(meta.mime).slice(0, 120) : null,
-        cover_url: meta.cover_url ? String(meta.cover_url).slice(0, 2000) : null,
-        sort_order: (typeof meta.sort_order === 'number') ? Math.round(meta.sort_order) : 0,
-        owner_id: meta.owner_id
-      };
-      /* ⚠ 两件事必须同时成立：
-         ① select 用 RADIO_WRITE_FIELDS（基表列）——**不能**用 RADIO_FIELDS，
-            里面的 has_data 是视图算出来的，基表插入时 RETURNING 会报 42703。
-         ② 同样**不含 data**：否则入库响应会把刚上传的十几 MB 原样回吐一遍，白等一倍时间。 */
-      var res = await ensure().database.from(RADIO_WRITE_TABLE).insert(row).select(RADIO_WRITE_FIELDS);
-      if (res.error) throw new Error(errMsg(res.error, '曲目入库失败'));
-      var saved = (res.data && res.data[0]) || null;
-      if (saved) {
-        /* 刚入库的行必然有音源 → 补上视图才有的 has_data，
-           让返回对象与 list() 的行**同形**（调用方不必按来源分支判断）。 */
-        saved.has_data = true;
-        radioCacheDrop(saved.id);   /* 同 id 重传时清掉旧缓存 */
-      }
-      return saved;
-    },
-
-    /* 规范化外链音源。返回 '' 表示"没填"；填了但不合法则**抛错**（不静默丢弃 ——
-       静默会变成"看着加成功了、点了没声"，比报错难查得多）。
-       ⚠ 与库层的 CHECK 同规则（只放行 https）：http 会被浏览器当混合内容拦掉，
-         javascript:/data:text/html 之类更不该进这条管道。 */
-    normalizeSourceUrl: function (raw) {
-      var s = String(raw == null ? '' : raw).trim();
-      if (!s) return '';
-      if (s.length > 2000) throw new Error('音频直链过长（上限 2000 字符）');
-      if (!/^https:\/\//i.test(s)) throw new Error('音频直链必须以 https:// 开头');
-      /* 只做结构性校验，不"猜"合法性：能不能播最终由 <audio> 说了算 */
-      try { new URL(s); } catch (e) { throw new Error('音频直链格式不正确'); }
-      return s;
-    },
-
-    /* 只凭一个外链入库（供 UI 的"贴链接"入口调用）。
-       与 addTrack 并列：那个走文件（读 base64 + 探时长），这个不碰文件。
-       ⚠ 时长/体积都留空 —— 外链不必下载就能播，播放时由 <audio> 自己得出时长。 */
-    addByUrl: async function (url, meta, uid) {
-      return await Radio.create({
-        title: (meta && meta.title) || '',
-        artist: meta && meta.artist,
-        album: meta && meta.album,
-        cover_url: meta && meta.cover_url,
-        sort_order: meta && meta.sort_order,
-        source_url: url,
-        mime: meta && meta.mime,
-        owner_id: uid
-      });
     },
 
     /* ---------- v5.0.0：电台 = 网易云条目（单曲 / 歌单） ---------- */
@@ -1112,135 +924,13 @@
       return saved;
     },
 
-    /* 旧的 neteaseEmbedUrl 保留（v4.9.9 起的兼容入口，内部走新解析） */
-    /* 从用户贴的任何形式里认出网易云歌曲 id 并换成官方外链播放器地址：
-         · https://music.163.com/#/song?id=2003621098
-         · https://music.163.com/song/2003621098
-         · https://music.163.com/#/outchain/2/2003621098/m/use/html   ← 站长给的这种
-         · 2003621098（裸 id）
-       认不出返回 ''。**不联网、不猜**：只做本地字符串解析。 */
-    neteaseEmbedUrl: function (input) {
-      var s = String(input == null ? '' : input).trim();
-      if (!s) return '';
-      if (/^\d{4,}$/.test(s)) return NETEASE_EMBED_BASE + s + NETEASE_EMBED_TAIL;
-      if (!/music\.163\.com/i.test(s)) return '';
-      var m = /[?&]id=(\d{4,})/.exec(s) ||
-              /\/song\/(\d{4,})/.exec(s) ||
-              /\/outchain\/\d+\/(\d{4,})/.exec(s) ||
-              /\/song\?id=(\d{4,})/.exec(s);
-      return m ? (NETEASE_EMBED_BASE + m[1] + NETEASE_EMBED_TAIL) : '';
-    },
-
-    /* 这条地址是不是"官方外链播放器"（而不是音频文件） */
-    isEmbedUrl: function (url) {
-      return /^https:\/\/music\.163\.com\/outchain\/player/i.test(String(url || ''));
-    },
-
-    /* 入库**前**先问浏览器一句："这个地址你到底能不能当音频加载？"
-       v4.9.6 新增：站长第一次贴的是 B 站**网页地址**，库里存得好好的、
-       播放时才报 "no supported sources" —— 句子里既像网络故障又像文件损坏，
-       谁也不知道是自己贴错了。入口拦一次，这类错就再也进不了库。
-
-       ⚠ 为什么用 <audio> 而不是 fetch 看 Content-Type：
-         · 同源策略/防盗链会让 fetch 拿到与 <audio> **不同**的结果；
-         · .m3u8 / 无扩展名的音频流 Content-Type 常是 text/plain，但照样能播；
-         · 最终"能不能播"本来就由 <audio> 说了算 —— 那就直接问它。
-       ⚠ 不需要 CORS：媒体元素播放是"不透明"加载（只有 Web Audio 分析才要 CORS）。
-       返回 { ok:true, duration } 或 { ok:false, reason }；**永不抛错**（调用方按 ok 分支）。 */
-    probeSourceUrl: function (url) {
-      return new Promise(function (resolve) {
-        /* ⚠ 官方外链（网易云 outchain）不是音频地址，**必须先于一切判断**直接放行：
-           <audio> 当然加载不了它，若走到音频校验就会被误判成坏链接，功能直接不可用。
-           （第一版把它插在"取 Audio"之后，于是"没有 Audio 的环境"先返回了降级原因 —— 测试抓住。） */
-        if (Radio.isEmbedUrl(url)) { resolve({ ok: true, embed: true, duration: null }); return; }
-        var A = (typeof window !== 'undefined') ? window.Audio : null;
-        var A = (typeof window !== 'undefined') ? window.Audio : null;
-        if (!A) { resolve({ ok: false, reason: '当前环境无法试听校验，请自行确认地址可用' }); return; }
-        var audio = null, timer = null, done = false;
-        function finish(r) {
-          if (done) return;
-          done = true;
-          if (timer) { clearTimeout(timer); timer = null; }
-          if (audio) { try { audio.removeAttribute('src'); audio.load(); } catch (e) {} }
-          resolve(r);
-        }
-        try {
-          audio = new A();
-          audio.preload = 'metadata';
-          audio.addEventListener('loadedmetadata', function () {
-            var d = audio.duration;
-            finish({ ok: true, duration: (isFinite(d) && d > 0) ? Math.round(d) : null });
-          });
-          audio.addEventListener('error', function () {
-            var code = (audio.error && audio.error.code) || 0;
-            finish({
-              ok: false,
-              code: code,
-              /* code 4 = 不是可播放的音频（网页链接/需登录/防盗链都会落到这里） */
-              reason: code === 4
-                ? '这个地址不是可直接播放的音频文件（可能是网页链接、需要登录，或开了防盗链）'
-                : '这个地址无法作为音频加载（网络/格式问题）'
-            });
-          });
-          /* 超时兜底：个别源既不报错也不给元数据（一直转圈）——不能让表单卡死 */
-          timer = setTimeout(function () { finish({ ok: false, reason: '试听超时：地址无响应或太慢' }); }, 8000);
-          audio.src = url;
-          audio.load();
-        } catch (e) {
-          finish({ ok: false, reason: '试听校验失败：' + ((e && e.message) || '未知原因') });
-        }
-      });
-    },
-
-    /* 读文件 + 取时长 + 入库，一步到位（供 UI 调用）。
-       ⚠ 没有「回删已上传文件」这一步了 —— 音频不再有独立的存储对象，
-         入库失败就是整条失败，不会留孤儿（原 storage 方案的孤儿问题天然消失）。 */
-    addTrack: async function (file, meta, uid) {
-      var read = await Radio.readAudio(file);
-      var probed = await Radio.probeDuration(file);
-      return await Radio.create({
-        title: (meta && meta.title) || String(read.name || '').replace(/\.[^.]*$/, ''),
-        artist: meta && meta.artist,
-        album: meta && meta.album,
-        duration_sec: (meta && meta.duration_sec) || probed,
-        cover_url: meta && meta.cover_url,
-        sort_order: meta && meta.sort_order,
-        data: read.data,
-        size_bytes: read.size,
-        mime: read.mime,
-        owner_id: uid
-      });
-    },
-
-    /* 删除曲目：音频本体就在这一行里，删记录 == 删音频
+    /* 删除条目：只删库记录 —— 音乐本体在网易云，删这条记录不动对方任何内容
        （不再有独立的存储对象，因此也没有「文件删不掉」的中间态）。 */
     removeTrack: async function (row) {
       if (!row || !row.id) throw new Error('缺少曲目标识');
       var res = await ensure().database.from(RADIO_WRITE_TABLE).delete().eq('id', row.id);
       if (res.error) throw new Error(errMsg(res.error, '曲目删除失败'));
-      radioCacheDrop(row.id);
       return true;
-    },
-
-    /* 取可播放地址。入参兼容「整行」与「id」，返回一个**可直接交给 <audio> 的地址**：
-         · 有 source_url（外链音源）→ 直接返回它，**不碰 base64**（v4.9.5 起）
-         · 否则 → 取库里的 data URL（内链，永久有效）
-       ⚠ 两种来源对播放内核完全一样（它只认"一个地址"），所以 radio.js 一行都不用改。
-       ⚠ 不带过期时间 ⇒ 无需续签（radio.js 已按「返回字符串 = 永久」处理）。
-       ⚠ 带 LRU 缓存：上下一首来回切、播完重播都不会重新拉十几 MB。
-         外链也进缓存（几十字符，代价可忽略），语义上更一致。 */
-    playUrl: async function (row) {
-      var id = (row && typeof row === 'object') ? row.id : row;
-      var hit = radioCacheGet(id);
-      if (hit) return hit;
-      var direct = (row && typeof row === 'object') ? row.source_url : null;
-      if (direct) {
-        radioCachePut(id, direct);
-        return direct;
-      }
-      var url = await Radio.trackData(id);
-      radioCachePut(id, url);
-      return url;
     },
 
     /* 批量重排：rows 为 [{id, sort_order}] */
@@ -1496,24 +1186,14 @@
   };
 
   /* v4.7.0：电台回退。
-     云端把音频存成十几 MB 的 base64 data URL（trackData 返回的就是它）；
-     快照里则是**同源文件** `data/radio/<id>.<mp3>`。
-     playUrl 的语义是"给我一个能播的地址"，所以返回文件路径即可 ——
-     播放器不关心它是 data URL 还是路径，只把它交给 <audio>。
-     ⚠ 不再需要把 27MB base64 塞进 JSON：那会让快照本体大到浏览器解析都费劲。 */
+     快照里的电台条目与云端**同形**（id/title/artist/kind/netease_id/source_url）——
+     播放地址就在行里（source_url 是网易云官方播放器地址），所以回退只需 list。
+     ⚠ v5.6.1 清理：base64 时代的 StaticRadio.playUrl（把 data/radio/<id>.mp3
+       当成地址返回）随 ① 一并删除 —— 音频本体早已退役，快照的 radio 恒为空数组。 */
   var StaticRadio = {
     list: async function () {
       var snap = await loadSnapshot();
       return (snap.radio || []).slice();
-    },
-    playUrl: async function (row) {
-      var id = (row && typeof row === 'object') ? row.id : row;
-      var snap = await loadSnapshot();
-      var hit = null;
-      (snap.radio || []).forEach(function (r) { if (String(r.id) === String(id)) hit = r; });
-      if (!hit) throw new Error('该曲目不在快照中');
-      if (!hit.file) throw new Error('该曲目在快照中没有音频数据');
-      return 'data/' + hit.file;
     }
   };
 
@@ -1527,16 +1207,43 @@
        而快照失败只是"兜底也没接住"这一后果 ——
        把根因盖成后果会让排查方向从"配置错了"偏移到"快照坏了"。
        这条是被 noSDK / noAllCDN 两条既有断言逼出来的：
-       首版没做这个区分，两个降级场景的提示文案被静默改掉。 */
+       首版没做这个区分，两个降级场景的提示文案被静默改掉。
+
+     ===== v5.7.0：加一层"竞速上限"（P0 第二条腿） =====
+     ⚠ 为什么光有 fetch 超时不够（实测）：把云端请求变成"永不 resolve"后，
+       fetch 走到 8s 才 abort ⇒ 首屏骨架屏要**干等 8 秒**才出内容。
+       那不是 bug 修好了，只是把"无限等"换成了"等 8 秒"。
+       根因是这道兜底**只挂在失败上**，而"慢"与"挂"都不算失败。
+     ⇒ 所以这里给真身加一个**竞速上限**：超过 FALLBACK_RACE_MS 还没回来，
+       就先拿快照把页面画出来（本地文件，几十毫秒），云端那边继续跑 ——
+       它回来了下次导航自然用真数据。用户看到的是"稍慢但一定出内容"，
+       而不是"转圈到天荒地老"。
+     ⚠ 竞速上限必须**大于** fetch 超时：否则正常慢请求会被快照抢先，
+       用户看到的是快照内容而云端数据随后才到（同一次会话里内容会"变"）。
+       8s 超时 + 10s 竞速 ⇒ fetch 超时先手，竞速只兜"超时机制本身失效"的底
+       （比如底层 fetch 被 polyfill 掉、或 SDK 走了别的通道）。 */
+  var FALLBACK_RACE_MS = 10000;
   function withFallback(real, backup, keys) {
     var out = {};
     Object.keys(real).forEach(function (k) { out[k] = real[k]; });
     keys.forEach(function (k) {
       out[k] = async function () {
         if (snapshotMode) return await backup[k].apply(backup, arguments);
+        var args = arguments;
+        var raceTimer = null;
         try {
-          return await real[k].apply(real, arguments);
+          var raced = await Promise.race([
+            real[k].apply(real, arguments),
+            new Promise(function (_, reject) {
+              raceTimer = setTimeout(function () {
+                reject(new Error('云端响应超时（' + FALLBACK_RACE_MS + 'ms 未返回）'));
+              }, FALLBACK_RACE_MS);
+            })
+          ]);
+          if (raceTimer) { clearTimeout(raceTimer); raceTimer = null; }
+          return raced;
         } catch (e) {
+          if (raceTimer) { clearTimeout(raceTimer); raceTimer = null; }
           try {
             var r = await backup[k].apply(backup, arguments);
             snapshotMode = true;   /* 兜底真的接住了，才认账 */
@@ -1579,19 +1286,14 @@
     isSnapshot: function () { return snapshotMode; },
     SNAPSHOT_URL: SNAPSHOT_URL,    Errors: Errors,
     Storage: Storage,
-    /* v2.9.0：电台数据层（曲目列表 / 音频入库 / 匿名可读播放地址） */
-    /* v4.7.0：电台也走同源回退（与 Posts/Images 同一套纪律：只包读路径） */
-    Radio: withFallback(Radio, StaticRadio, ['list', 'playUrl']),
-    AUDIO_MAX: AUDIO_MAX,
-    /* 库层 CHECK 对应的字符上限（客户端第二道体积关，与库同步） */
-    AUDIO_DATA_MAX: AUDIO_DATA_MAX,
+    /* v2.9.0：电台数据层（条目列表 / 网易云条目入库 / 排序 / 删除） */
+    /* v4.7.0：电台也走同源回退（与 Posts/Images 同一套纪律：只包读路径）
+       ⚠ v5.6.1：回退键只剩 list —— 条目自带 source_url，播放在界面侧渲染 iframe */
+    Radio: withFallback(Radio, StaticRadio, ['list']),
     RADIO_READ_TABLE: RADIO_READ_TABLE,
     RADIO_WRITE_TABLE: RADIO_WRITE_TABLE,
-    /* 读/写两套字段清单（测试用来守住「视图专有列不得进写路径」）
-       RADIO_FIELDS 含视图算出来的 has_data；RADIO_WRITE_FIELDS 是基表可返回的列。 */
+    /* 读/写两套字段清单（测试用来守住「列表绝不带 data」这条性能红线） */
     RADIO_FIELDS: RADIO_FIELDS,
-    RADIO_WRITE_FIELDS: RADIO_WRITE_FIELDS,
-    RADIO_VIEW_ONLY: RADIO_VIEW_ONLY,
     /* ⚠ 签名 URL 有效期的平台硬边界（1~3600），对外暴露给测试钉住。
        电台已不再走签名（改读库），这套留给附件下载等场景。 */
     SIGNED_TTL_MAX: SIGNED_TTL_MAX,

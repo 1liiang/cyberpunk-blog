@@ -32,8 +32,19 @@
 
   var LOCK_KEY = 'neon_atmo_lock';
   var FPS_MIN = 45;        /* 低于它算"坏样本" */
-  var BAD_LIMIT = 4;       /* 连续坏样本数（3s 一个 ⇒ 约 12s）才降档 */
-  var SAMPLE_MS = 3000;
+  /* ⚠ v5.7.0（P1 硬化）：原来的 3000/4 = 「连续 12 秒不达标才降**一层**」，
+     而 downgrade() 每次只摘一层 ⇒ 最坏要 9×12 ≈ 108 秒才关到不卡。
+     实测体感就是"先卡十几秒，机器才开始自救"，且自救速度远跟不上。
+     现在：1 秒采样 + 2 个坏样本即触发（≈2 秒），且**一次连降多层**（CASCADE_LIMIT）。
+     收敛上限 ≈ ceil(9/CASCADE_LIMIT)×2 秒 —— 取 2 层 ⇒ 最坏 ~10 秒关完，而不是 108 秒。
+     ⚠ 为什么还要 COOLDOWN：降档会让帧率回升，若此刻继续按"坏样本"猛降，
+       会在阈值附近把层数反复抖掉（用户看到氛围一闪一闪地消失）。
+       冷却期只重置计数、不重算帧率，等于"给画面 2 秒稳定时间再判"。 */
+  var BAD_LIMIT = 2;       /* 连续坏样本数（1s 一个 ⇒ 约 2s）才降档 */
+  var SAMPLE_MS = 1000;
+  var CASCADE_LIMIT = 2;   /* 一次触发最多连降几层（1 = 旧行为） */
+  var COOLDOWN_MS = 2000;  /* 降档后多久内不再触发下一轮（防抖） */
+  var lastDowngradeAt = 0;
 
   function root() { return document.documentElement; }
   function activeLayers() {
@@ -207,6 +218,13 @@
   function startProbe() {
     if (probe.raf) return;
     probe.last = 0; probe.frames = 0; probe.acc = 0; probe.bad = 0;
+    lastDowngradeAt = 0;
+    /* 采样间隔可由测试覆盖（默认 SAMPLE_MS）—— 1 秒级的真实节奏没法在门禁里等，
+       但语义完全一致：改的只是"多久量一次"，不是"量到什么才降档"，
+       所以 R211f 那条源码契约断言仍然钉着真实值。 */
+    var sampleMs = (typeof window !== 'undefined' && window.__NEON_ATMO_SAMPLE_MS)
+      ? Number(window.__NEON_ATMO_SAMPLE_MS) : SAMPLE_MS;
+    if (!isFinite(sampleMs) || sampleMs <= 0) sampleMs = SAMPLE_MS;
     probe.raf = requestAnimationFrame(probeLoop);
     probe.timer = setInterval(function () {
       if (document.hidden) { probe.acc = 0; probe.frames = 0; return; }
@@ -214,12 +232,26 @@
       var fps = 1000 / (probe.acc / probe.frames);
       probe.acc = 0; probe.frames = 0;
       probe.last = 0;
+      var now = Date.now();
+      /* 冷却期内只重置计数（给画面稳定的时间），不判降档 —— 防"一降就回升、
+         回升又降"的抖动把氛围一层层抖没 */
+      if (lastDowngradeAt && (now - lastDowngradeAt) < COOLDOWN_MS) { probe.bad = 0; return; }
       probe.bad = fps < FPS_MIN ? probe.bad + 1 : 0;
       if (probe.bad >= BAD_LIMIT) {
-        if (downgrade()) { probe.bad = 0; sync(); }
-        else stopProbe(); /* 已无可降：不是氛围的锅，停止折腾 */
+        /* v5.7.0：一次触发连降多层（最多 CASCADE_LIMIT）——
+           光把采样调密只能把"12 秒降一层"变成"2 秒降一层"，最坏仍要 18 秒；
+           连降才是把收敛时间真正压下来的那一步。 */
+        var dropped = 0;
+        while (dropped < CASCADE_LIMIT && downgrade()) dropped++;
+        if (dropped) {
+          probe.bad = 0;
+          lastDowngradeAt = Date.now();
+          sync();
+        } else {
+          stopProbe(); /* 已无可降：不是氛围的锅，停止折腾 */
+        }
       }
-    }, SAMPLE_MS);
+    }, sampleMs);
   }
 
   function stopProbe() {

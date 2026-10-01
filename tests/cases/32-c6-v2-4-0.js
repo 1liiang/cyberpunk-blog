@@ -2,7 +2,7 @@
 /* ============================================================
    tests/cases/32-c6-v2-4-0.js — v2.4.0 插单（K2 / K4 / C1+ C6）
 
-   对应《UI优化建议.md》实施期新增四项（用户选定提案板）：
+   对应 v2.4.0 实施期新增四项（原《UI优化建议.md》已随历史归档清理）：
      · E6(K2)  .btn 双层取景框（::before inset 3px 内圈 + clip-path:inherit
                + currentColor 派生，四色变体自动适配）
      · E7(K4)  .btn-magenta:hover 故障色散 text-shadow（青/紫双侧残影）

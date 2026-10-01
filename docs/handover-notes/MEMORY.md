@@ -42,7 +42,8 @@
 
 ## 3.0 改版进度（B1~B4 已完成并上线）
 
-方案全文 `docs/archive/3.0-改版方案.md`（三方融合：本站 + taozhiyy + sigrika/Fuwari）。
+方案全文原在 `docs/archive/3.0-改版方案.md`（三方融合：本站 + taozhiyy + sigrika/Fuwari）
+—— ⚠ 该归档已于 v5.6.3 整体清理，原文在 git 历史里可查，结论已收进本文件与 HANDOVER。
 - **B1 地基**（v3.0.0）：`--hue` 配色旋钮 + 二维主题罗盘（明度 3 × 色相 9）+ tokens 层
 - **B2 首页**（v3.1.0）：Hero + bento 六模块（MODULE 01~06）+ 错峰入场
 - **B3 阅读与列表**（v3.2.0）：详情页 TOC 侧栏（sticky）+ 页脚三栏 + SECTOR 07~13 编号 + 搜索吸附

@@ -28,22 +28,30 @@ async function run() {
   {
     const CN = 'v4.3 控制台';
 
-    T(CN, 'R230 终端：九条命令 + 彩蛋表 + 历史键齐备',
-      ['help', 'goto', 'search', 'hue', 'theme', 'atmo', 'radio', 'whoami', 'clear']
+    /* ⚠ v5.6.3：命令从九条变八条 —— `radio` 那条走的是 <audio> 内核（window.NEONRadio），
+       而内核已成死代码并删除；电台播放由常驻控制台的网易云官方 iframe 承担。 */
+    T(CN, 'R230 终端：八条命令 + 彩蛋表 + 历史键齐备',
+      ['help', 'goto', 'search', 'hue', 'theme', 'atmo', 'whoami', 'clear']
         .every(function (k) { return new RegExp("'" + k + "'|" + k + ':').test(conSrc); }) &&
       /var EGGS = \{/.test(conSrc) &&
       /neon_console_hist/.test(conSrc) &&
       /window\.NEONConsole = \{/.test(conSrc),
       '命令或彩蛋表缺项');
 
-    /* 接线：路由改 hash（走既有 parseHash）；hue/theme/atmo 走 NEONControls（惰性） */
-    T(CN, 'R230b 接线全部走既有系统：hash 路由 + NEONControls 惰性 + NEONRadio',
-      /location\.hash = GOTO_MAP\[key\]/.test(conSrc) &&
-      /'#\/search\/' \+ encodeURIComponent\(q\)/.test(conSrc) &&
-      /window\.NEONControls \|\| null/.test(conSrc) &&
-      /c\.setHue\(n\)/.test(conSrc) && /c\.setTheme\(m\)/.test(conSrc) && /c\.setAtmoMode\(m\)/.test(conSrc) &&
-      /window\.NEONRadio/.test(conSrc),
-      '接线缺项或未惰性');
+    /* 接线：路由改 hash（走既有 parseHash）；hue/theme/atmo 走 NEONControls（惰性）
+       ⚠ v5.6.3 改判：原先这条还钉 window.NEONRadio（<audio> 内核）。
+       内核已成死代码并删除，radio 命令也一并撤下 —— 现在钉的是
+"控制台不再引它"，防止有人又把死内核接回终端。 */
+    /* ⚠ 必须扫**剥过注释**的源码：本文件上方那段说明里就写着 NEONRadio（留痕），
+       用原文扫会自己把自己判红（与 35 号 R143 同一个坑）。 */
+    const conCode = stripComments(conSrc);
+    T(CN, 'R230b 接线全部走既有系统：hash 路由 + NEONControls 惰性（且不再依赖已删内核）',
+      /location\.hash = GOTO_MAP\[key\]/.test(conCode) &&
+      /'#\/search\/' \+ encodeURIComponent\(q\)/.test(conCode) &&
+      /window\.NEONControls \|\| null/.test(conCode) &&
+      /c\.setHue\(n\)/.test(conCode) && /c\.setTheme\(m\)/.test(conCode) && /c\.setAtmoMode\(m\)/.test(conCode) &&
+      !/NEONRadio/.test(conCode),
+      '接线缺项、未惰性，或把已删的电台内核接回来了');
 
     T(CN, 'R230c 无障碍三件：role=dialog / 输出区 role=log aria-live / 焦点归还',
       /role="dialog"/.test(conSrc) &&

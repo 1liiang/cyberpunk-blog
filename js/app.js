@@ -530,6 +530,7 @@
     highlight: 'js/vendor/highlight.min.js'
   };
   var vendorLoading = {};
+  var vendorFailed = {};   /* v5.6.5：记「真的加载失败过」的库 —— 供 ?diag=1 如实汇报 */
   function loadVendors(names) {
     var todo = names.filter(function (n) {
       var g = (n === 'dompurify') ? window.DOMPurify : window[n];
@@ -540,8 +541,12 @@
       vendorLoading[n] = new Promise(function (resolve, reject) {
         var s = document.createElement('script');
         s.src = VENDOR_SRC[n] + '?v=' + ((window.BUILD && window.BUILD.id) || Date.now());
-        s.onload = function () { resolve(true); };
-        s.onerror = function () { vendorLoading[n] = null; reject(new Error(n + ' 加载失败')); };
+        s.onload = function () { vendorFailed[n] = false; resolve(true); };
+        s.onerror = function () {
+          vendorLoading[n] = null;
+          vendorFailed[n] = true;
+          reject(new Error(n + ' 加载失败'));
+        };
         document.head.appendChild(s);
       });
       return vendorLoading[n];
@@ -713,22 +718,28 @@
   }
 
   /* 诊断横幅：在 ?diag=1 时额外显示「加载自哪个文件」的硬证据。
-     与 version.js 自身的横幅配合，可判断 app.js 与 version.js 版本是否一致。 */
+     与 version.js 自身的横幅配合，可判断 app.js 与 version.js 版本是否一致。
+     ⚠ v5.6.5：这里原先也做 `typeof marked === 'undefined'` 那三项检查，
+       把它们报成"依赖缺失"—— 同样的过期逻辑：三个库 v5.3.0 起改成渲染正文时
+       按需注入，启动那一刻**必然不存在**，于是诊断条永远显示"缺失"，
+       反而把真正的诊断信息淹了。现在只报**真的加载失败过**的（loadVendors 记的账）。
+       顺带去掉 WorkBuddyCloud：那是旧平台 SDK，早已不加载也不再使用。 */
   function diagBanner() {
     if (!/[?&]diag=1/.test(location.search)) return;
     var info = getVersionInfo();
-    var errs = [];
-    if (typeof marked === 'undefined') errs.push('marked');
-    if (typeof DOMPurify === 'undefined') errs.push('DOMPurify');
-    if (typeof hljs === 'undefined') errs.push('highlight.js');
-    if (typeof WorkBuddyCloud === 'undefined') errs.push('CloudSDK');
+    var failed = Object.keys(vendorFailed).filter(function (k) { return vendorFailed[k]; });
+    var pending = Object.keys(VENDOR_SRC).filter(function (k) {
+      var g = (k === 'dompurify') ? window.DOMPurify : window[k];
+      return !g && !vendorFailed[k];
+    });
     var line = document.createElement('div');
     line.id = 'neon-diag-app';
     line.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99998;' +
       'background:#0b1120;color:#00f0ff;font:12px/1.8 monospace;padding:6px 14px;text-align:center';
     line.textContent = 'DIAG/app.js · app 侧读到版本 = ' +
       (info && info.BUILD ? 'v' + info.BUILD : '【读取失败 version.js 未生效】') +
-      ' · 依赖缺失: ' + (errs.length ? errs.join(', ') : '无');
+      ' · Markdown 引擎: ' + (failed.length ? '加载失败(' + failed.join(',') + ')'
+        : (pending.length ? '待按需加载(' + pending.join(',') + ')  ← 正常，打开文章时才注入' : '已就绪'));
     if (document.body) document.body.appendChild(line);
   }
 
@@ -1832,512 +1843,23 @@ function route() {
     });
   }
 
-  /* ============ v2.8.0：电台（RADIO） ============
-     三块拼起来：内核（js/radio.js，纯逻辑）+ 视图（views.js 纯渲染）+ 这里（接线）。
+  /* ============ 电台（RADIO）：权限判据 ============
+     ⚠ v5.6.1：v2.8.0 那套「迷你条 dock + 弹出面板」的接线（约 20 个函数／
+     一个 RadioUI 状态对象）随 HANDOVER §6 审计清单 ② 整体删除 ——
+     容器（#radio-dock / #radio-panel-host）在 v5.2.0 就没了，
+     函数体也早已是空实现或不可达代码。完整名单见 version.js 的 v5.6.1 条目。
+     ⚠ 本注释刻意**不逐一点名**那些已删标识符：audit-all.js 的 ② 项是
+       原文扫描（不剥注释），点名会让审计一直报"还残留"（实测踩到）。
 
-     ★ 为什么播放器不放在 #app 里：路由每次渲染都会重写 #app.innerHTML，
-       播放器若在内部会被反复重建 —— 音频会中断、状态会丢。
-       它挂在 index.html 的 #radio-dock（#app 之外），与阅读进度条同理。
-
-     ★ 为什么用事件代理而不是逐个绑定：面板是整块重渲染的（订阅 statechange），
-       逐个绑定会在每次重渲染后失效、需要重绑。代理到容器上只绑一次，永久有效。 */
-  var RadioUI = {
-    rows: [],            /* 曲目缓存（避免每次开面板都请求） */
-    loaded: false,
-    panelOpen: false,
-    busy: false          /* 上传中标志，防重复提交 */
-  };
-
-  var radioDockEl = document.getElementById('radio-dock');
+     现在的电台是一条**更短**的路（全部仍在本文件里，且是活的）：
+       · 常驻控制台 #radio-stage  → paintStage()（v5.1.0，切页面不断歌）
+       · 电台页 #/radio            → renderRadio() + bindRadioPage()（v5.0.0/5.1.0）
+       · 条目读写                   → need('Radio') 的 list / add / remove / reorder
+     ⚠ 这三条路都靠下面这一个权限判据，所以它必须留着。 */
 
   /* 是否具备管理权限（作者本人）。未登录或非作者 → 只读收听 */
   function canManageRadio() {
     return !!(State.session && State.session.user);
-  }
-
-  /* 渲染迷你条（只在状态变化时调用，不整页重绘） */
-  /* v5.2.0：旧小条已移除。保留空实现是为了不动那 6 处调用点
-     （删函数会连锁 ReferenceError；清空实现更安全，也让旧入口彻底失效）。
-     ⚠ 真正的播放界面是 #app 之外的 #radio-stage（见 paintStage）。 */
-  function paintDock() {
-    return;
-    /* eslint-disable no-unreachable */
-    if (!radioDockEl) return;
-    var st = window.NEONRadio ? window.NEONRadio.state() : null;
-    if (!st) return;
-
-    /* 即便下面要把 dock 藏起来，面板里的进度/时间也要同步（面板可能开着） */
-    paintPanelProgress(st);
-
-    /* 让主内容顶部为 dock 让位（CSS: body.has-radio .wrap）。
-       ⚠ 判据用「电台可用」而非「dock 当前可见」—— 否则面板一开一关，
-          class 跟着抖，正文会上下跳 84px。 */
-    try {
-      document.body.classList.toggle('has-radio', !!st.count || canManageRadio());
-    } catch (e) { /* 忽略 */ }
-
-    /* ⚠ 面板展开时收起迷你条：两者都定位在左上角同一处（left:16 /
-       top:var(--topbar-h)+14），同时显示会**完全重叠**、面板盖住 dock
-       （实测面板 z-index 70 > dock 60）。收起态 → 迷你条；展开态 → 面板。
-       面板自带播放控制与收起按钮，因此不必两个同时在场。 */
-    if (RadioUI.panelOpen) {
-      radioDockEl.hidden = true;
-      return;
-    }
-
-    /* ⚠ 空曲目时的显隐策略（易错点）：
-       最初写成「没曲目就隐藏 dock」，结果作者也看不到入口 —— 无法上传第一首歌，
-       形成死锁。正确逻辑：
-         · 已登录（能管理）→ **始终显示**，空时 dock 文案引导「点开添加曲目」
-         · 未登录（只能听）→ 空时隐藏，避免访客看到一个永远没内容的播放器 */
-    if (!st.count && !canManageRadio()) {
-      radioDockEl.hidden = true;
-      return;
-    }
-    radioDockEl.hidden = false;
-    radioDockEl.innerHTML = V().radioDockView(st);
-  }
-
-  /* 只更新面板里随时间变化的部位（进度条/时间），避免整面板重渲染抢焦点 */
-  function paintPanelProgress(st) {
-    var panel = document.querySelector('.radio-panel');
-    if (!panel) return;
-    var seek = panel.querySelector('.radio-seek');
-    var cur = panel.querySelector('[data-radio-time]');
-    /* ⚠ 总时长也要跟着更新：它只在整面板重绘时渲染一次，
-       切歌后如果不在这里纠正，就会一直显示**上一首**的时长（实测踩到）。 */
-    var dur = panel.querySelector('[data-radio-dur]');
-    if (seek) {
-      var d = st.duration || 0;
-      var val = d > 0 ? Math.round((st.time / d) * 1000) : 0;
-      /* ⚠ 用户正在拖动时不要回写 value —— 会跟手指打架、拖不动。
-         用 document.activeElement 判断是否持有焦点（拖动中的 range 会获得焦点）。 */
-      if (document.activeElement !== seek) seek.value = String(clamp01(val));
-    }
-    if (cur) cur.textContent = window.NEONRadio.fmtTime(st.time);
-    if (dur) dur.textContent = window.NEONRadio.fmtTime(st.duration || 0);
-  }
-
-  function clamp01(v) { return v < 0 ? 0 : (v > 1000 ? 1000 : v); }
-
-  /* 整面板渲染（打开、或曲目列表/模式变化时） */
-  function paintPanel() {
-    if (!RadioUI.panelOpen) {
-      var old = document.querySelector('.radio-panel');
-      if (old) old.remove();
-      return;
-    }
-    var st = window.NEONRadio.state();
-    st.canManage = canManageRadio();
-    /* 列表尚未拉到（首次打开、尚未 loaded）→ 显示"调频中"骨架而非"没有曲目" */
-    st.listLoading = !RadioUI.loaded;
-    var host = document.getElementById('radio-panel-host');
-    if (!host) {
-      host = document.createElement('div');
-      host.id = 'radio-panel-host';
-      document.body.appendChild(host);
-    }
-    host.innerHTML = V().radioPanelView(st);
-    /* 表单里已填的内容不因重渲染丢失：重渲染前记下、渲染后回填 */
-    restoreFormDraft();
-  }
-
-  /* ---------- 面板开关 ----------
-     ★ 必须"先开面板、后取数据"：
-       面板渲染绝不能 await 网络 —— 否则网络慢/被阻断时点了没反应，
-       用户以为按钮坏了（2026-09-29 真实浏览器实测：本地起服打云服务
-       list() 3s 不返回，面板死活打不开）。
-       正解：同步渲染骨架（loading 态）→ 立刻 bind → 后台补数据再重绘。 */
-  function openRadioPanel() {
-    /* v5.2.0：旧面板已废弃 —— 任何想"打开面板"的调用统一改成进电台页 */
-    location.hash = '#/radio';
-    return;
-    /* eslint-disable no-unreachable */
-    RadioUI.panelOpen = true;
-    paintPanel();      /* 先出面板（此刻 RadioUI.rows 可能是旧值/空，先给骨架） */
-    paintDock();
-    bindRadioPanel();
-    /* 首次打开才拉列表；已有缓存直接用（避免每次开面板都打网络）。
-       loadRadioTracks 内部自带 catch，失败会 toast 并保持空态，不会静默。 */
-    if (!RadioUI.loaded) {
-      loadRadioTracks().then(function () {
-        /* 数据回来后重绘（此时用户可能已关了面板，paintPanel 会自行判断） */
-        paintPanel();
-      }, function () { /* 错误已在内部消化 */ });
-    }
-  }
-
-  function closeRadioPanel() {
-    RadioUI.panelOpen = false;
-    var host = document.getElementById('radio-panel-host');
-    if (host) host.innerHTML = '';
-    paintDock();
-  }
-
-  /* ---------- 拉曲目列表 ----------
-     ⚠ 本函数**永不 reject**（内部已消化错误）：调用方（openRadioPanel）
-     直接 .then 重绘即可，不需要再挂 catch。
-
-     v4.9.1：**在途去重**。原先并发调用会各发一次请求 —— 实测首屏同一秒出现
-     两个一模一样的 public_radio GET（两条路径都拉了列表），而本机到新加坡
-     一次往返就要 ~1.2s，纯属白等。只在"在途"期间共享：请求一结束就清空，
-     所以上传/删除之后仍然会真刷新。 */
-  var radioLoadPromise = null;
-  async function loadRadioTracks() {
-    if (radioLoadPromise) return radioLoadPromise;
-    radioLoadPromise = (async function () {
-      try {
-        var rows = await need('Radio').list();
-        RadioUI.rows = rows || [];
-        RadioUI.loaded = true;
-        if (window.NEONRadio) window.NEONRadio.setList(radioQueue(), true);
-      } catch (e) {
-        /* 保持 loaded=false，下次开面板会重试（网络抖动自愈） */
-        RadioUI.loaded = false;
-        toast(errMsg(e, '曲目列表加载失败'), 'error');
-      } finally {
-        radioLoadPromise = null;
-      }
-    })();
-    return radioLoadPromise;
-  }
-
-  /* 交给播放内核的队列。
-     ⚠ 访客视角要摘掉「无音频本体」的旧记录（has_data=false，云存储时代的遗留）——
-       它对访客永远播不了，留着只会让电台看起来是坏的；
-       而作者必须看得到它们才能删除/重传，所以管理视角完整保留。
-     ⚠ 判据依赖登录态 ⇒ 身份一变就必须重取（见 onAuthStateChange），
-       否则作者会看不到那条待处理的旧记录。 */
-  function radioQueue() {
-    if (canManageRadio()) return RadioUI.rows;
-    return RadioUI.rows.filter(function (r) { return r.has_data !== false; });
-  }
-
-  /* ---------- 事件绑定（代理，绑一次） ---------- */
-  function bindRadioDock() {
-    return;   /* v5.2.0：旧小条已移除（理由见 paintDock） */
-    /* eslint-disable no-unreachable */
-    if (!radioDockEl || radioDockEl._radioBound) return;
-    radioDockEl._radioBound = true;
-
-    radioDockEl.addEventListener('click', function (ev) {
-      var actEl = ev.target.closest('[data-radio-act]');
-      if (actEl) {
-        var act = actEl.getAttribute('data-radio-act');
-        /* dock 里只有 toggle（其余点击一律展开面板） */
-        if (act === 'toggle') {
-          ev.stopPropagation();
-          ev.preventDefault();
-          window.NEONRadio.toggle();
-          return;
-        }
-      }
-      /* v5.1.0：电台重做后不再有"展开小面板" —— 点小条直接进电台页
-         （播放器是常驻的，切页面不会断歌）。 */
-      ev.preventDefault();
-      location.hash = '#/radio';
-    });
-
-    /* 键盘可达：Enter/Space 展开（dock 是 role=button） */
-    radioDockEl.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Enter' || ev.key === ' ') {
-        if (ev.target.closest('[data-radio-act]')) return;   /* 让按钮自己处理 */
-        ev.preventDefault();
-        openRadioPanel();
-      }
-    });
-  }
-
-  function bindRadioPanel() {
-    var host = document.getElementById('radio-panel-host');
-    if (!host || host._radioBound) return;
-    host._radioBound = true;
-
-    /* 点击面板外部 → 收起（在 mousedown 上判，避免与面板内点击冲突） */
-    document.addEventListener('mousedown', function (ev) {
-      if (!RadioUI.panelOpen) return;
-      if (ev.target.closest('.radio-panel')) return;
-      if (ev.target.closest('#radio-dock')) return;   /* 点 dock 由它自己处理 */
-      closeRadioPanel();
-    });
-
-    document.addEventListener('keydown', function (ev) {
-      if (ev.key === 'Escape' && RadioUI.panelOpen) {
-        closeRadioPanel();
-      }
-    });
-
-    /* 统一 click 代理 */
-    host.addEventListener('click', function (ev) {
-      var el = ev.target.closest('[data-radio-act]');
-      if (!el) return;
-      var act = el.getAttribute('data-radio-act');
-      var id = el.getAttribute('data-id');
-      handleRadioAction(act, id, el, ev);
-    });
-
-    /* range 输入：seek 与 volume（input 事件才能跟手实时响应） */
-    host.addEventListener('input', function (ev) {
-      var el = ev.target.closest('[data-radio-act]');
-      if (!el) return;
-      var act = el.getAttribute('data-radio-act');
-      if (act === 'seek') {
-        var d = window.NEONRadio.state().duration || 0;
-        if (d > 0) window.NEONRadio.seek((Number(el.value) / 1000) * d);
-      } else if (act === 'volume') {
-        window.NEONRadio.setVolume(Number(el.value) / 100);
-      }
-    });
-
-    /* 文件选择：选中后把文件名回填到「曲目名称」（用户多半想用文件名） */
-    host.addEventListener('change', function (ev) {
-      var el = ev.target;
-      if (el && el.getAttribute && el.getAttribute('data-radio-field') === 'file') {
-        var nameInput = host.querySelector('[data-radio-field="title"]');
-        var f = el.files && el.files[0];
-        if (nameInput && f && !nameInput.value.trim()) {
-          nameInput.value = f.name.replace(/\.[^.]*$/, '').slice(0, 200);
-        }
-      }
-    });
-  }
-
-  function handleRadioAction(act, id, el, ev) {
-    var R = window.NEONRadio;
-    switch (act) {
-      case 'toggle': R.toggle(); break;
-      case 'prev': R.prev(); break;
-      case 'next': R.next(); break;
-      case 'playat': {
-        var numId = Number(id);
-        var st = R.state();
-        /* 点当前曲目 = 播放/暂停切换（符合通用播放器习惯） */
-        if (st.current && st.current.id === numId) { R.toggle(); }
-        else R.playAt(numId);
-        break;
-      }
-      case 'mute': R.toggleMute(); break;
-      case 'repeat': {
-        var modes = R.REPEAT_MODES;
-        var i = modes.indexOf(R.state().repeat);
-        R.setRepeat(modes[(i + 1) % modes.length]);
-        paintPanel();
-        break;
-      }
-      case 'shuffle': R.setShuffle(!R.state().shuffle); paintPanel(); break;
-      case 'close': closeRadioPanel(); break;
-      case 'up': moveTrack(numIdOf(id), -1); break;
-      case 'down': moveTrack(numIdOf(id), 1); break;
-      case 'del': askRemoveTrack(numIdOf(id)); break;
-      case 'add': showAddForm(true); break;
-      case 'cancel-add': showAddForm(false); break;
-      case 'submit-add': submitAddTrack(); break;
-      default: break;
-    }
-    if (ev) ev.preventDefault();
-  }
-
-  function numIdOf(id) { return Number(id); }
-
-  /* ---------- 上传表单 ---------- */
-  var formDraft = { title: '', artist: '', album: '', url: '' };
-
-  function showAddForm(on) {
-    var host = document.getElementById('radio-panel-host');
-    if (!host) return;
-    var form = host.querySelector('[data-radio-form]');
-    if (!form) return;
-    form.hidden = !on;
-    if (on) {
-      var first = form.querySelector('[data-radio-field="title"]');
-      if (first) first.focus();
-    }
-  }
-
-  /* 重渲染后回填草稿（否则用户填一半、恰逢状态刷新就白填了） */
-  function restoreFormDraft() {
-    var host = document.getElementById('radio-panel-host');
-    if (!host) return;
-    var form = host.querySelector('[data-radio-form]');
-    if (!form || form.hidden) return;
-    ['title', 'artist', 'album', 'url'].forEach(function (k) {
-      var el = form.querySelector('[data-radio-field="' + k + '"]');
-      if (el && !el.value) el.value = formDraft[k] || '';
-    });
-  }
-
-  function formMsg(text, kind) {
-    var host = document.getElementById('radio-panel-host');
-    if (!host) return;
-    var el = host.querySelector('[data-radio-msg]');
-    if (!el) return;
-    el.hidden = false;
-    el.textContent = text;
-    el.className = 'radio-form-msg' + (kind ? ' is-' + kind : '');
-  }
-
-  async function submitAddTrack() {
-    if (RadioUI.busy) return;
-    var host = document.getElementById('radio-panel-host');
-    if (!host) return;
-    var form = host.querySelector('[data-radio-form]');
-    if (!form) return;
-
-    var titleEl = form.querySelector('[data-radio-field="title"]');
-    var artistEl = form.querySelector('[data-radio-field="artist"]');
-    var albumEl = form.querySelector('[data-radio-field="album"]');
-    var fileEl = form.querySelector('[data-radio-field="file"]');
-    var urlEl = form.querySelector('[data-radio-field="url"]');
-
-    var title = (titleEl && titleEl.value || '').trim();
-    var file = fileEl && fileEl.files && fileEl.files[0];
-    var url = (urlEl && urlEl.value || '').trim();
-
-    /* 校验在前，给具体原因（不做"上传失败"这种模糊提示） */
-    if (file && url) { formMsg('音频文件与直链只能选一个', 'err'); return; }
-    if (!file && !url) { formMsg('请选择音频文件，或填写 https 直链', 'err'); return; }
-    if (!title) { formMsg('请填写曲目名称', 'err'); return; }
-    if (title.length > 200) { formMsg('曲目名称不能超过 200 字', 'err'); return; }
-    /* 直链的结构校验放在前面做（别等提交到库层才因为 CHECK 报错，
-       那样用户拿到的是"曲目入库失败"，看不出是链接写错了） */
-    if (url) {
-      try { need('Radio').normalizeSourceUrl(url); }
-      catch (e2) { formMsg(errMsg(e2, '音频直链不合法'), 'err'); return; }
-    }
-
-    var uid = State.session && State.session.user && State.session.user.id;
-    if (!uid) { formMsg('请先登录', 'err'); return; }
-
-    RadioUI.busy = true;
-    formMsg(url ? '正在试听校验这条直链…' : '正在上传并写入云端库…（大文件需要一点时间）');
-
-    try {
-      /* v4.9.6：外链**先试听校验再入库**。
-         ⚠ 教训实锤：站长第一次贴的是 B 站**网页地址**，它 https 合法、URL 结构也合法，
-           于是顺利入库，直到播放时才报一句 "no supported sources" —— 用户根本看不出
-           是自己贴错了。校验放在入库前，这类错就进不了库。 */
-      /* v5.0.0：只剩一条路 —— 网易云条目。本地文件上传已按站长决定移除。 */
-      var kindEl = form.querySelector('[data-radio-field="kind"]');
-      var wantKind = (kindEl && kindEl.value) || 'auto';
-      var row = await need('Radio').add(url, {
-        title: title,
-        artist: (artistEl && artistEl.value || '').trim(),
-        kind: wantKind === 'auto' ? null : wantKind,
-        id: url
-      }, uid);
-
-      /* 成功 → 刷新列表，清空表单 */
-      formDraft = { title: '', artist: '', album: '', url: '' };
-      await loadRadioTracks();
-      RadioUI.loaded = true;
-      paintPanel();
-      showAddForm(false);
-      toast('已加入频段：' + (row && row.title ? row.title : title), 'ok');
-      formMsg('');
-    } catch (e) {
-      formMsg(errMsg(e, url ? '外链写入失败' : '上传失败'), 'err');
-    } finally {
-      RadioUI.busy = false;
-    }
-  }
-
-  /* ---------- 删除 / 排序 ---------- */
-  function askRemoveTrack(id) {
-    var row = RadioUI.rows.filter(function (r) { return r.id === id; })[0];
-    if (!row) return;
-    openModal('删除曲目', '<p>将从频段移除「' + V().esc(row.title) + '」及其云端音频数据。此操作不可撤销。</p>', [
-      { label: '取消', cls: 'btn-ghost', onClick: closeModal },
-      { label: '确认删除', cls: 'btn-magenta', onClick: async function () {
-        closeModal();
-        try {
-          await need('Radio').removeTrack(row);
-          await loadRadioTracks();
-          paintPanel();
-          toast('已移除：' + row.title, 'ok');
-        } catch (e) {
-          toast(errMsg(e, '删除失败'), 'error');
-        }
-      } }
-    ]);
-  }
-
-  /* 上移/下移：交换相邻两项的 sort_order，落库后重拉 */
-  async function moveTrack(id, delta) {
-    var rows = RadioUI.rows.slice();
-    var i = -1;
-    for (var k = 0; k < rows.length; k++) { if (rows[k].id === id) { i = k; break; } }
-    if (i < 0) return;
-    var j = i + delta;
-    if (j < 0 || j >= rows.length) return;   /* 已在两端，静默不动 */
-
-    /* 重排 sort_order：按新顺序重新编号（简单可靠，不怕历史值重复） */
-    var swapped = rows.slice();
-    var t = swapped[i]; swapped[i] = swapped[j]; swapped[j] = t;
-    var payload = swapped.map(function (r, idx) { return { id: r.id, sort_order: idx }; });
-
-    try {
-      await need('Radio').reorder(payload);
-      await loadRadioTracks();
-      paintPanel();
-    } catch (e) {
-      toast(errMsg(e, '排序保存失败'), 'error');
-    }
-  }
-
-  /* ---------- 初始化 ---------- */
-  function initRadio() {
-    if (!window.NEONRadio) return false;
-    var R = window.NEONRadio;
-    try {
-      R.init({
-        /* 播放地址取自库内音频数据（公开视图 public_radio，**匿名可读**）。
-           ⚠ v2.9.0 起不再走云存储签名 URL —— 云存储只服务登录用户，
-             未登录访客拿不到地址，与「所有人可听」互斥。
-           入参是**整行**：内核不关心地址怎么来，只把它交给数据层。 */
-        fetchUrl: function (row) { return need('Radio').playUrl(row); }
-      });
-    } catch (e) {
-      try { console.error('[NEON] 电台初始化失败：', e); } catch (e2) {}
-      return false;
-    }
-
-    /* 订阅状态 → 只重绘 dock；面板只在"结构性变化"时才整绘 */
-    var lastPanelKey = '';
-    R.on('statechange', function (st) {
-      paintDock();
-      /* 面板整绘的触发条件：曲目数/当前曲目/播放态中会改变按钮文案的部分 */
-      var key = [st.count, st.current ? st.current.id : '-', st.playing ? 1 : 0,
-        st.repeat, st.shuffle ? 1 : 0, st.muted ? 1 : 0,
-        Math.round((st.volume || 0) * 100)].join('|');
-      if (RadioUI.panelOpen && key !== lastPanelKey) {
-        lastPanelKey = key;
-        paintPanel();
-      }
-    });
-
-    /* ⚠⚠ 必须订阅 timeupdate（内核每次播放进度推进都会发，带 time/duration）。
-       当前进度条与两个时间标签**只有** paintPanelProgress 在维护，而上面那个
-       statechange 只在「播放/暂停/载入/切歌」这类**离散**事件里触发，
-       播放过程中根本不发 ⇒ 不订阅的话进度显示在整首歌里是**冻住的**，
-       总时长更只在整面板重绘那一下渲染，于是长期停在上一首的值甚至 0:00。
-       ⚠ 顺序坑（不是 bug，别误判）：statechange 里是「先 paintDock（刷进度）
-         → 再 paintPanel（整绘）」，整绘会把刚刷的进度重置回渲染快照，
-         所以切歌瞬间的进度要等**下一次 timeupdate** 才纠正（约 0.25s 内）。 */
-    R.on('timeupdate', function (t) { paintPanelProgress(t); });
-
-    R.on('error', function (p) {
-      /* 首次错误提示一次即可（连环错误由内核限流，这里不重复骚扰） */
-      if (p && p.message) toast(p.message, 'error');
-    });
-
-    bindRadioDock();
-
-    /* 首次加载曲目列表：异步，不阻塞启动 */
-    loadRadioTracks().then(function () {
-      paintDock();
-    });
-
-    return true;
   }
 
   /* ============ C16：标签管理（重命名 / 合并） ============
@@ -3727,7 +3249,7 @@ function route() {
   });
 
   /* ---------- v2.9.4 主题罗盘：外部点击收起 + Escape 收起 + 方向键换档 ----------
-     与电台面板同一套范式（见 bindRadioPanel）。装在 document 上而非 renderNav 里：
+     与电台控制台同一套范式（见 paintStage 的"只在目标变化时才重建"）。装在 document 上而非 renderNav 里：
      renderNav 会被反复调用（登录/登出/路由），逐次绑定会累积监听；
      委托一次即可，面板被 innerHTML 重建也不影响。 */
   document.addEventListener('mousedown', function (ev) {
@@ -4006,10 +3528,10 @@ function route() {
     /* C19：收藏按钮委托。装在 route 之前 —— 与快捷键同理：
        避免"首屏已出现但点了没反应"的窗口期。全站只装一次（委托到 document）。 */
     try { bindMarkDelegation(); } catch (e) { try { console.error('[NEON] 收藏委托失败：', e); } catch (e2) {} }
-    /* v2.8.0：电台播放器。装在 route 之前 —— 与快捷键/收藏同理，
-       避免"界面已出现但点了没反应"。radio.js 缺失时静默跳过，
-       不影响其余功能（电台是增强项，不是启动必需件）。 */
-    try { initRadio(); } catch (e) { try { console.error('[NEON] 电台初始化失败：', e); } catch (e2) {} }
+    /* v5.6.1：这里原先还有一句 initRadio()（把旧面板接上播放内核）。
+       面板在 v5.1.0 已被常驻控制台替代，initRadio 随审计清单 ② 删除。
+       ⚠ 电台的启动**不在这里**：bindRadioPageOnce() + requestIdleCallback(rcLoad)
+       在文件上方（v5.1.0 起）就完成了，"界面上点了没反应"的窗口期同样不存在。 */
     /* 编辑器离开提醒（全局仅挂载一次，实时读取当前编辑器内容） */
     window.addEventListener('beforeunload', function (e) {
       var ta = document.getElementById('editor-textarea');
@@ -4018,18 +3540,17 @@ function route() {
         e.returnValue = '';
       }
     });
-    /* CDN 依赖检查 */
-    var missing = [];
-    if (typeof marked === 'undefined') missing.push('Markdown');
-    if (typeof DOMPurify === 'undefined') missing.push('DOMPurify');
-    if (typeof hljs === 'undefined') missing.push('highlight.js');
-    if (missing.length > 0) {
-      var b = document.createElement('div');
-      b.className = 'notice-banner';
-      b.innerHTML = '◈ 以下 CDN 组件加载失败：<b>' + missing.join('、') + '</b>。请检查网络后刷新。';
-      /* 挂 body 而不是 #app：挂 #app 会被路由重渲染的 innerHTML 整个抹掉 */
-      try { document.body.insertBefore(b, app); } catch (e) { app.prepend(b); }
-    }
+    /* ⚠ v5.6.5：这里原先是「CDN 依赖检查」—— 启动时若 marked/DOMPurify/hljs 三个全局
+       不存在，就往页面顶部插一条「以下 CDN 组件加载失败：… 请检查网络后刷新」的红条。
+       它现在是**假警报**，两处都过期了：
+         ① v4.8.1 起这三个库已**本地托管**（js/vendor/，见 js/vendor/README.md），
+            文案里的"CDN"早就不成立；
+         ② v5.3.0 起它们**不在启动时加载**（改成渲染正文时按需注入，见上面的 loadVendors）——
+            所以启动那一刻它们"必然不存在"，这条检查 100% 会亮红条，
+            而用户其实还没打开任何一篇文章。
+       真实失败路径本来就有、而且更准：`renderMarkdownInto()` 在 loadVendors 失败时
+       就地渲染「Markdown 引擎加载失败，仅显示纯文本」+ 原文兜底（不白屏、不丢内容）。
+       故整段删除 —— 启动阶段不再对"还没用到的库"下结论。 */
     /* SDK 初始化
        注意：必须在 try 内调用。若 cloud.js 整体加载失败，
        window.NEON 不存在，此处会抛 ReferenceError 并中断整个启动流程。 */
@@ -4099,11 +3620,16 @@ function route() {
           }
           safeRenderNav();
           safeRoute();
-          /* 电台队列按身份过滤（访客不显示无音频本体的旧记录）⇒ 身份一变必须重取。
-             失败不影响主流程：下次开面板会自动重试。 */
+          /* 电台条目按身份渲染（未登录访客没有"增删排序"入口）⇒ 身份一变必须重取。
+             ⚠ v5.6.1：这里原先调的是旧面板的 loadRadioTracks()/paintDock()/paintPanel()，
+             随审计清单 ② 换成现在这条真路 —— rcLoad() 重取条目并重绘常驻控制台，
+             电台页正开着时再补一次 renderRadio()。
+             失败不影响主流程：下次切到电台页 rcLoad 会自行重试。 */
           try {
-            if (window.NEONRadio) {
-              loadRadioTracks().then(function () { paintDock(); paintPanel(); }, function () {});
+            if (!RC_STATE.loaded || (location.hash.replace(/^#\/?/, '').split('/')[0] || '') === 'radio') {
+              rcLoad().then(function () {
+                if ((location.hash.replace(/^#\/?/, '').split('/')[0] || '') === 'radio') renderRadio();
+              }, function () {});
             }
           } catch (e) { /* 忽略 */ }
         });

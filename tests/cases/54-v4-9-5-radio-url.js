@@ -125,185 +125,157 @@ async function run() {
   const S = makeSuite();
   const T = S.T;
 
-  /* ================= ① 直链规范化：只放行 https ================= */
+  /* ================= ① 认得出各种网易云写法 =================
+     ⚠ v5.6.1 重写：本 case 原先钉的是 v4.9.5 那套「外链音源」API
+     （normalizeSourceUrl / addByUrl / playUrl / probeSourceUrl /
+       neteaseEmbedUrl / isEmbedUrl）。那套管道在 v5.0.0 换成「网易云条目」后
+     整体退役，函数已按 HANDOVER §6 审计清单 ① 从 cloud.js 删除（v5.6.1）。
+     这里的 R290/R291/R292/R293/R294/R298/R299 等 24 条断言随之退役，
+     改钉**现在真正活着**的入口：Radio.add(input, meta, uid) —— 它内部走
+     parseNetease + buildEmbedUrl，并落库一条网易云条目。
+     ⚠ 退役/改写是**一条一条**做的（§6 的"括号配平批量退役"翻车教训）。 */
   {
     const c = bootCloud();
     const N = c.NEON;
-    T(CASE, 'R290 空值不算填写（返回空串，交给上层判"二选一"）',
-      N.Radio.normalizeSourceUrl('') === '' && N.Radio.normalizeSourceUrl(null) === '');
 
-    T(CASE, 'R290b 合法 https 直链原样通过（首尾空白被裁掉）',
-      N.Radio.normalizeSourceUrl('  ' + URL_OK + '  ') === URL_OK,
-      N.Radio.normalizeSourceUrl('  ' + URL_OK + '  '));
+    /* 各种贴法 → 期望的 { kind, id } */
+    const MATRIX = [
+      ['https://music.163.com/#/outchain/2/2003621098/m/use/html', 'song', '2003621098'],
+      ['https://music.163.com/#/song?id=2003621098', 'song', '2003621098'],
+      ['https://music.163.com/song/2003621098', 'song', '2003621098'],
+      ['2003621098', 'song', '2003621098'],
+      ['https://music.163.com/#/playlist?id=2867512990', 'playlist', '2867512990'],
+      ['https://music.163.com/playlist/2867512990', 'playlist', '2867512990'],
+      ['https://music.163.com/#/outchain/0/2867512990/m/use/html', 'playlist', '2867512990']
+    ];
+    const bad = [];
+    for (const [raw, kind, id] of MATRIX) {
+      try {
+        await N.Radio.add(raw, { title: '条目 ' + id }, 'uid-1');
+      } catch (e) { bad.push(raw + ' → ' + e.message); continue; }
+      const row = insertOf(c.log);
+      if (!row || row.kind !== kind || String(row.netease_id) !== id) {
+        bad.push(raw + ' → kind=' + (row && row.kind) + ' id=' + (row && row.netease_id));
+      }
+    }
+    T(CASE, 'R290 七种贴法都认（outchain / 歌曲页 / /song/ / 歌单页 / /playlist/ / 裸 id）',
+      bad.length === 0, bad.length ? bad.join(' | ') : MATRIX.length + ' 种全部通过');
 
+    /* 识别不出来必须**当场报错**：静默入库 = 一条点了没声的条目，比报错难查 */
     let e1 = null;
-    try { N.Radio.normalizeSourceUrl('http://cdn.test/a.mp3'); } catch (e) { e1 = e; }
-    T(CASE, 'R290c ★ http:// 被拒（与库层 CHECK 同规则：混合内容会被浏览器拦掉）',
-      !!e1 && /https/.test(String(e1.message)), e1 ? e1.message : '没有抛错');
+    try { await N.Radio.add('https://www.bilibili.com/video/BV1FN411n7FT/', { title: 'x' }, 'uid-1'); }
+    catch (e) { e1 = e; }
+    T(CASE, 'R290b 认不出的链接被拒（不静默入库成"点了没声"的条目）',
+      !!e1 && /认不出/.test(String(e1.message)), e1 ? e1.message : '竟然入库了');
 
     let e2 = null;
-    try { N.Radio.normalizeSourceUrl('javascript:alert(1)'); } catch (e) { e2 = e; }
-    T(CASE, 'R290d ★ javascript: 被拒（这条管道不该承载可执行协议）',
-      !!e2, e2 ? e2.message : '没有抛错');
-
-    let e3 = null;
-    try { N.Radio.normalizeSourceUrl('https://cdn.test/' + 'x'.repeat(2100)); } catch (e) { e3 = e; }
-    T(CASE, 'R290e 超长直链被拒（库列有长度上限，早报比入库失败清楚）',
-      !!e3, e3 ? e3.message : '没有抛错');
+    try { await N.Radio.add('https://music.163.com/', { title: 'x' }, 'uid-1'); }
+    catch (e) { e2 = e; }
+    T(CASE, 'R290c 网易云站内但没带 id 的地址也被拒（不猜）',
+      !!e2 && /认不出/.test(String(e2.message)), e2 ? e2.message : '竟然入库了');
   }
 
-  /* ================= ② 入库：二选一 + 外链不写 data ================= */
+  /* ================= ② 入库：形态一律规范化 ================= */
+  {
+    const c = bootCloud();
+    const N = c.NEON;
+
+    await N.Radio.add('https://music.163.com/#/song?id=2003621098', { title: '单曲甲' }, 'uid-1');
+    const row = insertOf(c.log);
+    T(CASE, 'R291 入库的是规范化后的 outchain 地址（不是用户贴的原始页地址）',
+      !!row && row.source_url ===
+        'https://music.163.com/outchain/player?type=2&id=2003621098&auto=0&height=66',
+      row ? row.source_url : '没发出 insert');
+
+    T(CASE, 'R291b 裸 id 与页面地址**落到同一条**规范化地址（库里有且只有一种形态）',
+      (function () {
+        const want = 'https://music.163.com/outchain/player?type=2&id=2003621098&auto=0&height=66';
+        return !!row && row.source_url === want &&
+          /music\.163\.com\/outchain\/player\?type=2&id=2003621098/.test(want);
+      })(),
+      row ? row.source_url : '没发出 insert');
+
+    T(CASE, 'R291c 歌单摆 430px 完整播放器（type=0），单曲摆 66px 官方条（type=2）',
+      !!row && /type=2&id=2003621098&auto=0&height=66$/.test(row.source_url) &&
+      /height=430/.test(String(N.Radio.buildEmbedUrl('playlist', '2867512990'))),
+      '高度/类型没跟着 kind 走');
+
+    /* ⚠ v5.6.1 新增：写路径必须是**基表可返回的那 8 列**。
+       base64 时代的教训仍适用 —— 混进视图专有的算出来列（当时是 has_data）
+       会让 PostgREST 生成 `INSERT … RETURNING …, <算出来的列>` → 42703，上传直接失败。 */
+    const ins = reqs(c.log, null, 'insert').slice(-1)[0];
+    const sel = selectOf(ins);
+    T(CASE, 'R291d 入库的返回字段走显式白名单，且不含任何音源大对象',
+      /title/.test(sel) && /netease_id/.test(sel) && /source_url/.test(sel) &&
+      !/(^|,)data(,|$)/.test(sel) && !/has_data/.test(sel),
+      sel);
+
+    await N.Radio.add('https://music.163.com/#/playlist?id=2867512990', { title: '歌单乙' }, 'uid-2');
+    const row2 = insertOf(c.log);
+    T(CASE, 'R291e 歌单入库带 kind=playlist 与 netease_id，且归属人写入',
+      !!row2 && row2.kind === 'playlist' && row2.netease_id === '2867512990' && row2.owner_id === 'uid-2',
+      row2 ? JSON.stringify({ k: row2.kind, n: row2.netease_id, o: row2.owner_id }) : 'no insert');
+
+    /* 显式指定类型优先于地址里的线索 */
+    await N.Radio.add('12345678', { title: '强制歌单', kind: 'playlist' }, 'uid-1');
+    const row3 = insertOf(c.log);
+    T(CASE, 'R291f 类型选择器可覆盖自动识别（meta.kind 说了算）',
+      !!row3 && row3.kind === 'playlist', row3 ? row3.kind : 'no insert');
+  }
+
+  /* ================= ③ 入库前校验 ================= */
   {
     const c = bootCloud();
     const N = c.NEON;
 
     let e = null;
-    try { await N.Radio.create({ title: '无音源' }); } catch (x) { e = x; }
-    T(CASE, 'R291 ★ 既没文件也没直链 → 入口就拦（防"看着有曲目、点了没声"）',
-      !!e && /音源/.test(String(e.message)), e ? e.message : '没有抛错');
+    try { await N.Radio.add('2003621098', {}, 'uid-1'); } catch (x) { e = x; }
+    T(CASE, 'R292 ★ 名称必填（条目列表要显示名字，空名等于一条看不见的记录）',
+      !!e && /请填写条目名称/.test(String(e.message)), e ? e.message : '没有抛错');
 
-    await N.Radio.create({ title: '外链曲', artist: '某人', source_url: URL_OK });
+    let e2 = null;
+    try { await N.Radio.add('2003621098', { title: 'x'.repeat(201) }, 'uid-1'); } catch (x) { e2 = x; }
+    T(CASE, 'R292b 名称长度上限 200 字（与库列长度一致，早报比入库失败清楚）',
+      !!e2 && /200/.test(String(e2.message)), e2 ? e2.message : '没有抛错');
+
+    await N.Radio.add('2003621098', { title: ' 有空白 ', artist: ' 某人 ' }, 'uid-1');
     const row = insertOf(c.log);
-    T(CASE, 'R291b 外链入库：source_url 写入、data 保持 null',
-      !!row && row.source_url === URL_OK && row.data === null,
-      row ? ('source_url=' + row.source_url + ' data=' + JSON.stringify(row.data)) : '没发出 insert');
-
-    const ins = reqs(c.log, null, 'insert').slice(-1)[0];
-    const sel = selectOf(ins);
-    T(CASE, 'R291c 入库的返回字段含 source_url、不含 data（不回吐大对象）',
-      /source_url/.test(sel) && !/(^|,)data(,|$)/.test(sel), sel);
-
-    T(CASE, 'R291d 入库记录 storage_path 一律 null（旧云存储方案的孤儿路径不再产生）',
-      !!row && row.storage_path === null);
-
-    /* addByUrl 是"只凭一个链接"的入口，形状必须与 create 一致 */
-    await N.Radio.addByUrl(URL_OK, { title: '外链曲2' }, 'uid-1');
-    const row2 = insertOf(c.log);
-    T(CASE, 'R292 addByUrl 与 create 同形（source_url + data null + owner_id）',
-      !!row2 && row2.source_url === URL_OK && row2.data === null && row2.owner_id === 'uid-1',
-      row2 ? JSON.stringify({ u: row2.source_url, d: row2.data, o: row2.owner_id }) : 'no insert');
-
-    T(CASE, 'R292b addByUrl 会带上归属人（外链曲目同样受"只能管自己的"约束）',
-      !!row2 && row2.owner_id === 'uid-1');
+    T(CASE, 'R292c 名称与备注首尾空白被裁掉（库里的值就是界面显示的值）',
+      !!row && row.title === '有空白' && row.artist === '某人',
+      row ? JSON.stringify({ t: row.title, a: row.artist }) : 'no insert');
   }
 
-  /* ================= ③ playUrl：外链抄近路，内链走原路 ================= */
+  /* ================= ④ 旧管道的残留必须清零 ================= */
   {
     const c = bootCloud();
     const N = c.NEON;
 
-    const before = c.log.length;
-    const u = await N.Radio.playUrl({ id: 1, source_url: URL_OK });
-    T(CASE, 'R293 playUrl 遇到外链直接返回该地址', u === URL_OK, String(u).slice(0, 60));
+    await N.Radio.add('2003621098', { title: '清理检查' }, 'uid-1');
+    const row = insertOf(c.log) || {};
+    /* base64 / 云存储时代的列一个都不许再写 */
+    const deadCols = ['data', 'mime', 'storage_path', 'duration_sec', 'size_bytes', 'cover_url', 'has_data'];
+    const leaked = deadCols.filter(function (k) { return Object.prototype.hasOwnProperty.call(row, k); });
+    T(CASE, 'R293 v5 的写入不再碰任何已删列（data / mime / storage_path / duration_sec …）',
+      leaked.length === 0, leaked.length ? '仍在写：' + leaked.join(',') : '干净');
 
-    const asked = c.log.slice(before).filter(function (st) {
-      return /(^|,)data(,|$)/.test(selectOf(st));
-    });
-    T(CASE, 'R293b ★ 且**没有**去拉 base64（否则"轻量外链"退化成白等十几 MB）',
+    const asked = c.log.filter(function (st) { return /(^|,)data(,|$)/.test(selectOf(st)); });
+    T(CASE, 'R293b ★ 全程没有一次去取音频本体（base64 那条重路已彻底不存在）',
       asked.length === 0, '拉 data 的请求数=' + asked.length);
 
-    /* 没有外链的老记录：必须仍然能播 */
-    const before2 = c.log.length;
-    const d = await N.Radio.playUrl({ id: 2 });
-    T(CASE, 'R294 无外链的老记录仍走 base64（这次改造不能让老曲目播不了）',
-      /^data:audio\/mpeg;base64,/.test(String(d)), String(d).slice(0, 40));
-
-    const asked2 = c.log.slice(before2).filter(function (st) {
-      return /(^|,)data(,|$)/.test(selectOf(st));
-    });
-    T(CASE, 'R294b 且确实发了那一次取 data 的请求（证明走的是真路，不是桩里编出来的）',
-      asked2.length === 1, '拉 data 的请求数=' + asked2.length);
+    T(CASE, 'R293c 旧的取音频 / 试听 / 解析 API 确实已从数据层消失',
+      typeof N.Radio.readAudio === 'undefined' && typeof N.Radio.trackData === 'undefined' &&
+      typeof N.Radio.probeSourceUrl === 'undefined' && typeof N.Radio.playUrl === 'undefined' &&
+      typeof N.Radio.addByUrl === 'undefined' && typeof N.Radio.neteaseEmbedUrl === 'undefined' &&
+      typeof N.Radio.isEmbedUrl === 'undefined' && typeof N.Radio.normalizeSourceUrl === 'undefined',
+      '还有旧 API 挂在 window.NEON.Radio 上');
   }
 
-  /* ================= ④ 列表字段：能区分来源 ================= */
+  /* ================= ⑤ 界面：表单真的接到 Radio.add ================= */
   {
-    const c = bootCloud();
-    const before = c.log.length;
-    await c.NEON.Radio.list();
-    const sel = c.log.slice(before).map(selectOf).join(' ');
-    T(CASE, 'R295 列表字段含 source_url（面板要标"内链/外链"，也供 playUrl 抄近路）',
-      /source_url/.test(sel), sel.slice(0, 120));
-    T(CASE, 'R295b 列表字段仍**不含** data（打开面板≠下载整个曲库）',
-      !/(^|,)data(,|$)/.test(sel), sel.slice(0, 120));
-  }
-
-  /* ================= ④b 入库前试听校验（v4.9.6）================= */
-  {
-    /* 能播 → ok + 时长 */
-    const okC = bootCloud();
-    stubAudio(okC.w, 'ok');
-    const r1 = await okC.NEON.Radio.probeSourceUrl(URL_OK);
-    T(CASE, 'R298 试听校验：能播的地址返回 ok + 时长',
-      r1.ok === true && r1.duration === 42, JSON.stringify(r1));
-
-    /* 不能播（实测：站长贴的是一条 B 站**网页地址**）→ ok:false + 人话原因 */
-    const badC = bootCloud();
-    stubAudio(badC.w, 'bad');
-    const r2 = await badC.NEON.Radio.probeSourceUrl('https://www.bilibili.com/video/BV1FN411n7FT/');
-    T(CASE, 'R298b ★ 网页地址被识破（URL 合法但根本不是音频）—— ok:false',
-      r2.ok === false, JSON.stringify(r2));
-    T(CASE, 'R298c 且给出人话原因（点名"网页链接 / 需要登录 / 防盗链"，不是甩一句英文）',
-      /不是可直接播放的音频文件/.test(String(r2.reason)) && /网页链接/.test(String(r2.reason)),
-      String(r2.reason));
-
-    /* 没有 Audio 的环境（显式抹掉；jsdom 其实**有** Audio 对象、只是不会解码 ——
-       第一版按"jsdom 没有 Audio"写，结果走的是 8 秒超时路径，红得冤枉） */
-    const noAudio = bootCloud();
-    noAudio.w.Audio = undefined;
-    const r3 = await noAudio.NEON.Radio.probeSourceUrl(URL_OK);
-    T(CASE, 'R298d 环境不支持试听时不抛错（降级为"请自行确认"，不阻断入库）',
-      r3 && r3.ok === false && /无法试听校验/.test(String(r3.reason)), JSON.stringify(r3));
-  }
-
-
-  /* ================= ④c 网易云官方外链播放器（v4.9.9）================= */
-  {
-    const c = bootCloud();
-    const N = c.NEON;
-    const WANT = 'https://music.163.com/outchain/player?type=2&id=2003621098&auto=0&height=66';
-
-    /* 站长给的就是 outchain 页那种形式；三种常见形式 + 裸 id 都要认 */
-    T(CASE, 'R299 认得出 outchain 页（站长截图里那种 /#/outchain/2/<id>/m/use/html）',
-      N.Radio.neteaseEmbedUrl('https://music.163.com/#/outchain/2/2003621098/m/use/html') === WANT,
-      N.Radio.neteaseEmbedUrl('https://music.163.com/#/outchain/2/2003621098/m/use/html'));
-    T(CASE, 'R299b 认得出歌曲页 /#/song?id=… 与 /song/…',
-      N.Radio.neteaseEmbedUrl('https://music.163.com/#/song?id=2003621098') === WANT &&
-      N.Radio.neteaseEmbedUrl('https://music.163.com/song/2003621098') === WANT);
-    T(CASE, 'R299c 裸歌曲 id 也认（最省事的一种贴法）',
-      N.Radio.neteaseEmbedUrl('2003621098') === WANT);
-    T(CASE, 'R299d 无关链接一律不认（不能把普通音频地址误判成网易云外链）',
-      N.Radio.neteaseEmbedUrl('https://cdn.test/a.mp3') === '' &&
-      N.Radio.neteaseEmbedUrl('') === '' && N.Radio.neteaseEmbedUrl('https://example.com/song/1') === '');
-
-    T(CASE, 'R299e isEmbedUrl 只认官方播放器地址',
-      N.Radio.isEmbedUrl(WANT) === true && N.Radio.isEmbedUrl('https://cdn.test/a.mp3') === false);
-
-    /* ⚠ 关键：外链**不能**去做音频校验 —— <audio> 当然加载不了 iframe 播放器，
-       不特判的话它会被当成坏链接拒掉，功能直接不可用。 */
-    const noAudio = bootCloud();
-    noAudio.w.Audio = undefined;              /* 连 Audio 都没有：能过 = 确实没走音频校验 */
-    const pr = await noAudio.NEON.Radio.probeSourceUrl(WANT);
-    T(CASE, 'R299f ★ 官方外链跳过音频校验直接放行（不特判就会被误判成坏链接）',
-      pr && pr.ok === true && pr.embed === true, JSON.stringify(pr));
-
-    /* 库里存的形态必须统一（只有一种形态，判断逻辑才简单） */
-    T(CASE, 'R299g 入库的是规范化后的 outchain 地址（不是用户贴的原始页地址）',
-      N.Radio.neteaseEmbedUrl('https://music.163.com/#/song?id=2003621098') === WANT);
-  }
-
-  /* ================= ⑤ 界面：那条分支真的会调 addByUrl ================= */
-  {
-    /* ⚠ 必须显式 radio: true —— bootDom 默认**不装载** radio.js（见 common.js 的说明），
-       不装载的话 window.NEONRadio 不存在，面板点开也是空的。 */
-    const ctx = bootDom({ url: 'https://x.test/#/', fixtures: { __session: SESSION }, radio: true });
-    await waitFor(function () { return !!ctx.doc.getElementById('radio-dock'); }, 4000);
-
-    /* ⚠ 面板默认**不渲染**（RadioUI.panelOpen 才画），所以要像真人一样先点开 dock。
-       第一版没点，于是 4 条界面断言全红 —— 红得对：证明的是"没打开就没有表单"，
-       而不是"功能不在"。 */
-    /* v4.9.6：界面提交现在会先试听校验 —— jsdom 里没有 Audio，
-       不装桩的话校验会（正确地）拦下提交，R296d 就测不到入库分支了。 */
-    stubAudio(ctx.w, 'ok');
+    /* v5.6.3：<audio> 内核（radio.js）已删除，控制台改由网易云官方 iframe 渲染，
+       不再需要 opts.radio 装载任何脚本。 */
+    const ctx = bootDom({ url: 'https://x.test/#/', fixtures: { __session: SESSION } });
+    await waitFor(function () { return !!ctx.doc.getElementById('radio-stage'); }, 4000);
 
     /* v5.2.0：旧小条已移除 —— 现在直接进电台页（表单在页面里，仅站长可见）。 */
     ctx.w.location.hash = '#/radio';
@@ -313,34 +285,28 @@ async function run() {
       return !!ctx.doc.querySelector('[data-radio-field="url"]');
     }, 4000);
     T(CASE, 'R296 站长在电台页能看到条目表单（能力真的摆在界面上）',
-      ok, ok ? '' : (dock ? '点了 dock 仍没渲染表单' : '没有 #radio-dock'));
+      ok, ok ? '' : '电台页没渲染表单');
 
-    const form = ctx.doc.querySelector('[data-radio-form]');
+    const form = ctx.doc.querySelector('[data-radio-compose]');
     /* v5.0.0：文件上传整条路移除，改为"贴网易云链接 + 选类型" */
     T(CASE, 'R296b 表单含网易云条目输入与类型选择器，且**不再有文件输入**',
       !!ctx.doc.querySelector('.radio-src-head') && !!ctx.doc.querySelector('[data-radio-field="url"]') &&
       !!ctx.doc.querySelector('[data-radio-field="kind"]') && !ctx.doc.querySelector('[data-radio-field="file"]'),
       form ? 'form ok' : '没有表单');
 
-    const hint = ctx.doc.querySelector('.radio-hint');
-    /* v5.1.0：重做后不再有"展开小面板"，提示挪到了 #/radio 页面（radio-page-tip）。
-       这里改判**页面视图源码**里有这句说明（界面文案的来源处）。 */
+    /* v5.1.0：重做后不再有"展开小面板"，提示挪到了 #/radio 页面（radio-page-tip）。 */
     const viewsSrc = require('fs').readFileSync(require('path').join(ROOT, 'js/views.js'), 'utf8');
     T(CASE, 'R296c 电台页写明"使用网易云官方外链播放器，播放与版权由网易云处理"',
       /radio-page-tip/.test(viewsSrc) && /官方外链播放器/.test(viewsSrc) && /版权由网易云处理/.test(viewsSrc),
       /radio-page-tip/.test(viewsSrc) ? 'ok' : '没有页面提示块');
 
-    /* 真点一次：填直链 → 加入频段 → 应当产生一条带 source_url 的 insert */
+    /* 真点一次：填链接 → 加入电台 → 应当产生一条带 source_url 的 insert */
     const openBtn = ctx.doc.querySelector('[data-radio-act="add"]');
     if (openBtn) openBtn.dispatchEvent(new ctx.w.MouseEvent('click', { bubbles: true, cancelable: true }));
-    await waitFor(function () {
-      const f = ctx.doc.querySelector('[data-radio-form]');
-      return !!f && !f.hidden;
-    }, 2000);
 
     const urlEl = ctx.doc.querySelector('[data-radio-field="url"]');
     const titleEl = ctx.doc.querySelector('[data-radio-field="title"]');
-    const submit = ctx.doc.querySelector('[data-radio-act="submit-add"]');
+    const submit = ctx.doc.querySelector('[data-radio-act="additem"]');
     if (urlEl && titleEl && submit) {
       titleEl.value = '界面条目';
       /* v5.0.0：校验口径变成"能不能认成网易云条目" —— 测试输入也得是网易云链接，
@@ -366,13 +332,13 @@ async function run() {
       /kind: \(kEl && kEl\.value\)/.test(appSrc) && /id: url/.test(appSrc),
       wrote.length ? JSON.stringify({ u: wrote[0].payload.source_url, d: wrote[0].payload.data }) : '没有外链写入请求');
 
-    T(CASE, 'R296e 界面上贴直链时**没有**读文件（外链不必碰 base64 那条重路）',
+    T(CASE, 'R296e 界面上贴链接时**没有**读文件（外链不必碰 base64 那条重路）',
       !ctx.queries.some(function (q) { return q.kind === 'storage-upload'; }));
 
     ctx.dom.window.close();
   }
 
-  /* ================= ⑥ CSP：外链媒体确实被放行 ================= */
+  /* ================= ⑥ CSP：官方播放器确实被放行 ================= */
   {
     const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
     const csp = (html.match(/Content-Security-Policy" content="([^"]+)"/) || [])[1] || '';
@@ -391,17 +357,21 @@ async function run() {
 
   }
 
-
-  /* ================= ⑦ 内核：外链曲目不碰 <audio> ================= */
+  /* ================= ⑦ 界面渲染：条目自带 outchain 地址，不需要内核 ================= */
   {
-    const radioSrc = require('fs').readFileSync(require('path').join(ROOT, 'js/radio.js'), 'utf8');
-    T(CASE, 'R301 内核认得出官方外链并转入 embed 态（不设 audio.src）',
-      /* ⚠ 别去匹配源码里的转义（radio.js 里写的是 music\.163\.com / outchain\/player），
-         只钉不带转义的确定事实 —— 少一次自找麻烦。 */
-      /outchain/.test(radioSrc) && /embedUrl = got\.url/.test(radioSrc) &&
-      /embedUrl = ''/.test(radioSrc), 'source 里查不到 embed 分支');
-    T(CASE, 'R301b 转 embed 态时先 pause 并清掉 audio.src（否则 <audio> 会去加载 iframe 地址而报错）',
-      /try \{ audio\.pause\(\); \} catch \(e\) \{\}[\s\S]{0,120}removeAttribute\('src'\)/.test(radioSrc));
+    /* ⚠ v5.6.1 重写：原 R301 / R301b 钉的是 NEONRadio 内核"遇到外链转 embed 态、
+       不碰 <audio>"的行为。条目改成网易云条目后，播放地址就在行里，
+       界面直接把 source_url 渲染成 iframe（app.js 的 paintStage）——
+       没有"内核取址"这一层，也没有 <audio> 可碰。改钉界面侧这条真路。 */
+    const appSrc = fs.readFileSync(path.join(ROOT, 'js/app.js'), 'utf8');
+    T(CASE, 'R301 界面把条目地址直接渲染成官方 iframe（播放不再经过任何音频内核）',
+      /rc-frame/.test(appSrc) && /src="' \+ V\(\)\.esc\(url\)/.test(appSrc) &&
+      /title="网易云音乐外链播放器"/.test(appSrc),
+      '没找到 iframe 渲染分支');
+
+    T(CASE, 'R301b 同一个地址不重建 iframe（重建 = 重新加载 = 歌断掉）',
+      /if \(RC_STATE\.mounted === url\) return;/.test(appSrc) && /RC_STATE\.mounted = url;/.test(appSrc),
+      '缺少"地址未变则不重建"的守卫');
   }
 
   return { pass: S.results.filter(function (r) { return r.pass; }).length,
@@ -409,5 +379,5 @@ async function run() {
           results: S.results };
 }
 
-module.exports = { run: run, name: 'v4.9.5 电台外链音源（URL 源播放）' };
+module.exports = { run: run, name: 'v5.0.0 电台：网易云条目（v5.6.1 重写）' };
 standalone(module, run);

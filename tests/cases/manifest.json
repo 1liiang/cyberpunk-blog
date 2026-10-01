@@ -27,7 +27,7 @@
     "file": "05-e-供应链.js",
     "name": "E 供应链",
     "blocks": 1,
-    "expect": 14
+    "expect": 15
   },
   {
     "file": "06-f-编辑器.js",
@@ -201,7 +201,7 @@
     "file": "35-v2-8-0-电台.js",
     "name": "v2.8.0 电台",
     "blocks": 1,
-    "expect": 106
+    "expect": 49
   },
   {
     "file": "36-v2-9-4-uiverse.js",
@@ -285,7 +285,7 @@
     "file": "49-v4-4-0-final-audit.js",
     "name": "v4.4 终审：a11y/一致性/性能/文档",
     "blocks": 1,
-    "expect": 13
+    "expect": 15
   },
   {
     "file": "50-v4-5-0-hue-default.js",
@@ -297,7 +297,7 @@
     "file": "51-v4-6-0-static-fallback.js",
     "name": "v4.6 静态快照：GitHub Pages 同源回退",
     "blocks": 1,
-    "expect": 37
+    "expect": 36
   },
   {
     "file": "52-v4-8-0-supabase-adapter.js",
@@ -313,8 +313,26 @@
   },
   {
     "file": "54-v4-9-5-radio-url.js",
-    "name": "v4.9.5 电台外链音源（URL 源播放）",
+    "name": "v5.0.0 电台：网易云条目（v5.6.1 重写）",
     "blocks": 1,
-    "expect": 39
+    "expect": 26
+  },
+  {
+    "file": "55-v5-7-0-超时硬化.js",
+    "name": "v5.7.0 超时硬化（出网时限 + 首屏兜底）",
+    "blocks": 1,
+    "expect": 11
+  },
+  {
+    "file": "56-v5-7-0-降档收敛.js",
+    "name": "v5.7.0 降档收敛（氛围保底的时间上界）",
+    "blocks": 1,
+    "expect": 9
+  },
+  {
+    "file": "57-v5-7-0-低端档.js",
+    "name": "v5.7.0 低端档（按设备降一档，不误伤高配）",
+    "blocks": 1,
+    "expect": 9
   }
 ]
