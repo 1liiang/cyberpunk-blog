@@ -1,0 +1,72 @@
+name: 同步静态快照
+
+# 为什么需要这个 workflow
+# ------------------------------------------------------------
+# 站点内容存在 Supabase；Pages 读的也是 Supabase（v4.8.0 起 CSP 已放行 supabase 域，
+# 而 Supabase 不设 Origin 白名单 —— 所以浏览器**能**直连，这与旧平台不同）。
+#
+# 那这个 workflow 还干什么？**维护那份兜底快照。**
+#   data/ 快照的职责从"Pages 唯一的内容来源"退化为"云端不可达时的兜底"：
+#   免费档长期无请求会被暂停、额度可能用尽、网络也会抖 —— 那时站点会自动
+#   改读同源的 data/，界面与文章照常在。本 workflow 保证那份兜底是新鲜的。
+#
+# ★ 顺带说明为什么它跑在服务器上更省事：
+#   浏览器受 CORS / CSP 约束（虽然 Supabase 不设 Origin 白名单，但仍受本站 CSP 约束）；
+#   而本 workflow 用 Node 直接请求，没有 Origin 那道闸，导出逻辑与本地跑完全一致。
+#
+# 触发方式
+#   · schedule          每 6 小时自动跑一次
+#   · workflow_dispatch 手动点（Actions 页面 → Run workflow）—— 发完文想立刻刷新兜底时用
+#
+# ⚠ 刻意**不**监听 push：本 workflow 自己会产生推送，
+#   监听 push 会形成"提交→触发→再检查→无变更→结束"的空转环。
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+# 提交需要写权限（默认 token 是只读的）
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-snapshot
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 准备 Node（export-static.js 用到全局 fetch，需 18+）
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 从云端导出快照
+        run: node tools/export-static.js
+
+      - name: 有变更才提交
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          # ⚠ 无变更时必须**静默退出**，不能造空提交 ——
+          #    每 6 小时一个空提交会把提交历史刷成噪音。
+          if git diff --cached --quiet; then
+            echo "快照无变更，跳过提交。"
+            exit 0
+          fi
+          git commit -m "chore(快照): 自动同步 $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
+
+      - name: 汇总
+        if: always()
+        run: |
+          echo "### 快照同步结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- 文章：$(node -e "console.log(require('./data/posts.json').posts.length)") 篇" >> $GITHUB_STEP_SUMMARY
+          echo "- 图片：$(node -e "console.log(Object.keys(require('./data/posts.json').images).length)") 张" >> $GITHUB_STEP_SUMMARY
+          echo "- 电台：$(node -e "console.log((require('./data/posts.json').radio||[]).length)") 首" >> $GITHUB_STEP_SUMMARY

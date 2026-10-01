@@ -1,0 +1,326 @@
+[
+  {
+    "file": "01-a-正常启动.js",
+    "name": "A 正常启动",
+    "blocks": 1,
+    "expect": 10
+  },
+  {
+    "file": "02-b-文章详情.js",
+    "name": "B 文章详情",
+    "blocks": 1,
+    "expect": 2
+  },
+  {
+    "file": "03-c-首页列表.js",
+    "name": "C 首页列表",
+    "blocks": 1,
+    "expect": 4
+  },
+  {
+    "file": "04-d-写入透传.js",
+    "name": "D 写入透传",
+    "blocks": 1,
+    "expect": 1
+  },
+  {
+    "file": "05-e-供应链.js",
+    "name": "E 供应链",
+    "blocks": 1,
+    "expect": 15
+  },
+  {
+    "file": "06-f-编辑器.js",
+    "name": "F 编辑器",
+    "blocks": 1,
+    "expect": 11
+  },
+  {
+    "file": "07-g-版本一致.js",
+    "name": "G 版本一致",
+    "blocks": 1,
+    "expect": 2
+  },
+  {
+    "file": "08-h-长度约束.js",
+    "name": "H 长度约束",
+    "blocks": 1,
+    "expect": 5
+  },
+  {
+    "file": "09-i-og-卡片.js",
+    "name": "I OG 卡片",
+    "blocks": 1,
+    "expect": 8
+  },
+  {
+    "file": "10-j-草稿快照.js",
+    "name": "J 草稿快照",
+    "blocks": 1,
+    "expect": 17
+  },
+  {
+    "file": "11-k-bump-脚本.js",
+    "name": "K bump 脚本",
+    "blocks": 1,
+    "expect": 14
+  },
+  {
+    "file": "12-l-图片收口.js",
+    "name": "L 图片收口",
+    "blocks": 1,
+    "expect": 9
+  },
+  {
+    "file": "13-m-csp.js",
+    "name": "M CSP",
+    "blocks": 1,
+    "expect": 15
+  },
+  {
+    "file": "14-n-第三批.js",
+    "name": "N 第三批",
+    "blocks": 6,
+    "expect": 37
+  },
+  {
+    "file": "15-o-2-0-收尾.js",
+    "name": "O 2.0 收尾",
+    "blocks": 6,
+    "expect": 58
+  },
+  {
+    "file": "16-o16-auto-收口.js",
+    "name": "O16 AUTO 收口",
+    "blocks": 1,
+    "expect": 7
+  },
+  {
+    "file": "17-o17-装饰层.js",
+    "name": "O17 装饰层",
+    "blocks": 1,
+    "expect": 37
+  },
+  {
+    "file": "18-o7-复查修正.js",
+    "name": "O7 复查修正",
+    "blocks": 1,
+    "expect": 6
+  },
+  {
+    "file": "19-o8-分隔线.js",
+    "name": "O8 分隔线",
+    "blocks": 1,
+    "expect": 9
+  },
+  {
+    "file": "20-o9-色标.js",
+    "name": "O9 色标",
+    "blocks": 1,
+    "expect": 49
+  },
+  {
+    "file": "21-o10-改号.js",
+    "name": "O10 改号",
+    "blocks": 1,
+    "expect": 10
+  },
+  {
+    "file": "22-o11-暗色优先.js",
+    "name": "O11 暗色优先",
+    "blocks": 1,
+    "expect": 21
+  },
+  {
+    "file": "23-o12-减少动效.js",
+    "name": "O12 减少动效",
+    "blocks": 1,
+    "expect": 15
+  },
+  {
+    "file": "24-o13-键盘可达.js",
+    "name": "O13 键盘可达",
+    "blocks": 1,
+    "expect": 38
+  },
+  {
+    "file": "25-o14-请求并行.js",
+    "name": "O14 请求并行",
+    "blocks": 1,
+    "expect": 15
+  },
+  {
+    "file": "26-o15-阅读进度.js",
+    "name": "O15 阅读进度",
+    "blocks": 1,
+    "expect": 32
+  },
+  {
+    "file": "27-o18-防白屏.js",
+    "name": "O18 防白屏",
+    "blocks": 1,
+    "expect": 11
+  },
+  {
+    "file": "28-o19-编辑器文本.js",
+    "name": "O19 编辑器文本",
+    "blocks": 1,
+    "expect": 14
+  },
+  {
+    "file": "29-p1-v2-2-0.js",
+    "name": "P1 v2.2.0",
+    "blocks": 1,
+    "expect": 20
+  },
+  {
+    "file": "30-p0-v2-2-2.js",
+    "name": "P0 v2.2.2",
+    "blocks": 1,
+    "expect": 10
+  },
+  {
+    "file": "31-p1-v2-3-0.js",
+    "name": "P1 v2.3.0",
+    "blocks": 1,
+    "expect": 18
+  },
+  {
+    "file": "32-c6-v2-4-0.js",
+    "name": "C6 v2.4.0",
+    "blocks": 1,
+    "expect": 15
+  },
+  {
+    "file": "34-v2-7-体验批次.js",
+    "name": "体验批次 v2.7",
+    "blocks": 1,
+    "expect": 66
+  },
+  {
+    "file": "35-v2-8-0-电台.js",
+    "name": "v2.8.0 电台",
+    "blocks": 1,
+    "expect": 49
+  },
+  {
+    "file": "36-v2-9-4-uiverse.js",
+    "name": "v2.9.4 Uiverse 借法",
+    "blocks": 1,
+    "expect": 46
+  },
+  {
+    "file": "37-v2-9-5-uiverse-b.js",
+    "name": "v2.9.5 Uiverse 借法二",
+    "blocks": 1,
+    "expect": 22
+  },
+  {
+    "file": "38-v2-9-8-uptime.js",
+    "name": "v2.9.8 在线时长 HUD",
+    "blocks": 1,
+    "expect": 24
+  },
+  {
+    "file": "39-v3-0-0-b1-tokens.js",
+    "name": "v3.0.0 B1 地基",
+    "blocks": 1,
+    "expect": 22
+  },
+  {
+    "file": "40-v3-1-0-home-bento.js",
+    "name": "v3.1.0 首页 Hero+bento",
+    "blocks": 1,
+    "expect": 28
+  },
+  {
+    "file": "41-v3-2-0-b3-reading.js",
+    "name": "v3.2.0 B3 阅读与列表",
+    "blocks": 1,
+    "expect": 28
+  },
+  {
+    "file": "42-v3-3-0-b4-console.js",
+    "name": "v3.3.0 B4 控制台与侧栏件",
+    "blocks": 1,
+    "expect": 18
+  },
+  {
+    "file": "43-v3-5-0-responsive-audit.js",
+    "name": "v3.5.0 响应式与审计修复",
+    "blocks": 1,
+    "expect": 12
+  },
+  {
+    "file": "44-v3-7-0-widget-collapse.js",
+    "name": "v3.7.0 小工具折叠",
+    "blocks": 1,
+    "expect": 15
+  },
+  {
+    "file": "45-v4-0-0-scene-atmo.js",
+    "name": "v4.0 B1 场景/氛围/排版",
+    "blocks": 1,
+    "expect": 19
+  },
+  {
+    "file": "46-v4-1-0-scene-gate.js",
+    "name": "v4.1 门廊：字标/开场/街区",
+    "blocks": 1,
+    "expect": 16
+  },
+  {
+    "file": "47-v4-2-0-reading-deck.js",
+    "name": "v4.2 阅读舱：阅读框/迷你地图/档案",
+    "blocks": 1,
+    "expect": 18
+  },
+  {
+    "file": "48-v4-3-0-console-devices.js",
+    "name": "v4.3 控制台：终端/反馈/装置面板",
+    "blocks": 1,
+    "expect": 23
+  },
+  {
+    "file": "49-v4-4-0-final-audit.js",
+    "name": "v4.4 终审：a11y/一致性/性能/文档",
+    "blocks": 1,
+    "expect": 15
+  },
+  {
+    "file": "50-v4-5-0-hue-default.js",
+    "name": "v4.5 出厂色相：285 + 存量迁移三处同口径",
+    "blocks": 1,
+    "expect": 17
+  },
+  {
+    "file": "51-v4-6-0-static-fallback.js",
+    "name": "v4.6 静态快照：GitHub Pages 同源回退",
+    "blocks": 1,
+    "expect": 36
+  },
+  {
+    "file": "52-v4-8-0-supabase-adapter.js",
+    "name": "v4.8 Supabase 适配",
+    "blocks": 1,
+    "expect": 28
+  },
+  {
+    "file": "53-v4-9-0-bookmarks.js",
+    "name": "v4.9 收藏（账号 + 登录门槛）",
+    "blocks": 1,
+    "expect": 19
+  },
+  {
+    "file": "54-v4-9-5-radio-url.js",
+    "name": "v5.0.0 电台：网易云条目（v5.6.1 重写）",
+    "blocks": 1,
+    "expect": 26
+  },
+  {
+    "file": "55-v5-7-0-超时硬化.js",
+    "name": "v5.7.0 超时硬化（出网时限 + 首屏兜底）",
+    "blocks": 1,
+    "expect": 11
+  }
+]

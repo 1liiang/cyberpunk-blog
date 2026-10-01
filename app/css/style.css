@@ -1,0 +1,5449 @@
+/* ============================================================
+   NEON://DIARY — 赛博朋克博客样式
+   配色：深空黑底 / 霓虹青 / 品红 / 电光黄 / 幽紫
+   ============================================================ */
+
+/* v4.0 B1：等宽中文字体（--mono 栈的最后一环）。
+   此前中文会掉到通用 monospace（Windows = 新宋体）——外部评审点名的技术债。
+   自托管子集：7619 字符（GB2312 全集 + 站内源码全部非 ASCII 字符），
+   woff2 约 960KB；来源与更新方法见 assets/fonts/README.md。
+   unicode-range 限定到中文与符号区 ⇒ 页面没有中文等宽文本时浏览器完全不下载它；
+   font-display: swap —— 字体未就绪时先用系统字体渲染，不阻塞、不空白。 */
+@font-face {
+  font-family: "Sarasa Mono SC";
+  src: url("../assets/fonts/sarasa-mono-sc-subset.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+A4-U+12B, U+14D-U+16B, U+1CE-U+1DC, U+2C7-U+2C9, U+391-U+3C9, U+401-U+451,
+  U+2013-U+203B, U+2075, U+2103-U+2122, U+2160-U+216B, U+2190-U+2194, U+21BB-U+226F,
+  U+2299-U+22A5, U+22EF, U+2312-U+2318, U+23CE, U+23F5-U+23F8, U+2423, U+2460-U+249B,
+  U+2500-U+2550, U+2571-U+2606, U+2630-U+2642, U+26A0, U+2713-U+275A, U+2913,
+  U+2B22-U+2B26, U+3000-U+3129, U+3220-U+3229, U+4E00-U+9FFF, U+FF01-U+FF5E, U+FFE0-U+FFE5;
+}
+
+:root {
+  --bg-0: #04060d;
+  --bg-1: #070b16;
+  --bg-2: #0b1120;
+  --bg-3: #101830;
+  --panel: rgba(11, 17, 32, 0.88);
+
+  /* ─────────── ★ 3.0 B1（v3.0.0）：配色旋钮 —— 一个变量 = 任意颜色 ───────────
+     --hue 是**唯一旋钮**（0~360）。
+     ⚠ v4.5.0：默认值由 184（青 = 原 #00f0ff 的色相）改为 **285（紫）** ——
+       站长在配色面板里挑中了这一档，拍板定为全站出厂色相。
+       184 仍是九档快捷之一（面板第一格），随时可切回，能力没有减少。
+       派生公式只写在这里；三个主题档（dark/light/warm）只覆盖"饱和/明度参数"，
+       于是「换色相」对所有档位一致生效，「换明度档」依旧压暗/暖化。 */
+  --hue: 285;
+  --hue-s: 100%;
+  --hue-l: 50%;
+  --vio-off: 96;      /* 辅助紫相对主色的偏移：184+96=280 ≈ 原 #b537f2 */
+  --vio-s: 88%;
+  --vio-l: 58%;
+
+  --primary: hsl(var(--hue) var(--hue-s) var(--hue-l));
+  /* ⚠ --cyan / --line / --glow-cyan 等**旧名全部保留**，只把取值改成派生 ——
+     全站 800+ 处引用一行都不用改，却能随 --hue 整体变色。
+     这就是"一处换色、全站跟着变"的实现方式（3.0 方案 §3.2）。 */
+  --cyan: var(--primary);
+  --line: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.22);
+  --line-strong: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.55);
+  --violet: hsl(calc(var(--hue) + var(--vio-off)) var(--vio-s) var(--vio-l));
+
+  /* ─── 语义色：**不随 --hue 旋转** ───
+     用户能调"气质"，不能调"语义"：品红永远=流逝/警示、绿永远=在线、
+     黄永远=高亮。这是把「多彩」与「可读」绑在一起的闸门（方案 §3.2）。 */
+  --magenta: #ff2a6d;
+  --yellow: #f9f002;
+  --green: #05ffa1;
+  --red: #ff3860;
+  --text: #c9d6e8;
+  /* v3.5.1：原 #5f7391 对 --bg-0 只有 4.19:1（外部评审实测），低于 AA 的 4.5。
+     提到 #657a9a（4.65:1）—— 只动明度、保住原来的青灰感；与 --text 的 13.76:1 仍有充分层次。 */
+  --text-dim: #657a9a;
+  --text-bright: #eaf4ff;
+  /* B1 正文排版三色（h4/斜体/引用）：暗色取原始霓虹浅色，亮色表压暗同色系。
+     曾以硬编码散在 .md-body 三处规则里，切亮色后 1.8~2.6:1 不可读 —— 变量化后两主题恒成立。 */
+  --md-h4: #7ee7f5;
+  --md-em: #ffb8d0;
+  --md-quote: #d9a0b8;
+  --glow-cyan: 0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.75),
+               0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35);
+  --glow-magenta: 0 0 6px rgba(255, 42, 109, 0.75), 0 0 18px rgba(255, 42, 109, 0.35);
+  --glow-yellow: 0 0 6px rgba(249, 240, 2, 0.7), 0 0 16px rgba(249, 240, 2, 0.3);
+  /* v4.0 B1：字体栈在 Courier New 之后插入自托管 Sarasa Mono SC ——
+     前面的拉丁等宽字体都没有中文字形，中文此前直接掉到通用 monospace；
+     插在它们之后 = 英文观感完全不变，仅中文/装饰符号落到 Sarasa。
+     字体来源与子集说明见文件顶部 @font-face。 */
+  --mono: "Cascadia Code", "JetBrains Mono", Consolas, "Courier New", "Sarasa Mono SC", "Noto Sans Mono CJK SC", monospace;
+  --sans: "HarmonyOS Sans SC", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  --clip-corner: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+  /* v2.9.5：小一号的切角（编辑器文本输入用）。
+     输入框高度只有 ~40px，14px 的切角会吃掉近三分之一宽度 —— 收成 9px。 */
+  --clip-corner-sm: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  /* C6 主题开关用：暗色下的代码块底色与正文色（亮色下需另行压暗）
+     加进变量层而不是在亮色块里堆 :not() 选择器 —— 变量天然只随当前主题取值。 */
+  --code-bg: #060a14;
+  --code-text: #b8e6f5;
+  /* （已随氛围层移除）原值为网格线不透明度
+     —— 这条「色相派生」当年定了却没接上。批 B 对齐 0.075 并真正接入，
+     于是**换色相时网格线现在会跟着变**（此前一直是固定青色）。 */
+  /* B2 批修正：对齐 .topbar 底部亮线的现值 0.08，并真正接入（此前零引用）。 */
+  --head-glow: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.08);
+  --topbar-bg: rgba(4, 6, 13, 0.92);
+  --shadow-strong: rgba(0, 0, 0, 0.6);
+  /* C13：动效时长三档集中定义 —— 此前散落各处的 .15s/.18s/.2s/.25s/.3s/.35s
+     共 6 种不同写法，既没有设计上的差别，也让「统一降速/停动」无从下手。
+     收敛为三档后：
+       · 瞬时反馈（hover 变色、按钮按下）→ fast
+       · 常规过渡（边框、阴影、位移）    → normal
+       · 较大位移（滑轨、吐司进出）      → slow
+     prefers-reduced-motion 块里只需把这三档归零即可全站生效。 */
+  --t-fast: 0.15s;
+  --t-normal: 0.2s;
+  --t-slow: 0.3s;
+  /* v2.5.0：背景极光漂移专用时长（22s 一循环，极缓慢）。
+     与三档通用时长分开命名 —— 它是"环境氛围"而非"交互反馈"，
+     但同样必须在 reduce 块内归零（R72k 系列断言守着"每个时长型 --t-*
+     都必须出现在 reduce 块内"，勿遗漏）。 */
+  --t-bezier: cubic-bezier(0.4, 0, 0.2, 1);
+  /* v2.8.0：顶栏高度 —— 电台 dock 用它算「贴在顶栏下方」的位置。
+     写成变量而不是各处写死数字：顶栏高度会随 logo 字号/内边距变化，
+     变量化后只改这一处。
+     实测值 65px（真实浏览器 getBoundingClientRect().height，1440px 视口）。 */
+  --topbar-h: 65px;
+
+  /* ─────────── 3.0 B1：间距九级刻度（4px 基准）───────────
+     替换现状 12 种 gap 散值（2/3/4/5/6/7/8/9/10/12/14/18px）。
+     本批只**定义**刻度并建立映射；旧值按方案 §7.1 的映射表逐批归位 ——
+     一次性全替换会带来"全站 ±2px 抖动"，那样目视与断言都难以复核。 */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px; --s5: 20px;
+  --s6: 24px; --s7: 32px; --s8: 48px; --s9: 64px;
+
+  /* ─────────── v4.0 B1：字号刻度 ───────────
+     背景：外部评审点名"24 种字号、含半像素值，没有体系"。本批做了三件事：
+       ① 建立以下刻度（新代码一律用变量）；
+       ② 把 9.5 / 10.5 / 11.5 / 12.5 / 13.5 / 23 六种"漂移半档"归并到
+          邻近主档 —— 单处视觉差异 ≤0.5px，肉眼不可辨（B1"视觉接近不变"红线内）；
+       ③ 存量 160 处字面值的"变量化替换"列为后续批次（纯工程收益，
+          不在视觉批次里挤占时间）。
+     保留项与理由：14.5px（.card-summary 有"摘要跟全局字号微调半档"的历史
+     理由，且被断言钉住）；9 / 15 / 17 / 20 / 24 / 30px 为个别组件的刻意微调。
+     收敛结果：24 种 → 18 种（半像素仅剩 14.5 一种，有据可查）。 */
+  --fs-2xs: 10px;     /* 极小标注（徽章 / 角标 / 微状态） */
+  --fs-xs: 11px;      /* 小字（mono 元信息 / 导航 / 标签） */
+  --fs-sm: 12px;      /* 次要文字（卡片元信息 / 表头 / 标签页） */
+  --fs-md: 13px;      /* 紧排辅助（代码块 / 日志标题） */
+  --fs-base: 14px;    /* 基准小正文（卡片摘要 / 列表项） */
+  --fs-lg: 16px;      /* 正文（body 基础，断言钉住） */
+  --fs-body: 16.5px;  /* 阅读正文（.md-body，断言钉住） */
+  --fs-xl: 18px;      /* 小标题 */
+  --fs-2xl: 22px;     /* 大标题（h2 / 移动端标题） */
+  --fs-3xl: 26px;     /* 页面大标题（h1 级） */
+  --fs-display: 44px; /* 展示级（404 / hero） */
+
+  /* ─────────── 3.0 B1：容器三档 ─────────── */
+  --w-read: 760px;    /* 长文列宽（65ch 锚点）—— 已接入 .md-body */
+  /* 注：详情页外壳宽度 = --w-read + 240(目录) + 44(间距)，是**派生量**。
+     原先这里另有一条 --w-page（零引用），批 B 删除 —— 做成 :root 旋钮会让人
+     误以为调它能动外壳宽度，而改任一分量它都会失真。要调外壳请直改分量。 */
+  --w-wide: 1240px;   /* 首页 bento / 管理台 */
+
+  /* ─────────── 3.0 B1：Banner 与人味层 ───────────
+     Banner 规格借 Fuwari：高度按视口算并**取 4 的倍数**保证文字清晰。
+     --r-soft 与 --clip-corner 取同值 14px —— 同尺度、两种性格
+     （切角 = 系统层，圆角 = 人味层），详见方案 §8.3。 */
+  /* B2 批修正：原为设计稿数字（Banner 180 / 首页 320）且零引用。
+     Hero 实际用的是 min(100vh - topbar, 720px)（窄屏 560px）——
+     批 B 改成这两档并接入，Hero 高度从此是可调旋钮，不再是散在规则里的魔数。 */
+  --banner-h: 560px;          /* 窄屏 Hero 高度上限 */
+  --banner-h-home: 720px;     /* 宽屏 Hero 高度上限 */
+  --r-soft: 14px;
+  /* 零依赖衬线：只用系统字体栈，绝不加载 Web Font（体积 + CSP 双重理由） */
+  --font-serif-cn: "Songti SC", "STSong", "SimSun", Georgia, serif;
+
+  /* ─────────── 3.0 B2：墨色盘（bento 模块分区用）───────────
+     由主色相做**色相偏移**派生，不手写六组颜色 ——
+     所以换色相时六个模块的墨色会一起沿色环平移，整体仍然成套。
+     浓度极低（12~13% 明度）：只染底与边，不计入"霓虹表面积"。
+     ⚠ 浅底档必须另行覆盖（见 light / warm 块）—— 暗墨色在浅底上等于一块污渍。 */
+  --ink-1: hsl(var(--hue) 26% 12%);
+  --ink-2: hsl(calc(var(--hue) + 40) 26% 12%);
+  --ink-3: hsl(calc(var(--hue) + 80) 24% 13%);
+  --ink-4: hsl(calc(var(--hue) + 140) 22% 13%);
+  --ink-5: hsl(calc(var(--hue) + 200) 20% 13%);
+  --ink-6: hsl(calc(var(--hue) + 260) 22% 13%);
+
+  /* ─────────── 3.0 B1：断点体系登记（4 值）───────────
+     新骨架层统一使用：1280 / 1024 / 768 / 480。
+     旧散值 1400 / 1000 / 860 / 720 / 640 保留为过渡，映射见方案 §6.3；
+     逐批搬迁完成后，在最后一个批次删除旧块。
+     ⚠ 新代码的媒体查询一律写移动优先：@media (min-width: Npx)。 */
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+/* C13：进场动画等一律走统一曲线；prefers-reduced-motion 块会整体归零 */
+
+body {
+  /* v2.6.0 背景增亮：三处 radial 晕斑不透明度各上调约 60%（0.09/0.07/0.06 → 0.14/0.11/0.10），
+     并在顶部补一道冷色环境光 —— 用户反馈短页面「黑漆漆」。晕斑是 body 自身的
+     背景层（在 .wrap 之下），提高后不会压到正文可读性，只让整体底色从「纯黑」
+     变成「有层次的深蓝黑」，赛博感更足。 */
+  /* v3.6.0：body 原有的三处 radial 晕斑（青/品红/紫）随氛围层一并移除。
+     ⚠ 它们本是 v2.6.x 为修复「短页面黑漆漆」而加的 —— 移除后底色回到纯 --bg-0，
+       深色档会显得更空（这正是用户要的效果；如要氛围请改用 Hero 背景图）。 */
+  background: var(--bg-0);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 16px; /* C1：15→16px，中文博客正文主流；显式字号的组件（meta/状态位等）不受影响 */
+  line-height: 1.75;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ---------- 背景地平线网格 ---------- */
+/* v3.6.0：氛围层已按用户要求整体移除（网格 / 噪点 / 扫描线 / 极光）。 */
+
+/* ---------- CRT 扫描线 ---------- */
+
+
+
+/* ---------- v2.5.0 胶片噪点层（推荐档 · 噪点） ----------
+   深色渐变（三处 radial-gradient + --bg-0 纯色）在大面积暗区容易出现
+   色带（banding）—— 相邻色阶在 8bit 面板上被显式区分开，看起来"脏"。
+   叠一层极低透明度的细微噪点即可打散色阶、消除色带，同时给画面增加
+   "胶片/老显示器"的质感。
+   实现：repeating-conic-gradient 拼 3px 棋格再压到 0.035 透明度 ——
+   纯 CSS、零请求、无图片依赖（CSP 亦无额外负担）。
+   ⚠（v3.6.0 起 .scanlines 已移除，此条历史对照仅作记录）这里用 soft-light，
+   避免与扫描线相乘后整体过暗。 */
+
+
+/* ---------- 顶栏 ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 0 var(--head-glow), 0 8px 30px var(--shadow-strong);
+}
+.topbar-inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 0 20px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+.logo {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  text-decoration: none;
+  cursor: pointer;
+  user-select: none;
+}
+.logo-mark {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  position: relative;
+}
+/* 故障抖动 */
+.logo-mark::before,
+.logo-mark::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  clip-path: inset(0 0 55% 0);
+  opacity: 0;
+}
+.logo-mark::before { color: var(--magenta); left: 1px; }
+.logo-mark::after { color: var(--cyan); left: -1px; clip-path: inset(55% 0 0 0); }
+/* E1：强 hover（位移/发光/动画类）包 @media(hover:hover) —— 触屏点按后
+   hover 态会粘住（卡片保持上浮发光、logo 闪烁不停、按钮扫光卡在半途），
+   直到点别处才消，页面呈现"鬼影状态"。只隔离强反馈规则且【原地包裹】，
+   不改规则在文件中的位置 —— 末尾 reduce 块靠文件顺序压制的级联必须保持。
+   变色类弱 hover（nav/toc/tabs/admin/表格行等）粘滞观感轻，不包。
+   其余发光小件（theme-toggle/to-top/foot-log-btn/code-copy/tool-btn）
+   点击后要么场景消失要么有替代反馈，也不包 —— 名单见《UI优化建议.md》E1。 */
+@media (hover: hover) {
+  .logo:hover .logo-mark { animation: glitch-skew 0.4s infinite linear alternate-reverse; }
+  .logo:hover .logo-mark::before { animation: glitch-a 0.25s infinite linear alternate-reverse; opacity: 0.85; }
+  .logo:hover .logo-mark::after { animation: glitch-b 0.19s infinite linear alternate-reverse; opacity: 0.85; }
+}
+@keyframes glitch-a {
+  0% { clip-path: inset(8% 0 62% 0); transform: translate(-2px, -1px); }
+  40% { clip-path: inset(28% 0 44% 0); transform: translate(2px, 1px); }
+  100% { clip-path: inset(52% 0 20% 0); transform: translate(-1px, 0); }
+}
+@keyframes glitch-b {
+  0% { clip-path: inset(62% 0 8% 0); transform: translate(2px, 1px); }
+  50% { clip-path: inset(30% 0 48% 0); transform: translate(-2px, -1px); }
+  100% { clip-path: inset(78% 0 2% 0); transform: translate(1px, 0); }
+}
+@keyframes glitch-skew {
+  0% { transform: skewX(0deg); }
+  25% { transform: skewX(2deg); }
+  75% { transform: skewX(-3deg); }
+  100% { transform: skewX(1deg); }
+}
+.logo-sub {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.logo-sub b { color: var(--magenta); font-weight: 400; }
+
+.nav {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 13px;
+  /* v2.9.4：作为主题罗盘面板的定位基准。
+     必须给容器加，不能给面板加 margin —— 本行是 `margin-left:auto` 的弹性行，
+     任何挤占行内空间的做法都会把 nav 整体推歪（电台 dock 用的是同一套：绝对定位）。 */
+  position: relative;
+}
+.nav a {
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 7px 12px;
+  letter-spacing: 1px;
+  position: relative;
+  transition: color var(--t-normal), text-shadow var(--t-normal);
+  border: 1px solid transparent;
+}
+.nav a::before { content: "// "; color: rgba(0, 240, 255, 0); transition: color var(--t-normal); }
+.nav a:hover, .nav a.active {
+  color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+}
+.nav a:hover::before, .nav a.active::before { color: var(--magenta); }
+.nav .nav-user {
+  color: var(--yellow);
+  font-size: 12px;
+  padding: 7px 10px;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 布局 ---------- */
+.wrap {
+  position: relative;
+  z-index: 1;
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 34px 20px 90px;
+  /* v2.5.1：内容区最小高度对齐视口，让短内容页（搜索/标签/关于/登录）也撑满一屏。
+     起因（历史记录，网格层已于 v3.6.0 移除）：.grid-bg 是 position:fixed，其纵向 mask 为
+     「顶端透明 → 55% 处最亮 → 底端透明」。首页内容多、文档高，滚动时视口停在
+     网格的「中段亮带」，背景清晰可感；而短内容页文档不足一屏、无法滚动，
+     看到的永远是视口顶端那一段（mask 在此处 fully transparent）→ 观感上「没有背景」。
+     把内容区最小高度提到接近满屏（原 200px → 现 120px 占位），短页即进入
+     可滚动状态，滚动后网格亮带显现，短页与首页的背景观感趋于一致。
+     ⚠ 用 calc(100vh - 120px) 而非 100vh：顶栏 sticky 64px + 页脚约 136px，
+     若直接取 100vh，内容区自身即满屏、整页远超一屏 → 短页也出现大幅多余滚动；
+     取 120px 让整页略高于视口即可（刚好触发滚动、露出网格亮带），
+     长内容页因 min-height 只兜底不封顶而零副作用。 */
+  min-height: calc(100vh - 120px);
+}
+
+.page-head {
+  margin-bottom: 30px;
+  font-family: var(--mono);
+  position: relative;   /* 作为 ::before 菱形锚点的定位基准 */
+}
+.page-head h1 {
+  font-size: 26px;
+  letter-spacing: 2px;
+  color: var(--text-bright);
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.page-head h1::before {
+  content: "◢";
+  color: var(--magenta);
+  text-shadow: var(--glow-magenta);
+  font-size: 18px;
+}
+.page-head .crumb {
+  margin-top: 6px;
+  /* v2.9.6 → v2.9.7 两连跳的教训：12 → 13px 属于"肉眼看不见"的量级，
+     用户反馈"也没加大呀"。这次直接到 14px（较原始 12px +17%，一眼可辨）。
+     顺带把单色改成**渐变文字** —— 用 background-clip:text 实现：
+       · 纯 CSS、零 JS、零内联 → CSP（无 'unsafe-inline'）依然合规
+       · 三个色标全走变量 → 亮色/暖色档自动落到压暗后的同色系
+       · 起点保留 --text-dim：它终究是次级信息，从"隐"渐到"亮"，
+         比整条拉满霓虹更有层次，也不会反客为主压过 26px 的 h1
+       · 数字 <b> 自带 color:var(--cyan)，会盖在渐变上 —— 焦点色不丢 */
+  font-size: 14px;
+  letter-spacing: 1px;
+  background-image: linear-gradient(90deg,
+    var(--text-dim) 0%, var(--cyan) 58%, var(--violet) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.page-head .crumb b { color: var(--cyan); font-weight: 400; }
+
+/* ---------- 页头分隔线（.page-head::after）----------
+   问题：页头（标题 + 副标题）与下方内容区之间只有留白，亮色主题下尤其糊成一片，
+   上下区域边界不可辨。
+   方案：用伪元素画一条赛博朋克风横向分隔线，纯 CSS 实现（零 JS、零内联样式，
+   符合 CSP script-src 无 'unsafe-inline' 的硬约束）。
+   结构（自上而下三层）：
+     ① 主线：1px 渐变，两端透明 → 中间亮，视觉上「无头无尾」，比实线更耐看
+     ② 扫描段：一段 80px 的亮色短线叠在主线上，模拟信号扫描位
+     ③ 端点标记：左端一个品红菱形（clip-path），呼应 h1::before 的 ◢ 与卡片斜切角
+   配色：主调 --cyan（与全站一致），端点用 --magenta 做对比点缀，
+        与 h1::before 的 ◢ 同色 —— 首尾呼应，不引入新色。
+   亮色适配：不用单独写规则 —— 上面的颜色全走 CSS 变量，
+        亮色档的 --cyan 已是压暗后的 #007a91，--glow-magenta 也收敛为极淡描边。 */
+.page-head::after {
+  content: "";
+  display: block;
+  margin-top: 20px;
+  height: 1px;
+  /* ② 扫描段叠在 ① 主线之上：前者在后（先绘制），后者在前（覆盖）
+     注意：这里用 color-mix 从 --cyan 派生半透明色，而非硬编码 rgba(0,240,255)。
+     否则亮色主题下扫描段仍是刺眼的荧光青（--cyan 已压暗为 #007a91，
+     但硬编码的 rgba 不会跟着变）—— 这正是"变量化"的意义所在。 */
+  background:
+    linear-gradient(90deg,
+      var(--cyan) 0,
+      color-mix(in srgb, var(--cyan) 85%, transparent) 55px,
+      transparent 80px),
+    linear-gradient(90deg,
+      transparent 0,
+      var(--line-strong) 12%,
+      var(--line-strong) 88%,
+      transparent 100%);
+  box-shadow: 0 0 1px var(--line-strong);
+}
+/* 起点锚：紧贴分隔线左端的小菱形 —— 用 .page-head 的 ::before 实现，
+   以 .page-head 为定位基准（已加 position: relative） */
+.page-head::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -22px;          /* 分隔线在 .page-head 底部下方 20px 处，菱形居中对齐它 */
+  width: 5px;
+  height: 5px;
+  background: var(--magenta);
+  box-shadow: var(--glow-magenta);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  transform: translateY(-50%);
+}
+
+/* ---------- 按钮 ---------- */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 1.5px;
+  padding: 10px 22px;
+  background: rgba(0, 240, 255, 0.06);
+  color: var(--cyan);
+  border: 1px solid var(--line-strong);
+  clip-path: var(--clip-corner);
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+  transition: all var(--t-normal);
+  user-select: none;
+}
+/* E1：发光反馈包 hover 媒体（下同，不再重复注释） */
+@media (hover: hover) {
+  .btn:hover:not(:disabled) {
+    background: rgba(0, 240, 255, 0.16);
+    box-shadow: var(--glow-cyan);
+    text-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+  }
+}
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+/* E3：加载更多等待态 —— 慢网络下按钮无变化像"没点上"，诱发连点。
+   点击时 JS 置 .loading（文字换 ▚ LOADING + disabled），请求完成 innerHTML
+   重建自动恢复；失败时 homeView 错误态重渲染，同样自动恢复。 */
+.btn.loading { opacity: 0.55; pointer-events: none; cursor: wait; }
+/* v2.9.4 对向充能光条（借法自 Uiverse「切角光轨按钮」）。
+   上缘自左向右充能、下缘自右向左充能 —— 两端对向合拢，像机械触点在充电。
+
+   ★ 为什么用**两个 background 层**而不是两个伪元素：
+       ::before 已被双层取景框占用（R104 守着），而 .btn 的调用点散布在各视图
+       模板里，再插一个 <span> 要改十几处、且每次 innerHTML 重建都得记得补。
+       background-size 是可插值的，两个图层各自锚定一角：
+         第 1 层 background-position: 0 0       → 自左上角向右生长
+         第 2 层 background-position: 100% 100% → 自右下角向左生长
+       一层伪元素即得"对向"，零新增 DOM。
+
+   ★ 为什么用 transition 而不是 @keyframes：
+       transition 在移开鼠标时会**反向收回**，光条有"放电"的回程；
+       animation 只能靠 forwards 停在终点，移开瞬间直接消失，很生硬。
+       时长走 var(--t-*)，与本文件"禁止裸写 transition 时长"的约定一致（R66m）。 */
+.btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(currentColor, currentColor),
+    linear-gradient(currentColor, currentColor);
+  background-repeat: no-repeat;
+  background-position: 0 0, 100% 100%;
+  background-size: 0% 2px, 0% 2px;
+  opacity: 0;
+  pointer-events: none;
+  transition: background-size var(--t-slow) var(--t-bezier), opacity var(--t-fast) linear;
+}
+@media (hover: hover) {
+  .btn:hover:not(:disabled)::after {
+    background-size: 52% 2px, 52% 2px;
+    opacity: 1;
+  }
+}
+/* E6（v2.4.0 插单）K2 双层取景框：内嵌 3px 第二圈细线，终端仪器的取景感。
+   边框色用 currentColor 派生 —— cyan/magenta/yellow/ghost 四个变体自动适配，不逐个写；
+   ghost hover 时字色变亮，内圈随之点亮，行为一致。 */
+.btn::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  clip-path: inherit;
+  pointer-events: none;
+  transition: border-color var(--t-normal);
+}
+@media (hover: hover) {
+  .btn:hover:not(:disabled)::before { border-color: color-mix(in srgb, currentColor 95%, transparent); }
+}
+
+.btn-magenta {
+  color: var(--magenta);
+  border-color: rgba(255, 42, 109, 0.55);
+  background: rgba(255, 42, 109, 0.06);
+}
+@media (hover: hover) {
+  .btn-magenta:hover:not(:disabled) {
+    background: rgba(255, 42, 109, 0.16);
+    box-shadow: var(--glow-magenta);
+    /* E7（v2.4.0 插单）K4 故障色散：品红本体 + 左青右紫双侧残影，
+       与 logo glitch 同源的色差（chromatic aberration）语言。
+       只用在危险操作（恢复草稿 / 确认删除是仅有的两个 btn-magenta 调用点），不做通用 hover。 */
+    text-shadow: -1.5px 0 rgba(0, 240, 255, 0.9), 1.5px 0 rgba(181, 55, 242, 0.9);
+  }
+}
+.btn-ghost {
+  color: var(--text-dim);
+  border-color: rgba(95, 115, 145, 0.4);
+  background: transparent;
+}
+.btn-ghost:hover:not(:disabled) {
+  color: var(--text-bright);
+  border-color: var(--text-dim);
+  box-shadow: none;
+  text-shadow: none;
+}
+.btn-sm { padding: 6px 14px; font-size: 12px; }
+.btn-block { width: 100%; }
+
+/* ---------- 文章卡片 ---------- */
+.post-list { display: flex; flex-direction: column; gap: 22px; }
+
+.post-card {
+  position: relative;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner);
+  padding: 24px 26px 20px;
+  cursor: pointer;
+  transition: border-color var(--t-slow), transform var(--t-slow), box-shadow var(--t-slow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+@media (hover: hover) {
+  .post-card:hover {
+    border-color: var(--line-strong);
+    transform: translateY(-3px);
+    /* v2.9.5 双色内发光（借自 Uiverse「tiny-shrimp-10」）：
+       技法是**多层 inset 阴影左右对冲** —— 青光从左缘往里渗、品红从右缘往里渗，
+       再垫一层无偏移的大半径 inset 把整个卡面染上一层底色。
+       原组件用的是 #0ff / #f0f 硬编码色，这里换 color-mix(var(--cyan)/var(--magenta))，
+       亮色/暖色档自动落到压暗后的同色系，不会在浅底上炸出刺眼的原色。
+       原有的顶部霓虹与落地投影保留（它们负责"浮起来"，inset 负责"点亮"）。 */
+    box-shadow:
+      0 0 24px color-mix(in srgb, var(--cyan) 13%, transparent),
+      0 14px 40px rgba(0, 0, 0, 0.5),
+      inset 26px 0 46px -28px color-mix(in srgb, var(--cyan) 62%, transparent),
+      inset -26px 0 46px -28px color-mix(in srgb, var(--magenta) 58%, transparent),
+      inset 0 0 64px -34px color-mix(in srgb, var(--cyan) 24%, transparent);
+  }
+}
+.post-card .card-status {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  padding: 3px 9px;
+  border: 1px solid;
+}
+.card-status.published { color: var(--green); border-color: rgba(5, 255, 161, 0.4); text-shadow: 0 0 6px rgba(5,255,161,.5); }
+.card-status.draft { color: var(--yellow); border-color: rgba(249, 240, 2, 0.4); text-shadow: 0 0 6px rgba(249,240,2,.4); }
+.post-card .card-cover {
+  height: 190px;
+  margin: -8px -10px 4px;
+  background-size: cover;
+  background-position: center;
+  /* v2.4.1 修复「封面底部亮线」：background-clip 默认 border-box 会把图像最底部
+     1px 垫进半透明 border-bottom 后面，而 ::after 暗罩(inset:0)只盖 padding-box
+     盖不到 border 区 —— 那一行图像就成了全封面唯一没被压暗的像素，与上方 85% 暗
+     形成强反差，视觉上是一条随封面变色的"多余横线"。收进 padding-box 后 border
+     透出的恢复为卡片深底，线变回设计原意的均匀暗青分隔线。布局零影响（border 占位不变）。 */
+  background-clip: padding-box;
+  border-bottom: 1px solid var(--line);
+  filter: saturate(1.15) contrast(1.05);
+  position: relative;
+  overflow: hidden;
+}
+.post-card .card-cover::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgba(4,6,13,0.05) 40%, rgba(4,6,13,0.85));
+}
+/* F4/F5（v2.4.0 插单）C1 HUD 读数 + C6 标题压字：
+   kick 行（SIG_XXX // 日期）+ 标题一起压进底部渐变区，封面从配图变「信号面板」。
+   仅在有封面时由 views.js 分支渲染；无封面文章标题保持卡身原位，结构天然回退。 */
+.card-cover .cover-press {
+  position: absolute;
+  left: 14px; right: 14px; bottom: 10px;
+  z-index: 1; /* 压在 ::after 暗罩之上 */
+}
+.card-cover .cover-kick {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  text-shadow: 0 0 6px rgba(0, 240, 255, 0.4);
+  margin-bottom: 3px;
+}
+/* 压字版 h2 补投影保证图上可读；字号/颜色/hover 变青复用 .post-card h2 既有规则 */
+.post-card .card-cover h2 {
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.85);
+}
+.post-card h2 {
+  font-family: var(--sans);
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-bright);
+  letter-spacing: 0.5px;
+  transition: color var(--t-normal), text-shadow var(--t-normal);
+}
+@media (hover: hover) {
+  .post-card:hover h2 { color: var(--cyan); text-shadow: 0 0 12px rgba(0, 240, 255, 0.45); }
+}
+.post-card .card-summary {
+  color: var(--text-dim);
+  font-size: 14.5px; /* C1：14→14.5px，摘要跟全局字号微调半档 */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.card-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  /* ⚠ 卡片标签与收藏按钮的「避让」（v2.6.2）：
+     .card-mark 是绝对定位贴右下角（right:10px / bottom:10px / 34×34），
+     .card-tags 又用 margin-left:auto 把它推到最右 —— 两者抢占同一区域，
+     标签多或标签名长时必然重叠（实测「#指南」被收藏框压住）。
+     这里给整个 meta 行右侧留出按钮宽 + 间距，从布局上永久规避，
+     不依赖标签数量或名字长度。 */
+  padding-right: 46px;
+}
+.card-meta .meta-date::before { content: "⌚ "; }
+.card-meta .meta-author::before { content: "⌁ "; }
+.card-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
+/* O9：卡片标签也走频段色号（data-tone）。
+   无 data-tone 时（如关于页写死的 #cyberpunk / #写作 / #代码 装饰性标签）
+   回落到默认的幽紫，保持原有的版面观感不变。 */
+.tag-chip {
+  --tone: var(--violet);
+  --tone-ink: color-mix(in srgb, var(--tone) 82%, var(--text-bright));
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--tone-ink);
+  border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+  padding: 4.5px 12px; /* E2：原 2.5px 10px ≈ 22px 高，远低于 44px 触控推荐值。
+     方案原拟「::after 外扩热区」，实施时发现与下方 clip-path 冲突：
+     polygon 只覆盖本体 border-box，外扩的整圈伪元素全被裁掉、热区无效。
+     改用 padding 微增（高约 +5px ≈ 27px、宽 +4px），斜切角随 box 走，视觉增量可忽略。 */
+  cursor: pointer;
+  text-decoration: none;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  transition: all var(--t-normal);
+}
+.tag-chip[data-tone="t0"] { --tone: var(--cyan); }
+.tag-chip[data-tone="t1"] { --tone: var(--magenta); }
+.tag-chip[data-tone="t2"] { --tone: var(--yellow); }
+.tag-chip[data-tone="t3"] { --tone: var(--violet); }
+.tag-chip[data-tone="t4"] { --tone: var(--green); }
+
+@media (hover: hover) {
+  .tag-chip:hover {
+    border-color: var(--tone);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--tone) 40%, transparent);
+    text-shadow: 0 0 6px color-mix(in srgb, var(--tone) 80%, transparent);
+  }
+}
+
+/* ---------- O9：标签频段色标（分类视觉标识）----------
+   对象：文章所属的「标签 / 频段」——归档条目、卡片元信息、标签总览共用同一套色。
+   维度：类型（标签类别），不是状态、不是优先级。
+   空标签：中性灰「未分类」，同样有图标，不让它退回"没有身份"。
+
+   配色：复用站点既有 5 个霓虹频段，不引入新色相。
+     色值一律走 CSS 变量（--tone），故亮色主题下自动换成压暗档，
+     不会出现"深色下好看、浅色下刺眼"的老问题。
+     JS 只输出 data-tone="t0..t4"，颜色定义只此一处 —— 两套编码不会走散。
+
+   可读性保障（浅色 + 深色同时成立）：
+     · 文字色 = --tone 与 --text-bright 的混合（见下方 --tone-ink）。
+       为什么不直接用 --tone：亮色档的 --cyan(#007a91) 对底色 #eef2f8 的对比度
+       实测只有 4.46:1，低于 WCAG AA 的 4.5 —— 色标文字是 10.5px 小字，
+       差这 0.04 就是"合格"与"勉强看得见"的分界。故往文字色里掺入主体文字色，
+       暗色主题下 --text-bright 是近白，掺入即提亮；亮色下是近黑，掺入即加深，
+       两个方向都是「增加对比」，于是同一行公式同时修好两套主题。
+       色相由 --tone 贡献 82%，肉眼仍是那个频段的颜色。
+     · 色相之外还有图标（◆▲■⬢●）与底部 2px 下划线，
+       色盲 / 灰度打印下依然能区分类别 —— 颜色不是唯一信息通道。
+     · 边框用 color-mix 由 --tone 派生，随主题实时变化，不写死 rgba。
+
+   5 个色相的可分辨性：青(#00f0ff) / 品红(#ff2a6d) / 电光黄(#f9f002)
+   / 幽紫(#b537f2) / 荧光绿(#05ffa1)，色相角实测 184°/341°/58°/280°/157°，
+   两两间隔足够，且都是站点已有色。 */
+.tag-badge {
+  --tone: var(--cyan);
+  --tone-ink: color-mix(in srgb, var(--tone) 82%, var(--text-bright));
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .8px;
+  line-height: 1.5;
+  padding: 1px 8px 2px;
+  color: var(--tone-ink);
+  background: color-mix(in srgb, var(--tone) 9%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 42%, transparent);
+  border-bottom: 2px solid var(--tone);       /* 下划线：色块之外的第二重标识 */
+  border-radius: 2px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background var(--t-slow), border-color var(--t-slow), color var(--t-slow);
+}
+.tag-badge[data-tone="t0"] { --tone: var(--cyan); }
+.tag-badge[data-tone="t1"] { --tone: var(--magenta); }
+.tag-badge[data-tone="t2"] { --tone: var(--yellow); }
+.tag-badge[data-tone="t3"] { --tone: var(--violet); }
+.tag-badge[data-tone="t4"] { --tone: var(--green); }
+
+.tag-badge .tag-glyph { font-style: normal; font-size: 9px; opacity: .9; }
+
+.tag-badge:hover {
+  background: color-mix(in srgb, var(--tone) 22%, transparent);
+  border-color: var(--tone);
+}
+
+/* 未分类：中性灰。刻意不占 5 个频段中的任何一个 ——
+   灰色传达的信息就是"没有频段"，与"属于某个频段"在语义上互斥。 */
+.tag-badge-none {
+  --tone: var(--text-dim);
+  font-style: italic;
+  cursor: default;
+}
+.tag-badge-none:hover { background: color-mix(in srgb, var(--tone) 9%, transparent); border-color: color-mix(in srgb, var(--tone) 42%, transparent); border-bottom-color: var(--tone); }
+
+/* ---------- 文章详情 ---------- */
+.post-full {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner);
+  padding: 40px 44px 36px;
+  animation: fadein 0.35s ease;
+}
+@keyframes fadein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.post-full .post-title {
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--text-bright);
+  line-height: 1.35;
+  margin-bottom: 14px;
+  text-shadow: 0 0 1px rgba(0, 240, 255, 0.4);
+}
+.post-full .post-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  padding-bottom: 18px;
+  margin-bottom: 26px;
+  border-bottom: 1px dashed rgba(0, 240, 255, 0.25);
+}
+.post-full .post-cover {
+  margin: -6px -8px 26px;
+  border: 1px solid var(--line);
+  height: 300px;
+  background-size: cover;
+  background-position: center;
+  position: relative;
+}
+.post-full .post-cover::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, transparent 55%, rgba(4,6,13,0.7));
+  border-top: 2px solid var(--cyan);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.25);
+}
+
+/* ---------- Markdown 渲染 ---------- */
+/* A1 正文限宽：~1032px 全宽下每行 60~70 字远超中文舒适区（30~40 字），
+   760px ≈ 44 字/行。卡片外壳保持全宽（斜切角面板的仪式感不丢），只有正文文字限宽；
+   编辑器预览同走 .md-body，预览态与阅读态保持一致。
+   C1：15.5→16.5px，与 body 16px 同批上调（两档差保持 0.5px 节奏）。 */
+.md-body { font-size: 16.5px; line-height: 1.9; color: var(--text); word-break: break-word; max-width: var(--w-read); margin-inline: auto; }
+.md-body h1, .md-body h2, .md-body h3, .md-body h4 {
+  font-family: var(--sans);
+  color: var(--text-bright);
+  margin: 1.5em 0 0.6em;
+  letter-spacing: 0.5px;
+  position: relative;
+}
+.md-body h1 { font-size: 26px; border-bottom: 2px solid var(--line-strong); padding-bottom: 10px; text-shadow: 0 0 12px rgba(0,240,255,.25); }
+.md-body h2 { font-size: 22px; border-left: 3px solid var(--cyan); padding-left: 14px; box-shadow: inset 1px 0 0 rgba(0,240,255,.2); }
+.md-body h3 { font-size: 18px; color: var(--cyan); }
+.md-body h4 { font-size: 16px; color: var(--md-h4); }
+/* v3.5.1（外部评审）：原 0.7em = 11.55px，而正文行高 31.35px ——
+   换段只比换行多三分之一行高，段落几乎分不开（中文尤其明显）。
+   中文排版两条正路：① text-indent 2em + 段间距近 0；② 零缩进 + 段间距 ≥ 1em。
+   这里走 ② —— 与这个站的科技感更搭，且对中英混排更友好（缩进 2em 在英文段落里很怪）。 */
+.md-body p { margin: 1.1em 0; }
+.md-body a {
+  color: var(--cyan);
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(0, 240, 255, 0.5);
+  transition: all var(--t-normal);
+}
+@media (hover: hover) {
+  .md-body a:hover { text-shadow: var(--glow-cyan); border-bottom-color: var(--cyan); }
+}
+.md-body strong { color: var(--yellow); font-weight: 700; }
+.md-body em { color: var(--md-em); }
+.md-body del { color: var(--text-dim); }
+.md-body blockquote {
+  margin: 1em 0;
+  padding: 12px 18px;
+  border-left: 3px solid var(--magenta);
+  background: linear-gradient(90deg, rgba(255, 42, 109, 0.08), transparent 80%);
+  color: var(--md-quote);
+  font-style: italic;
+}
+.md-body blockquote p { margin: 0.3em 0; }
+/* A2 锚点落点兜底：顶栏 sticky 高 64px。当前 TOC 点击走 app.js 的
+   scrollTo(top - 78) 手动偏移、不经此规则；但一旦有人把跳转改成
+   scrollIntoView() / 原生锚点导航（更标准的写法，重构时很可能发生），
+   没有 scroll-margin 就会重新被顶栏盖住 —— 这条是防御性不变量。 */
+.md-body h2, .md-body h3 { scroll-margin-top: 76px; }
+.md-body ul, .md-body ol { padding-left: 1.6em; margin: 1.1em 0; }
+.md-body ul li::marker { color: var(--magenta); content: "▸ "; }
+.md-body ol li::marker { color: var(--cyan); font-family: var(--mono); }
+.md-body li { margin: 0.45em 0; }
+.md-body hr {
+  border: none;
+  height: 1px;
+  margin: 2em 0;
+  background: linear-gradient(90deg, transparent, var(--line-strong), transparent);
+}
+.md-body code:not(pre code) {
+  font-family: var(--mono);
+  font-size: 0.88em;
+  color: var(--yellow);
+  background: rgba(249, 240, 2, 0.08);
+  border: 1px solid rgba(249, 240, 2, 0.25);
+  padding: 1.5px 7px;
+  border-radius: 3px;
+}
+.md-body pre {
+  position: relative;
+  margin: 1.2em 0;
+  padding: 18px 20px;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--cyan);
+  box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.04);
+  overflow-x: auto;
+}
+.md-body pre::before {
+  content: "▸ EXEC //";
+  position: absolute;
+  top: 0; right: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: rgba(0, 240, 255, 0.4);
+  padding: 3px 0;
+}
+.md-body pre code {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--code-text);
+  background: transparent;
+  padding: 0;
+  border: none;
+}
+.md-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.2em 0;
+  font-size: 14px;
+}
+.md-body th {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  background: rgba(0, 240, 255, 0.07);
+  border: 1px solid var(--line);
+  padding: 9px 12px;
+  text-align: left;
+}
+.md-body td {
+  border: 1px solid rgba(0, 240, 255, 0.14);
+  padding: 8px 12px;
+}
+.md-body tr:hover td { background: rgba(0, 240, 255, 0.04); }
+.md-body img {
+  max-width: 100%;
+  /* B3：配合 <img width/height> 占位 —— 没有 height:auto 时，
+     max-width 收窄宽度而 height 属性仍按原值生效，图片会被拉变形。
+     有了它，宽高比由占位属性推导，缩放不变形且能预留空间消除 CLS。 */
+  height: auto;
+  border: 1px solid var(--line);
+  padding: 4px;
+  background: var(--bg-1);
+  margin: 0.6em 0;
+  display: block;
+}
+.md-body .md-attach {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--yellow);
+  border: 1px solid rgba(249, 240, 2, 0.4);
+  background: rgba(249, 240, 2, 0.05);
+  padding: 6px 14px;
+  margin: 4px 6px 4px 0;
+  text-decoration: none;
+  clip-path: var(--clip-corner);
+  cursor: pointer;
+}
+@media (hover: hover) {
+  .md-body .md-attach:hover { box-shadow: var(--glow-yellow); }
+}
+.md-body .md-attach.locked { opacity: 0.55; }
+
+/* highlight.js 霓虹配色 */
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-section { color: var(--magenta); }
+.hljs-string, .hljs-attr, .hljs-template-string { color: var(--green); }
+.hljs-title, .hljs-title.function_, .hljs-name, .hljs-selector-id { color: var(--yellow); }
+.hljs-comment, .hljs-quote { color: #4d648c; font-style: italic; }
+.hljs-number, .hljs-symbol, .hljs-meta { color: #ff9e64; }
+.hljs-built_in, .hljs-class .hljs-title, .hljs-title.class_ { color: #7ee7f5; }
+.hljs-variable, .hljs-attribute, .hljs-tag { color: #b8e6f5; }
+.hljs-params { color: var(--text); }
+.hljs-deletion { color: var(--red); }
+.hljs-addition { color: var(--green); }
+
+/* ---------- 标签云 ---------- */
+.tag-cloud { 
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+/* O9：标签总览改为 5 色频段 —— 原来全部是同一个紫色边框，
+   读者无法区分"哪个频段是主线"，只能用字号猜。
+   现在色号由 views.js 的 rankedTones() 按热度排名分配（前 5 名不重复），
+   颜色与归档页、卡片元信息同属一套色板。 */
+.tag-cloud .tag-item {
+  --tone: var(--cyan);
+  /* 与 .tag-badge / .tag-chip 同一套墨色公式：小字压在浅底上时靠掺主体文字色提对比 */
+  --tone-ink: color-mix(in srgb, var(--tone) 82%, var(--text-bright));
+  font-family: var(--mono);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 18px;
+  border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+  background: color-mix(in srgb, var(--tone) 8%, transparent);
+  color: var(--tone-ink);
+  text-decoration: none;
+  cursor: pointer;
+  clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px);
+  transition: all var(--t-normal);
+}
+.tag-cloud .tag-item[data-tone="t0"] { --tone: var(--cyan); }
+.tag-cloud .tag-item[data-tone="t1"] { --tone: var(--magenta); }
+.tag-cloud .tag-item[data-tone="t2"] { --tone: var(--yellow); }
+.tag-cloud .tag-item[data-tone="t3"] { --tone: var(--violet); }
+.tag-cloud .tag-item[data-tone="t4"] { --tone: var(--green); }
+
+.tag-cloud .tag-item:hover {
+  background: color-mix(in srgb, var(--tone) 22%, transparent);
+  border-color: var(--tone);
+  box-shadow: 0 0 16px color-mix(in srgb, var(--tone) 45%, transparent);
+  transform: translateY(-2px);
+}
+/* 高频段（≥5 篇）给一层常驻光晕，与「主线频段」的语义呼应 */
+.tag-cloud .tag-item-hot {
+  box-shadow: 0 0 12px color-mix(in srgb, var(--tone) 32%, transparent);
+}
+.tag-cloud .tag-count { font-size: 11px; color: var(--tone-ink); }
+.tag-cloud .tag-count::before { content: "×"; color: var(--text-dim); }
+
+/* ---------- 表单 ---------- */
+.form-panel {
+  max-width: 460px;
+  margin: 0 auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner);
+  padding: 36px 38px 32px;
+}
+.form-panel.wide { max-width: 720px; }
+.form-title {
+  font-family: var(--mono);
+  font-size: 17px;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  margin-bottom: 6px;
+}
+.form-sub { font-size: 12px; color: var(--text-dim); margin-bottom: 24px; font-family: var(--mono); }
+.field { margin-bottom: 18px; }
+.field label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  margin-bottom: 7px;
+  text-transform: uppercase;
+}
+.field label b { color: var(--magenta); font-weight: 400; }
+.field input[type="text"], .field input[type="email"], .field input[type="password"],
+.field textarea, .field select {
+  width: 100%;
+  background: rgba(4, 6, 13, 0.8);
+  border: 1px solid rgba(95, 115, 145, 0.35);
+  color: var(--text-bright);
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 11px 14px;
+  outline: none;
+  transition: border-color var(--t-normal), box-shadow var(--t-normal);
+}
+.field input:focus, .field textarea:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.3), 0 0 16px rgba(0, 240, 255, 0.12);
+}
+/* v2.9.5 扫描线霓虹输入框（借自 Uiverse「grumpy-horse-85」，只用于编辑器）。
+   借的是它的两个形态语言，**不搬**它的实现：
+     · 「装甲缺口」切角 → 换成本站自己的 --clip-corner-sm（同一套几何语言）
+     · 扫描线 → repeating-linear-gradient 直接铺在输入框背景上，
+       青色只给 6% 透明度，是"纹理"不是"花纹"，不影响输入可读性
+     · 聚焦时叠一道自左向右的青色渐变（原组件的 hover/focus 扫光）
+   ⚠ 刻意不搬的东西：
+     · backglitch（50ms 无限抖动的 inset 阴影）—— 高频闪烁是光敏性癫痫风险，
+       且与本站"装饰动画在 reduce 下必须停"的承诺冲突
+     · blinkShadowsFilter（8s 无限跳变的双向 drop-shadow）—— 大范围重影，
+       只会在编辑这种要久看的界面上制造视觉噪音
+   ⚠ 只圈编辑器的四个文本输入（#ed-*），不碰 .field 全局 ——
+     登录框 / 标签管理 / 封面引用框保持原样，避免一次性改动全站表单观感。 */
+#ed-title, #ed-summary, #ed-tags, #ed-cover {
+  clip-path: var(--clip-corner-sm);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0 3px,
+    color-mix(in srgb, var(--cyan) 6%, transparent) 3px 4px
+  );
+}
+#ed-title:focus, #ed-summary:focus, #ed-tags:focus, #ed-cover:focus {
+  border-color: var(--cyan);
+  background-image:
+    linear-gradient(90deg, transparent 0%,
+      color-mix(in srgb, var(--cyan) 16%, transparent) 27%,
+      color-mix(in srgb, var(--cyan) 16%, transparent) 63%, transparent 100%),
+    repeating-linear-gradient(to bottom, transparent 0 3px,
+      color-mix(in srgb, var(--cyan) 9%, transparent) 3px 4px);
+}
+.field textarea { resize: vertical; min-height: 90px; line-height: 1.7; }
+.field-row { display: flex; gap: 12px; }
+.field-row .field { flex: 1; }
+.field-hint { font-size: 11px; color: var(--text-dim); margin-top: 5px; font-family: var(--mono); }
+.otp-row { display: flex; gap: 10px; }
+.otp-row input { flex: 1; }
+.otp-row .btn { white-space: nowrap; }
+
+/* Tab */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 26px;
+  font-family: var(--mono);
+  font-size: 12px;
+  overflow-x: auto;
+}
+.tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-dim);
+  padding: 10px 4px;
+  margin-right: 22px;
+  cursor: pointer;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+  transition: color var(--t-normal);
+}
+.tabs button:hover { color: var(--text); }
+.tabs button.active {
+  color: var(--cyan);
+  border-bottom-color: var(--cyan);
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+}
+
+/* ---------- 编辑器 ---------- */
+.editor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+@media (max-width: 1024px) { .editor-grid { grid-template-columns: 1fr; } }
+
+/* ---------- A3：窄屏编辑器「输入/预览」切换 ----------
+   ≤1000px 退化为单列后，预览区在输入框下方数千像素处，实时预览名存实亡。
+   复用 .tabs 样式给两个 pane 顶加切换：默认显示输入，点「预览」才换 pane；
+   ≥1001px 下 .ed-switch 隐藏、data-ed-view 属性不生效（双列照旧）。
+   pane 用结构伪类（editor-grid 内恒为 输入|预览 两 pane），不加新 class。 */
+.ed-switch { display: none; margin-bottom: 14px; }
+@media (max-width: 1024px) {
+  .ed-switch { display: flex; }
+  .editor-grid[data-ed-view="input"] .editor-pane:last-child { display: none; }
+  .editor-grid[data-ed-view="preview"] .editor-pane:first-child { display: none; }
+  .editor-grid[data-ed-view="preview"] .editor-pane:last-child { min-height: 70vh; }
+}
+.editor-pane {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner);
+  display: flex;
+  flex-direction: column;
+  min-height: 520px;
+}
+.editor-pane-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-pane-head .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--magenta); box-shadow: var(--glow-magenta); animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+/* C11：草稿自动保存状态 + 字数。margin-left:auto 推到头部右端，不挤标题。 */
+.editor-status {
+  margin-left: auto;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.editor-status.near-limit { color: var(--yellow); }
+.editor-status.over-limit { color: var(--red); }
+#editor-textarea {
+  flex: 1;
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  color: var(--text-bright);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.85;
+  padding: 18px 20px;
+  tab-size: 2;
+}
+.editor-preview { flex: 1; padding: 18px 22px; overflow-y: auto; max-height: 640px; }
+.editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: rgba(4, 6, 13, 0.5);
+}
+.tool-btn {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  background: rgba(0, 240, 255, 0.04);
+  border: 1px solid rgba(95, 115, 145, 0.3);
+  padding: 5px 12px;
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+.tool-btn:hover:not(:disabled) {
+  color: var(--cyan);
+  border-color: var(--line-strong);
+  text-shadow: 0 0 6px rgba(0, 240, 255, 0.6);
+}
+.tool-btn:disabled { opacity: 0.35; cursor: wait; }
+.editor-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px dashed rgba(0, 240, 255, 0.25);
+  align-items: center;
+}
+.editor-actions .spacer { flex: 1; }
+
+/* ---------- 控制台列表 ---------- */
+.admin-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner);
+  padding: 16px 20px;
+  margin-bottom: 14px;
+  transition: border-color var(--t-normal);
+}
+.admin-item:hover { border-color: var(--line-strong); }
+.admin-item .admin-title {
+  flex: 1;
+  min-width: 200px;
+  color: var(--text-bright);
+  cursor: pointer;
+  font-weight: 600;
+}
+.admin-item .admin-title:hover { color: var(--cyan); text-shadow: 0 0 8px rgba(0,240,255,.4); }
+.admin-item .admin-info { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
+
+/* ---------- 空状态 / 加载 ---------- */
+.empty-state {
+  text-align: center;
+  padding: 90px 20px;
+  font-family: var(--mono);
+  color: var(--text-dim);
+}
+.empty-state .empty-glyph {
+  font-size: 44px;
+  color: var(--cyan);
+  text-shadow: var(--glow-cyan);
+  display: block;
+  margin-bottom: 18px;
+  animation: pulse 3s infinite;
+}
+.empty-state .empty-code { color: var(--magenta); font-size: 12px; letter-spacing: 3px; display: block; margin-bottom: 8px; }
+.empty-state .empty-hint { font-size: 13px; letter-spacing: 1px; }
+
+
+.type-cursor::after {
+  content: "█";
+  color: var(--cyan);
+  animation: pulse 0.9s infinite steps(1);
+  margin-left: 2px;
+}
+
+/* ---------- Toast ---------- */
+#toast-wrap {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  pointer-events: none;
+}
+.toast {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  padding: 12px 22px;
+  background: rgba(7, 11, 22, 0.96);
+  border: 1px solid var(--line-strong);
+  color: var(--cyan);
+  clip-path: var(--clip-corner);
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.25), 0 10px 30px rgba(0, 0, 0, 0.6);
+  animation: toast-in 0.25s ease;
+  max-width: min(90vw, 520px);
+}
+.toast.toast-error { color: var(--red); border-color: rgba(255, 56, 96, 0.6); box-shadow: 0 0 20px rgba(255, 56, 96, 0.25); }
+.toast.toast-ok { color: var(--green); border-color: rgba(5, 255, 161, 0.5); box-shadow: 0 0 20px rgba(5, 255, 161, 0.2); }
+.toast.toast-warn { color: var(--yellow); border-color: rgba(249, 240, 2, 0.5); box-shadow: 0 0 20px rgba(249, 240, 2, 0.2); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.toast.hide { animation: toast-out 0.3s ease forwards; }
+@keyframes toast-out { to { opacity: 0; transform: translateY(8px); } }
+
+/* ---------- 模态框 ---------- */
+.modal-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 4, 9, 0.78);
+  backdrop-filter: blur(4px);
+  z-index: 9990;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadein 0.2s ease;
+}
+.modal {
+  background: var(--bg-2);
+  border: 1px solid var(--line-strong);
+  clip-path: var(--clip-corner);
+  padding: 30px 34px;
+  max-width: 440px;
+  width: calc(100vw - 48px);
+  box-shadow: 0 0 40px rgba(0, 240, 255, 0.18), 0 20px 60px rgba(0, 0, 0, 0.7);
+}
+.modal h3 {
+  font-family: var(--mono);
+  color: var(--magenta);
+  letter-spacing: 2px;
+  font-size: 15px;
+  margin-bottom: 14px;
+  text-shadow: var(--glow-magenta);
+}
+.modal .modal-body { color: var(--text); font-size: 14px; margin-bottom: 24px; }
+.modal .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
+
+/* ---------- 关于页 ---------- */
+.about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 768px) { .about-grid { grid-template-columns: 1fr; } }
+
+/* ---------- v2.9.8 站点在线时长 HUD（ABOUT 顶部）----------
+   借鉴的是 HUD / 终端仪表盘的三条通用语言（研究来源：Cyberpunk UI 设计体系、
+   终端启动序列组件），不搬任何组件：
+     ① 角括号取景（bracket framing）—— 对角两段 L 形亮线，一眼读出"这是仪表"
+     ② 色即信号 —— 青 = 累计在线（天数），品红 = 正在流逝（秒数）；
+        每种霓虹只承担一种语义，不混用
+     ③ 一屏只放一个动效 —— 动的只有那条"电流弧"，其余（LIVE 点除外，
+        它是状态指示不是装饰）全部静止
+   数字用等宽字 + tabular-nums：秒数每秒变长，不锁定字宽会一直左右抖。 */
+.uptime-hud {
+  position: relative;
+  margin-bottom: 20px;
+  padding: 16px 22px 14px;
+  background: color-mix(in srgb, var(--bg-1) 92%, transparent);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner);
+  overflow: hidden;
+}
+/* 对角 L 形角括号（左上 / 右下）—— 两个伪元素刚好够，不必塞四个角 */
+.uptime-hud::before,
+.uptime-hud::after {
+  content: "";
+  position: absolute;
+  width: 13px; height: 13px;
+  border: 1px solid var(--cyan);
+  opacity: 0.8;
+  pointer-events: none;
+}
+.uptime-hud::before { top: 5px; left: 5px; border-right: 0; border-bottom: 0; }
+.uptime-hud::after { bottom: 5px; right: 5px; border-left: 0; border-top: 0; }
+
+.uptime-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.uptime-tag {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 2.5px;
+  color: var(--text-dim);
+}
+/* LIVE 状态点：steps(1) 硬切而非渐隐 —— 终端指示灯的本命写法 */
+.uptime-live {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--green);
+}
+.uptime-live i {
+  display: inline-block;
+  width: 6px; height: 6px;
+  margin-right: 5px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+  animation: uptime-blink 1.6s steps(1) infinite;
+}
+@keyframes uptime-blink { 50% { opacity: 0.25; } }
+
+/* v2.9.9：读数位由 2 格扩到 4 格（天/时/分/秒），min-width 132 → 108
+   保证窄内容格不占空 —— BOOT DATE 格内容长，flex 自动撑开不受 min 限制 */
+.uptime-grid { display: flex; flex-wrap: wrap; gap: 12px 34px; }
+.uptime-cell { min-width: 108px; }
+.uptime-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  margin-bottom: 3px;
+}
+.uptime-num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 26px;
+  color: var(--text-bright);
+  line-height: 1.2;
+}
+/* ---------- v2.9.10 计时数字：光谱渐变 + 呼吸辉光 ----------
+   用户要求「颜色渐变的、会呼吸的、鼠标放上去电光炸裂」。
+   ⚠ 渐变文字必须 color:transparent ⇒ **text-shadow 会露出实色块**
+     （字形本体透明后，阴影反成可见主体，糊成一坨）——
+     故光晕改用 filter: drop-shadow：它作用于"渲染后的不透明像素"，
+     background-clip:text 裁出的渐变字形正是它的输入。
+   ⚠ --glow-cyan 是「两层阴影」的简写值，塞不进单层 drop-shadow()，
+     这里用 color-mix(… var(--cyan) …) 现调 —— 色相仍单一来源，
+     亮色/暖色档 --cyan 已压暗，辉光随之收敛（与 --glow-* 同一自适应路径）。 */
+.uptime-num b {
+  font-weight: 600;
+  position: relative;          /* 电光伪元素的定位基准 */
+  background-image: linear-gradient(96deg,
+    var(--cyan) 0%, var(--violet) 50%, var(--magenta) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* --breathe-c：呼吸辉光的色相，由本规则与秒位各自赋值 ——
+     一套 keyframes 服务两种语义，不必写两份呼吸动画 */
+  --breathe-c: var(--cyan);
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--breathe-c) 60%, transparent));
+  animation: uptime-breathe 3.6s ease-in-out infinite;
+}
+/* 呼吸：只有"光"在起伏，字形始终清晰 —— 故动 filter 而非 opacity
+   （opacity 会把字一起变淡，那不是呼吸，是闪烁）。
+   ⚠ 3.6s 是裸时长写进 animation，R66m 只扫 transition、R72k 只认 --t_* 变量，
+     谁都不会替我关掉它 ⇒ reduce 块必须显式停（见文件末尾）。 */
+@keyframes uptime-breathe {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px color-mix(in srgb, var(--breathe-c) 38%, transparent));
+  }
+  50% {
+    filter: drop-shadow(0 0 15px color-mix(in srgb, var(--breathe-c) 92%, transparent))
+            brightness(1.14);
+  }
+}
+.uptime-num i { font-style: normal; font-size: 12px; color: var(--text-dim); margin-left: 4px; }
+/* 四段读数里只有秒位逐秒跳动 —— 唯一的"流逝"位：渐变重心后移到品红，
+   且呼吸辉光换成品红（其余累计位仍是青光）。光谱同一套，重心不同，语义可辨。 */
+.uptime-num b#uptime-sec {
+  font-size: 20px;
+  background-image: linear-gradient(96deg,
+    var(--magenta) 0%, var(--violet) 48%, var(--cyan) 100%);
+  --breathe-c: var(--magenta);
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--breathe-c) 65%, transparent));
+}
+
+/* ---------- v2.9.10 电光炸裂：两个伪元素分工 ----------
+   ::before = 爆环 —— 一圈电弧自数字中心炸开，环上挂三点火花碎屑（box-shadow 散点）
+   ::after  = 枝纹 —— 青/品红双色斜纹硬切闪烁，像电击穿空气
+   静态几何定义在这里（触屏也无害：opacity:0 不参与绘制），
+   :hover 触发的动画全部关在 @media (hover: hover) 里（hover 铁律）。 */
+.uptime-num b::before {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 44px; height: 44px;
+  margin: -22px 0 0 -22px;
+  border: 1px solid var(--cyan);
+  border-radius: 50%;
+  /* 三点火花：环上炸出的碎屑，随环一起外扩并旋转 */
+  box-shadow:
+    15px -11px 0 -3px var(--cyan),
+    -13px 9px 0 -3px var(--magenta),
+    9px 14px 0 -3px var(--violet);
+  opacity: 0;
+  transform: scale(0.4);
+  pointer-events: none;
+}
+.uptime-num b::after {
+  content: "";
+  position: absolute;
+  inset: -2px -5px;
+  /* 双色斜纹：两条电流脉交错，构成"电弧栅格" */
+  background: repeating-linear-gradient(72deg,
+    transparent 0 4px,
+    color-mix(in srgb, var(--cyan) 85%, transparent) 4px 5px,
+    transparent 5px 8px,
+    color-mix(in srgb, var(--magenta) 70%, transparent) 8px 9px,
+    transparent 9px 15px);
+  /* 边缘渐隐 ⇒ 栅格只在数字四周可见，不外扩成一块花布 */
+  -webkit-mask-image: radial-gradient(ellipse at center, #000 34%, transparent 76%);
+  mask-image: radial-gradient(ellipse at center, #000 34%, transparent 76%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+
+/* 电流弧：一段青→品红的光斑沿导轨从左跑到右，是整块 HUD 唯一的动效。
+   用 transform 而非 left —— 合成层动画不触发重排。
+   1.9s 在动画里属裸时长，R66m 只扫 transition、R72k 只认 --t-*，
+   ⇒ reduce 块里必须显式关掉（见下方 R181 相关单行规则）。 */
+.uptime-arc {
+  position: relative;
+  height: 2px;
+  margin: 15px 0 9px;
+  overflow: hidden;
+  background: linear-gradient(90deg,
+    transparent, color-mix(in srgb, var(--cyan) 22%, transparent), transparent);
+}
+.uptime-arc::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  width: 30%; height: 100%;
+  background: linear-gradient(90deg, transparent, var(--cyan), var(--magenta), transparent);
+  box-shadow: 0 0 8px var(--cyan);
+  transform: translateX(-110%);
+  animation: uptime-current 2.2s linear infinite;
+}
+@keyframes uptime-current { to { transform: translateX(440%); } }
+
+.uptime-foot {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+/* ---------- v2.9.10 电光炸裂（hover 触发）----------
+   一屏只放一个动效的例外：这一处动效由**用户主动悬停**唤起，
+   不 hover 时 HUD 依然是"呼吸 + 电流弧"的静态观感。
+   ⚠ hover 简写会整体替换 animation 值 ⇒ 必须把呼吸一并写回去，
+     否则一悬停数字就"屏住呼吸"了（transform 与 filter 两条轨道不冲突，可共存）。
+   ⚠ 全块包在 @media (hover: hover) 内：触屏没有"悬停"，不包会让移动端
+     永久停在炸裂态（hover 铁律 E1）。裸时长 animation ⇒ reduce 块必须显式关。 */
+@media (hover: hover) {
+  .uptime-num b:hover {
+    animation: uptime-breathe 3.6s ease-in-out infinite,
+               uptime-jolt 0.2s steps(2) infinite;
+  }
+  .uptime-num b:hover::before { animation: uptime-burst 0.62s ease-out infinite; }
+  .uptime-num b:hover::after { animation: uptime-arcflash 0.3s steps(2) infinite; }
+}
+/* 爆环：外扩 + 旋转 + 淡出 —— 一次 0.62s，循环三次即"连炸" */
+@keyframes uptime-burst {
+  0%   { opacity: 0.9; transform: scale(0.45) rotate(0deg); }
+  65%  { opacity: 0.35; }
+  100% { opacity: 0; transform: scale(1.45) rotate(22deg); }
+}
+/* 枝纹：steps(2) 硬切明暗 + 左右 1px 抖动，模拟电弧击穿的不稳定 */
+@keyframes uptime-arcflash {
+  0%, 100% { opacity: 0.8; transform: translateX(-1px); }
+  50%      { opacity: 0.28; transform: translateX(1px); }
+}
+/* 数字本体：≤1px 的电击抖动，位移极小以免影响读数 */
+@keyframes uptime-jolt {
+  0%, 100% { transform: translate(0, 0); }
+  25%      { transform: translate(-1px, 1px); }
+  50%      { transform: translate(1px, -1px); }
+  75%      { transform: translate(-1px, -1px); }
+}
+
+.about-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner);
+  padding: 26px 28px;
+}
+.about-card h3 {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 3px;
+  color: var(--cyan);
+  margin-bottom: 16px;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.4);
+}
+.about-card h3::before { content: "◢ "; color: var(--magenta); }
+.about-card p { color: var(--text-dim); font-size: 14px; margin-bottom: 10px; }
+.about-card p b { color: var(--text-bright); font-weight: 600; }
+.about-stat { display: flex; justify-content: space-between; font-family: var(--mono); font-size: 13px; padding: 7px 0; border-bottom: 1px dashed rgba(0, 240, 255, 0.14); }
+.about-stat span:last-child { color: var(--cyan); }
+
+/* ---------- 页脚 ---------- */
+.site-footer {
+  position: relative;
+  z-index: 1;
+  border-top: 1px solid var(--line);
+  padding: 26px 20px 34px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1.5px;
+  line-height: 2.1;
+}
+.site-footer .foot-glyph { color: var(--magenta); }
+.site-footer b { color: var(--cyan); font-weight: 400; }
+
+/* ---------- v3.2.0 B3：页脚三栏（身份 / 导航矩阵 / 元信息）----------
+   此前页脚是四行居中堆叠：链接散落在导航栏里、元信息挤成一行。
+   分栏后：左边"这是谁"、中间"去哪儿"、右边"什么版本" —— 各司其职。
+   ⚠ 名言保持独立成行且仍是最后一个 div 子元素（R70 / R85c 钉着它）。 */
+.foot-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr 1.3fr;
+  gap: var(--s7);
+  max-width: var(--w-wide);
+  margin: 0 auto;
+  text-align: left;
+}
+.foot-col { display: flex; flex-direction: column; gap: var(--s2); min-width: 0; }
+.foot-col-label {
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: var(--text-dim);
+  /* v3.5.1：原在这里叠了 opacity: 0.75，会把 --text-dim 的对比度打回约 3.4:1
+     —— 灰字提上去的意义全被这一步抵消。去掉：它本来就该"淡"，而 dim 已经够淡。 */
+}
+.foot-brand { letter-spacing: 2.4px; }
+/* 页脚定位句走人味层衬线（与身份卡同一层语言） */
+.foot-tag {
+  font-family: var(--font-serif-cn);
+  font-size: 12px;
+  line-height: 1.9;
+  letter-spacing: 0.5px;
+}
+.foot-col a {
+  width: fit-content;
+  font-size: 12px;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color var(--t-fast);
+}
+@media (hover: hover) {
+  .foot-col a:hover { color: var(--cyan); }
+}
+.foot-credit { font-size: 11px; line-height: 2; }
+.foot-quote {
+  margin-top: var(--s7);
+  font-family: var(--font-serif-cn);
+  letter-spacing: 2px;
+}
+@media (max-width: 768px) {
+  .foot-grid { grid-template-columns: 1fr; gap: var(--s5); }
+}
+
+/* ---------- v3.2.0 B3：详情页阅读栅格（正文 + TOC 辅助栏）----------
+   为什么是"辅助栏"而不是"内嵌目录"：目录内嵌在正文顶部时，读到一半想跳章节
+   得先滚回顶部；变成 sticky 侧栏后它在整个阅读过程中都在手边。
+
+   ⚠ sticky 配方的四条一条不能省（外部共识）：
+     · align-self: start —— 不加会被栅格拉伸到与正文等高，sticky 直接失效
+     · max-height + overflow-y —— 不加则长目录在矮屏上尾巴够不着
+     · top 用 --topbar-h —— 否则会被固定页头盖住
+     · 自身可滚动 —— 不是让页面滚，是让目录滚 */
+.reading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 44px;
+  align-items: start;
+}
+.reading-main { min-width: 0; }
+.reading .toc {
+  position: sticky;
+  top: calc(var(--topbar-h) + 24px);
+  align-self: start;
+  max-height: calc(100vh - var(--topbar-h) - 48px);
+  overflow-y: auto;
+  margin: 0;
+}
+
+/* ≤1024：辅助栏收起 —— TOC 回到正文之后（单列文档流），不再是侧栏 */
+@media (max-width: 1024px) {
+  .reading { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .reading .toc {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    margin: 22px 0 8px;
+  }
+}
+
+/* ≥1600：正文居中，目录浮到视口右侧空白区 —— 超宽屏上的第二种读法。
+   ⚠ 全站只有这一个元素允许 position: fixed（它是纯目录面板，
+     与内容没有版面归属；主侧栏若改 fixed 会在断点处和正文打架）。 */
+@media (min-width: 1600px) {
+  .reading { grid-template-columns: minmax(0, 1fr); }
+  .reading .toc {
+    position: fixed;
+    top: calc(var(--topbar-h) + 16px);
+    right: var(--s5);
+    width: 240px;
+    max-height: calc(100vh - var(--topbar-h) - 32px);
+  }
+}
+
+/* ============================================================
+   v3.3.0 B4：控制台仪表盘 + 归档页热力图（3.0 方案 §9.7 / §9.8）
+   ============================================================ */
+
+/* ---------- 控制台：左导航 + 右侧「统计块 + 记录列表」---------- */
+.console {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: var(--s7);
+  align-items: start;
+}
+.console-nav {
+  position: sticky;
+  top: calc(var(--topbar-h) + 24px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+}
+.console-nav-label {
+  margin-top: var(--s3);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: var(--text-dim);
+}
+.console-nav-label:first-child { margin-top: 0; }
+.console-nav a {
+  padding: 7px 12px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  border-radius: 0 var(--r-soft) var(--r-soft) 0;
+  transition: color var(--t-fast), background var(--t-fast);
+}
+@media (hover: hover) {
+  .console-nav a:hover {
+    color: var(--text-bright);
+    background: color-mix(in srgb, var(--cyan) 6%, transparent);
+  }
+}
+/* 当前位置：左侧一道实色边 —— 与 .archive-item 的色条是同一套"位置语言" */
+.console-nav a[aria-current="page"] {
+  color: var(--cyan);
+  border-left-color: var(--cyan);
+  background: color-mix(in srgb, var(--cyan) 8%, transparent);
+}
+.console-main { min-width: 0; }
+.console-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s4);
+  margin-bottom: var(--s5);
+}
+.console-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-soft);
+  background: var(--ink-2);
+}
+.console-stat b {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-bright);
+  text-shadow: var(--glow-cyan);
+}
+
+/* ---------- 归档页：时间线 + 热力图 ---------- */
+.archive-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 40px;
+  align-items: start;
+}
+.archive-main { min-width: 0; }
+.archive-aside { position: sticky; top: calc(var(--topbar-h) + 24px); }
+
+/* ---------- 小工具通用壳（后续小工具沿用同一套）---------- */
+.widget {
+  padding: var(--s4);
+  border: 1px solid var(--line);
+  border-radius: var(--r-soft);
+  background: var(--bg-1);
+}
+.widget-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--s3);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.4px;
+  color: var(--text-bright);
+}
+.widget-total { font-size: 10px; color: var(--text-dim); }
+.widget-note {
+  margin-top: var(--s3);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+}
+/* ---------- v3.7.0：小工具折叠（通用 .widget 壳能力，3.0 方案 §9.8 遗留项）----------
+   折叠态只留标题行；状态由 [data-collapsed="1"] 驱动 —— 属性由 app.js 在渲染后
+   同帧恢复/切换（浏览器只在 JS 执行间隙外绘制，故无"先展开后折叠"的闪烁）。
+   标题行包进原生 <button>：Enter/Space 天然可用，aria-expanded 同步读屏；
+   CSP 无 'unsafe-inline'，交互一律 addEventListener —— 此处只管外观。 */
+.widget-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.widget-toggle .widget-total { margin-left: auto; }
+.widget-caret {
+  font-size: 10px;
+  color: var(--text-dim);
+  transition: transform var(--t-normal);
+}
+@media (hover: hover) {
+  .widget-toggle:hover .widget-caret { color: var(--cyan); }
+}
+.widget-toggle:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.widget[data-collapsed="1"] .widget-caret { transform: rotate(-90deg); }
+.widget[data-collapsed="1"] .widget-body { display: none; }
+.widget[data-collapsed="1"] .widget-head { margin-bottom: 0; }
+/* 热力图 12 格 / 0~4 级亮度 —— 色值全由 --cyan 派生 ⇒ 换色相时整块跟着变 */
+.heat-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.heat-cell {
+  aspect-ratio: 1 / 1;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--cyan) 7%, var(--bg-2));
+}
+.heat-cell[data-lv="1"] { background: color-mix(in srgb, var(--cyan) 26%, var(--bg-2)); }
+.heat-cell[data-lv="2"] { background: color-mix(in srgb, var(--cyan) 46%, var(--bg-2)); }
+.heat-cell[data-lv="3"] { background: color-mix(in srgb, var(--cyan) 68%, var(--bg-2)); }
+.heat-cell[data-lv="4"] { background: var(--cyan); }
+
+/* ---------- 响应式：导航转横向、侧栏收起（1024 体系断点）---------- */
+@media (max-width: 1024px) {
+  .console { grid-template-columns: minmax(0, 1fr); }
+  .console-nav {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--s2);
+  }
+  .console-nav-label { display: none; }
+  .console-nav a { border-left: 0; border-radius: var(--r-soft); }
+  .console-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .archive-grid { grid-template-columns: minmax(0, 1fr); gap: var(--s6); }
+  .archive-aside { position: static; }
+}
+
+/* ---------- v3.2.0 B3：页面编号标（借 taozhiyy 的"片段 01"思路）----------
+   首页六个模块占了 MODULE 01~06，其余版块接着往下编号（SECTOR 07 起），
+   于是读者在任何页面都知道自己站在站台的哪一格。
+   走**系统层**语言：等宽 + 字距 + 切角贴片（与 .bento-no 同源）。
+   ⚠ 编号标放在 h1 **外面**且是独立元素 —— 既有的"页头 h1 文案"断言不受影响。 */
+.page-no {
+  display: block;
+  width: fit-content;
+  margin-bottom: var(--s2);
+  padding: 2px 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner-sm);
+}
+
+/* ---------- 页脚：版本号 + 工程日志按钮 ---------- */
+.foot-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.foot-build { color: var(--text-dim); }
+.foot-build b { color: var(--green); text-shadow: 0 0 8px rgba(5, 255, 161, 0.35); }
+.foot-log-btn {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1.2px;
+  color: var(--cyan);
+  background: transparent;
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  padding: 3px 11px;
+  cursor: pointer;
+  transition: all var(--t-normal);
+  clip-path: polygon(0 0, calc(100% - 6px) 0, 100% 6px, 100% 100%, 6px 100%, 0 calc(100% - 6px));
+}
+.foot-log-btn:hover {
+  color: var(--bg-0);
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+
+/* ---------- 工程日志弹窗 ---------- */
+.modal.modal-log { max-width: 620px; }
+.log-timeline {
+  max-height: 58vh;
+  overflow-y: auto;
+  padding-right: 8px;
+  margin-bottom: 22px;
+}
+.log-entry {
+  position: relative;
+  padding: 0 0 20px 20px;
+  border-left: 1px solid rgba(0, 240, 255, 0.25);
+}
+.log-entry:last-child { border-left-color: transparent; padding-bottom: 4px; }
+.log-entry::before {
+  content: "";
+  position: absolute;
+  left: -4.5px;
+  top: 6px;
+  width: 8px;
+  height: 8px;
+  background: var(--bg-0);
+  border: 1.5px solid var(--cyan);
+  border-radius: 50%;
+}
+.log-entry:first-child::before {
+  border-color: var(--magenta);
+  background: var(--magenta);
+  box-shadow: var(--glow-magenta);
+}
+.log-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.log-ver {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--magenta);
+  letter-spacing: 1.5px;
+  font-weight: 400;
+}
+.log-entry:first-child .log-ver { text-shadow: var(--glow-magenta); }
+.log-date { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px; }
+.log-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--bg-0);
+  background: var(--green);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+.log-title { color: var(--text-bright); font-size: 13px; margin-bottom: 7px; }
+.log-items { list-style: none; }
+.log-items li {
+  position: relative;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.85;
+  padding-left: 14px;
+}
+.log-items li::before { content: "▸"; position: absolute; left: 0; color: rgba(0, 240, 255, 0.6); }
+
+/* ---------- 提示横幅 ---------- */
+.notice-banner {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  padding: 10px 18px;
+  margin-bottom: 24px;
+  border: 1px dashed rgba(249, 240, 2, 0.45);
+  color: var(--yellow);
+  background: rgba(249, 240, 2, 0.05);
+}
+.notice-banner b { color: var(--cyan); font-weight: 400; }
+
+/* ---------- 分页 ---------- */
+.load-more-wrap { text-align: center; margin-top: 34px; }
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 768px) {
+  .topbar-inner { padding: 0 14px; height: 58px; gap: 10px; }
+  .logo-sub { display: none; }
+  .nav { font-size: 12px; gap: 2px; }
+  .nav a { padding: 8px 12px; } /* E2：原 6px 8px ≈ 26px 高，触控误触率高；8px 12px ≈ 30px 高 */
+  .nav .nav-user { display: none; }
+  .wrap { padding: 22px 14px 70px; }
+  .post-full { padding: 26px 20px; }
+  .post-full .post-title { font-size: 22px; }
+  .form-panel { padding: 26px 20px; }
+  .editor-grid { grid-template-columns: 1fr; }
+  .about-grid { grid-template-columns: 1fr; }
+  .modal.modal-log { padding: 24px 20px; }
+  .log-timeline { max-height: 62vh; }
+}
+
+/* 滚动条 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-0); }
+::-webkit-scrollbar-thumb { background: var(--bg-3); border: 2px solid var(--bg-0); }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 240, 255, 0.35); }
+
+::selection { background: rgba(255, 42, 109, 0.4); color: #fff; }
+
+/* ============================================================
+   C2 / C1 / C3 — 第三批（P2）新增样式
+   目录 · 代码复制 · 搜索 · 归档
+   ============================================================ */
+
+/* ---------- C2：文章目录 ---------- */
+.toc {
+  margin: 22px 0 8px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--violet);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.toc[hidden] { display: none; }
+.toc-head {
+  color: var(--violet);
+  font-size: 11px;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+  opacity: .9;
+}
+.toc-list { list-style: none; margin: 0; padding: 0; }
+.toc-item { margin: 2px 0; }
+.toc-item.toc-lv3 { padding-left: 16px; }
+.toc-link {
+  display: block;
+  padding: 3px 8px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-left: 2px solid transparent;
+  transition: all var(--t-slow);
+  line-height: 1.6;
+}
+.toc-link:hover { color: var(--cyan); border-left-color: rgba(0,240,255,.4); }
+.toc-link.active {
+  color: var(--cyan);
+  border-left-color: var(--cyan);
+  background: rgba(0,240,255,.06);
+  text-shadow: var(--glow-cyan);
+}
+.toc-lv3 .toc-link::before { content: "· "; color: var(--text-dim); }
+
+/* ---------- C2：代码块复制按钮 ---------- */
+.md-body pre.has-copy { padding-top: 26px; }
+.code-copy {
+  position: absolute;
+  top: 4px;
+  right: 92px;
+  z-index: 2;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: rgba(0,240,255,.65);
+  background: rgba(0,240,255,.05);
+  border: 1px solid rgba(0,240,255,.25);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: all var(--t-slow);
+}
+.code-copy:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+.code-copy.copied { color: var(--green); border-color: var(--green); }
+
+/* ---------- C1：搜索 ---------- */
+/* ---------- v4.9.3：搜索页空态的背景插画 ----------
+   站长提供的图（assets/search-bg.jpg，1067×600 / 62KB —— 由 1280×720 PNG 568KB 压出；
+   窄屏另有 search-bg-narrow.jpg 720×460 / 37KB，避免手机上被裁成一条）。
+
+   ⚠ 三层处理缺一不可：
+     ① opacity + saturate 压一档 —— 原图是霓虹粉的亮图，原样铺会把文字吃掉
+     ② ::after 渐变遮罩 —— 上深下更深，让 READY 与提示文字在图的任何区域都读得清
+     ③ 文字用**固定的浅色**而不是主题变量 —— 照片的亮度不随主题变，
+        若跟着亮色主题翻成深字，就会变成"深字压深图"。所以这块是**暗色孤岛**：
+        与站点的霓虹招牌/封面压字同一套思路（见 .cover-press）。
+   ⚠ 用 background-image 而非 <img>：它是纯装饰，不该进无障碍树；
+     也方便打印样式单独关掉（深色插画进打印机既费墨又糊）。
+   ⚠ 结果态不铺图（见 views.js 的 searchView）：那会跟列表抢注意力。 */
+.search-hero {
+  position: relative;
+  margin-top: 24px;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.search-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* 38% 的纵向焦点：原图人物在上半部，居中会把脸裁掉 */
+  background: url("../assets/search-bg.jpg") center 38% / cover no-repeat;
+  opacity: .55;
+  filter: saturate(1.05) contrast(1.02);
+}
+.search-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* 两层遮罩：左侧更暗（文字在那边）、上下收边（避免图的亮部顶到边框）——
+     原图的视觉重心是人物（在中右），文字若居中就会压在脸上。 */
+  background:
+    linear-gradient(90deg, rgba(4, 6, 13, .93) 0%, rgba(4, 6, 13, .74) 34%, rgba(4, 6, 13, .30) 62%, rgba(4, 6, 13, .18) 100%),
+    linear-gradient(180deg, rgba(4, 6, 13, .70) 0%, rgba(4, 6, 13, .30) 40%, rgba(4, 6, 13, .88) 100%);
+}
+.search-hero-inner {
+  position: relative;
+  z-index: 2;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  /* 文字靠左：让开人物的脸，同时吃满左侧那层更暗的遮罩（可读性 + 构图都更稳） */
+  justify-content: flex-start;
+  padding: 0 clamp(20px, 6%, 64px);
+}
+/* 暗色孤岛：这里的文字不跟主题走（理由见上） */
+.search-hero .empty-state { padding: 44px 0; text-align: left; color: #b9c6da; }
+.search-hero .empty-state .empty-glyph { color: #6ef0ff; text-shadow: 0 0 18px rgba(0, 240, 255, .45); }
+.search-hero .empty-state .empty-code { color: #ff6ea8; text-shadow: 0 0 14px rgba(255, 42, 109, .35); }
+.search-hero .empty-state .empty-hint { color: #cfd9e8; max-width: 30ch; display: block; }
+
+.search-bar {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 22px;
+  flex-wrap: wrap;
+  /* v3.2.0 B3：搜索条吸附 —— 结果很长时输入框始终在手边，不必滚回顶部改词。
+     ⚠ top 必须用 --topbar-h：贴着固定页头正下方，否则会滑进页头底下被盖住。
+     z-index 20 < 页头的 100 —— 滚上去时由页头盖住它，这正是想要的层序。 */
+  position: sticky;
+  top: var(--topbar-h);
+  z-index: 20;
+  padding: var(--s3) 0;
+  background: color-mix(in srgb, var(--bg-0) 94%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+/* v3.2.0 B3：快捷频段（筛选条）。
+   点一下就用该标签扫描 —— 与手输关键词走同一条路径（改 hash），
+   所以"搜索结果是怎么来的"永远只有一种解释。 */
+.filter-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin: 0 0 var(--s5);
+}
+.filter-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+/* button 版芯片：重置浏览器默认字体，与 <a> 版芯片（标签频段模块）长得一致 */
+.filter-row .freq-chip {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  transition: transform var(--t-fast), border-color var(--t-fast);
+}
+@media (hover: hover) {
+  .filter-row .freq-chip:hover { transform: translateY(-1px); border-color: var(--line-strong); }
+}
+/* v2.9.5 旋转光晕搜索框（借自 Uiverse「curvy-earwig-22」）。
+   原组件用 5 层嵌套 div 各挂一个大尺寸旋转 conic-gradient，聚在输入框背后
+   形成一圈会转的双色描边。这里只借它的**核心技法**：
+     · 一个大尺寸 conic-gradient，只在两处留亮弧（青 + 品红，与站点双色对位）
+     · 聚焦时让角度转起来 → 看上去是光在沿边框"巡逻"
+   落地方式收紧成一个宿主 + 一个伪元素（<input> 不支持伪元素，必须有宿主）：
+     · 用 @property 注册 --halo-spin 为 <angle>，自定义属性才能被 keyframes 插值
+       —— 不注册的话角度只会在 50% 处瞬跳，没有"旋转"观感
+     · 不再用 overflow:hidden 裁切，改为 blur(10px) + 8px 外扩：
+       光晕自然从输入框边缘往外渗，也省掉一层嵌套 div */
+@property --halo-spin {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+.search-field {
+  position: relative;
+  z-index: 0;          /* 造一个栈上下文，把 z-index:-1 的光晕关在输入框背后 */
+  flex: 1;
+  min-width: 220px;
+  display: flex;
+}
+.search-field::before {
+  content: "";
+  position: absolute;
+  inset: -9px;
+  z-index: -1;
+  border-radius: 12px;
+  background: conic-gradient(
+    from var(--halo-spin),
+    transparent 0 5%, var(--cyan) 8%, transparent 15%,
+    transparent 48%, var(--magenta) 54%, transparent 62%
+  );
+  filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--t-slow) ease;
+}
+.search-field:focus-within::before {
+  opacity: 0.5;
+  /* 7s 一圈：慢到只是"呼吸般的流转"，快了会变成干扰阅读的频闪 */
+  animation: halo-spin 7s linear infinite;
+}
+@keyframes halo-spin { to { --halo-spin: 360deg; } }
+
+.search-input {
+  flex: 1;
+  width: 100%;
+  background: var(--bg-1);
+  border: 1px solid var(--line);
+  color: var(--text-bright);
+  font-family: var(--mono);
+  font-size: 14px;
+  padding: 11px 14px;
+  outline: none;
+  transition: all var(--t-slow);
+}
+.search-input:focus {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 14px rgba(0,240,255,.15);
+}
+.search-input::placeholder { color: var(--text-dim); }
+.search-result-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+  letter-spacing: .5px;
+}
+/* 取数被截断时的诚实提示：宁可说明边界，也不假装覆盖全量 */
+.partial-note {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--yellow);
+  opacity: .75;
+  margin: 10px 0 14px;
+  letter-spacing: .5px;
+  border-left: 2px solid rgba(249, 240, 2, .35);
+  padding-left: 10px;
+}
+
+/* ---------- C3：归档 ---------- */
+.archive-group { margin: 0 0 30px; }
+.archive-month {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--sans);
+  font-size: 17px;
+  color: var(--text-bright);
+  border-left: 3px solid var(--cyan);
+  padding-left: 12px;
+  margin: 0 0 12px;
+  letter-spacing: .5px;
+}
+.archive-count {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--bg-0);
+  background: var(--cyan);
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+.archive-list { list-style: none; margin: 0; padding: 0 0 0 15px; }
+.archive-item {
+  --tone: var(--cyan);
+  position: relative;
+  display: flex;
+  align-items: center;      /* O9：改用 center —— 徽章有边框块，baseline 对齐会错位 */
+  gap: 10px;
+  padding: 7px 10px;
+  border-bottom: 1px dashed rgba(0,240,255,.12);
+  transition: background var(--t-slow);
+}
+/* O9：条目级色标 —— 左侧 3px 色条 + 淡色底。
+   色相同样由标签推出，于是「紫色的一行 = 代码类」在扫读时一眼成立，
+   不必逐个去读徽章文字。 */
+.archive-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  background: var(--tone);
+  opacity: .75;
+  border-radius: 2px;
+}
+.archive-item[data-tone="t0"] { --tone: var(--cyan); }
+.archive-item[data-tone="t1"] { --tone: var(--magenta); }
+.archive-item[data-tone="t2"] { --tone: var(--yellow); }
+.archive-item[data-tone="t3"] { --tone: var(--violet); }
+.archive-item[data-tone="t4"] { --tone: var(--green); }
+
+.archive-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.archive-item:hover { background: color-mix(in srgb, var(--tone) 7%, transparent); }
+.archive-flag {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .8px;
+  color: var(--yellow);
+  opacity: .8;
+  border: 1px dashed color-mix(in srgb, var(--yellow) 45%, transparent);
+  padding: 1px 7px 2px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+.archive-link {
+  flex: 1;
+  color: var(--text);
+  text-decoration: none;
+  transition: all var(--t-slow);
+}
+@media (hover: hover) {
+  .archive-link:hover { color: var(--tone); text-shadow: var(--glow-cyan); }
+}
+.archive-day {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+
+/* 窄屏：目录与搜索栏自适应 */
+@media (max-width: 768px) {
+  .code-copy { right: 8px; top: 24px; }
+  .md-body pre.has-copy { padding-top: 40px; }
+  /* O9：条目换行后徽章独占一行，日期仍靠右不挤标题 */
+  .archive-item { flex-wrap: wrap; row-gap: 4px; }
+  .archive-badges { flex-basis: 100%; }
+  .archive-link { flex-basis: calc(100% - 52px); }
+  .archive-day { margin-left: auto; }
+  /* v4.9.3：搜索页背景插画——窄屏换矮裁切（原图 16:9 在手机上会被裁成一条，
+     焦点移回人物），并压低高度，免得整屏只剩一张图。
+     ⚠ 按纪律并入既有断点块，不新开 @media（R202d 守"宽度断点块 ≤16"）。 */
+  .search-hero, .search-hero-inner { min-height: 236px; }
+  .search-hero::before { background-image: url("../assets/search-bg-narrow.jpg"); background-position: center 30%; }
+  .search-hero .empty-state { padding: 30px 16px; }
+}
+
+/* ============================================================
+   O17：赛博朋克装饰层（符号 / 名言 / 花纹光效）
+
+   目标：在不改动任何 DOM 结构、不新增内联样式、不引入 JS 的前提下，
+   用纯 CSS 伪元素 + 既有变量给页面铺一层「赛博朋克氛围」。
+
+   三个硬约束（也是本块的设计前提）：
+     ① 可读性优先 —— 所有装饰都是 pointer-events:none 的伪元素，
+        且配色一律走 color-mix 从变量派生半透明色（不硬编码 rgba）。
+        绝不会盖住正文：装饰要么在背景层（z-index 0 / 伪元素负偏移到容器外），
+        要么透明度压到 0.03–0.2 之间，只做"若有若无"的氛围。
+     ② 主题适配 —— 全部颜色来自 --cyan / --magenta / --violet / --line-* 等变量，
+        亮色档这些变量已整体压暗（见 L1480 亮色表），故无需任何亮色专用规则。
+        这与 .page-head::after 的既有做法一致（那里也论证过"硬编码 rgba 不跟主题变"）。
+     ③ 动效可关 —— 本块内的持续动画只有 2 处（标题流光扫描 / 卡片角标呼吸），
+        已在文件末尾的 prefers-reduced-motion 块里显式关闭。
+        其余装饰都是静态的，天然不触发前庭不适。
+
+   布置总览（分区域）：
+     · 背景层   → （v3.6.0 起氛围层已整体移除；正文装饰见下）
+     · 顶部导航 → logo 扫描光泽（.logo-mark::after）
+     · 页头标题 → 标题后的斜纹图案（.page-head h1::after）+ 端点菱形已有
+     · 卡片     → 四角 L 形边框标记（.post-card::before/::after）+ hover 全息渐变
+     · 关于卡   → 角标花纹（.about-card::after）
+     · 页脚     → 已有 ◢◢◣ + 名言；新增上方全息分隔条（.site-footer::before）
+   ============================================================ */
+
+/* ---------- 全局装饰变量（集中定义，便于一处调参） ---------- */
+:root {
+  /* 装饰用的极低透明度阈值 —— 这三个值是「氛围感 vs 可读性」的平衡点。
+     高于 0.2 会开始干扰正文，低于 0.03 肉眼不可见（等于白写）。
+     v2.6.0：--deco-faint 0.035 → 0.07。原值在纯黑底上几乎不可见，
+     用户反馈短页面「黑漆漆」；调到 0.07 后晕斑在中灰区可感，
+     仍远低于干扰正文的阈值（该层在 .wrap 之下）。 */
+  --deco-soft: 0.10;     /* 边角标记、斜纹 */
+  /* 全息渐变的四色停靠点（青→紫→品红→黄），供多处复用。
+     用 color-mix 派生，避免硬编码 —— 亮色档自动跟着变量变。 */
+  --deco-holo: linear-gradient(90deg,
+    color-mix(in srgb, var(--cyan) 70%, transparent) 0%,
+    color-mix(in srgb, var(--violet) 70%, transparent) 33%,
+    color-mix(in srgb, var(--magenta) 70%, transparent) 66%,
+    color-mix(in srgb, var(--yellow) 70%, transparent) 100%);
+  /* 装饰专用时长：logo 高光横贯扫描需要比 --t-slow(0.3s) 更长的节奏。
+     归入变量层而非裸写，遵守 C13 的「全站时长收敛」约定（R66m 守着）。
+     减少动效块里扫光元素直接 display:none，故无需在此档归零。 */
+  --t-sweep: 0.55s;
+}
+
+/* v3.6.0：此段原在解释 body::before / body::after 两层氛围的作法，
+   两层已随氛围层整体移除，说明一并撤下（历史见 js/version.js 的 LOG）。
+   ⚠ v5.6.3：这里原还留着一个**孤儿 `}`** —— 删那两层时把规则体删了、右花括号漏了下来。
+   浏览器会静默忽略它，所以一直没人发现（全站的括号配平校验也因此长期是 -2）。
+   本次清理一并删除，现在整份样式的括号是配平的。 */
+
+/* ---------- 背景层：顶部环境光 + 角落辉光（v2.6.0 新增） ----------
+   起因：用户反馈短内容页（搜索/标签/关于）「黑漆漆的，什么都没有」。
+   排查：背景层其实都在，但三层各自的问题叠加 ——
+     · body 的 3 处 radial 晕斑都定位在角落/底部（at 50% -10% / 110% / 105%），
+       视口**上半部中间**是空白区；
+     · .grid-bg 的透视把网格压向视口下半部；
+     · .scanlines 是压暗层（multiply）不增亮。
+   结果：内容少的页面里，视口上半部几乎纯黑。
+   做法：body::after 画一层「顶部光幕 + 双角辉光」，纯 radial-gradient、无 DOM 改动：
+     ① 顶部中央一道极宽的冷色光幕（模拟顶灯 / 屏幕余光），
+     ② 左上与右上各一团色辉（青 / 紫），
+   整体用 screen 混合只做加法（不压暗已有内容），透明度控制在 --deco-faint
+   一档内，保证不干扰正文可读性。
+   ⚠ 与 .grid-bg / .scanlines 的层序：body::after 在 DOM 上晚于 .grid-bg，
+   同 z-index:0 时后绘制 → 盖在网格之上、内容之下，光幕能把网格线微微照亮。 */
+
+
+/* ---------- 背景层：星点符号 ----------
+   在网格之上铺一层极小、极淡的符号阵列，模拟电路板 / 数据流噪点。
+   用两个 repeating-linear-gradient 把线裁成 5px 短线，两条 mask 求交集后
+   交叉处留下 **5×5px 方点**（电路节点感）。
+   ⚠ 注：这里用的是 mask-composite: intersect（交集），产出的是「方点」而非「+」十字 ——
+     要得到「+」需改用 add（并集）。方点观感更干净、与 42px 网格线不冲突，
+     是当前的有意选择，勿误当 bug"修正"。
+   间距放到 168px（远大于网格 42px），避免与网格线打架变成摩尔纹。 */
+
+
+/* ---------- 顶栏：logo 扫描光泽 ----------
+   ⚠ 不能用 .logo-mark 的伪元素 —— 它的 ::before / ::after 已被「故障抖动」
+     （chromatic aberration）占满：content: attr(data-text) + inset:0 +
+      clip-path + glitch-a/glitch-b 动画。若在此覆盖，会直接废掉那个效果。
+   故改挂在 .logo（<a> 容器）上，它的两个伪元素此前均未使用。
+   做法：一条斜切高光条从左侧扫过，常态停在屏外（left: -120% + opacity: 0），
+   hover 时单次扫过。用 transition 而非 animation：
+   一次性过渡天然不无限循环，对动效敏感人群更友好。 */
+.logo {
+  position: relative;
+  overflow: hidden;
+}
+.logo::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 50%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(100deg,
+    transparent 0%,
+    color-mix(in srgb, var(--cyan) 45%, transparent) 45%,
+    color-mix(in srgb, var(--text-bright) 60%, transparent) 50%,
+    color-mix(in srgb, var(--cyan) 45%, transparent) 55%,
+    transparent 100%);
+  transform: skewX(-18deg);
+  opacity: 0;
+}
+@media (hover: hover) {
+  .logo:hover::after {
+    opacity: 1;
+    left: 130%;
+    /* 扫描持续时间：0.55s 比 --t-slow(0.3s) 长 —— 这是一次横贯 logo 的
+       高光扫过，太快会像闪烁、太慢显得拖沓。单独定义 --t-sweep，
+       既满足「不裸写时长」的收敛约定（R66m），又保留了装饰所需的节奏。
+       减少动效块里该元素直接 display:none，故这个值不会造成不适。 */
+    transition: left var(--t-sweep) var(--t-bezier), opacity var(--t-sweep) linear;
+  }
+}
+
+/* ---------- 页头标题：斜纹图案 ----------
+   .page-head 是纯文本块（h1 是 inline-flex）。在 h1 右侧补一段
+   45° 斜纹（repeating-linear-gradient），像工程图纸的剖面线；
+   宽度用 flex 撑满剩余空间，端点渐隐。
+   放在 h1 的 ::after（h1 已 display:inline-flex，伪元素可作为 flex 子项）。 */
+.page-head h1::after {
+  content: "";
+  flex: 1 1 auto;
+  min-width: 24px;
+  height: 10px;
+  margin-left: 6px;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--cyan) var(--deco-pct, 30%), transparent) 0 2px,
+    transparent 2px 6px
+  );
+  mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 70%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 70%, transparent 100%);
+  opacity: 0.6;
+  align-self: center;
+}
+/* 斜纹密度用局部变量：移动端缩短长度时同步提高密度，避免只剩 3 条线显得秃 */
+.page-head { --deco-pct: 30%; }
+
+/* ---------- 卡片：四角 L 形边框标记 ----------
+   .post-card 已有 clip-path 斜切角（左上/右下被切掉 14px）。
+   这里在【右上 / 左下】两个未切角的位置补 L 形亮线（::before / ::after），
+   四个角由此形成"斜切 + 直角标记"的对称语言 —— 既强化赛博框线感，
+   又不与 clip-path 冲突（故意避开被切的两个角）。
+   注意 .post-card 已有 ::before/::after 吗？—— 没有，故可安全占用。 */
+.post-card::before,
+.post-card::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
+  /* 只在 hover 及聚焦时提亮，常态保持克制 */
+  opacity: var(--deco-soft);
+  transition: opacity var(--t-normal), border-color var(--t-normal);
+}
+.post-card::before {
+  top: 8px;
+  left: 8px;
+  border-top: 1px solid var(--cyan);
+  border-left: 1px solid var(--cyan);
+}
+.post-card::after {
+  right: 8px;
+  bottom: 8px;
+  border-right: 1px solid var(--magenta);
+  border-bottom: 1px solid var(--magenta);
+}
+/* E1：hover 提亮部分包 hover 媒体；:focus-within 是键盘焦点态，必须留在媒体外 */
+@media (hover: hover) {
+  .post-card:hover::before,
+  .post-card:hover::after {
+    opacity: 0.65;
+    box-shadow: 0 0 6px color-mix(in srgb, var(--cyan) 40%, transparent);
+  }
+}
+.post-card:focus-within::before,
+.post-card:focus-within::after {
+  opacity: 0.65;
+  box-shadow: 0 0 6px color-mix(in srgb, var(--cyan) 40%, transparent);
+}
+
+/* ---------- 卡片 hover：全息渐变辉光 ----------
+   既有 B1 hover 规则给的是青色 24px 光 + 黑色大投影（见 L392）。
+   这里在保留那两层观感的前提下，追加 violet / magenta 两圈全息辉光 ——
+   三层叠加形成"青→紫→品红"的色散外晕，是赛博朋克霓虹的典型语汇。
+
+   ⚠ 原规则里的 `rgba(0, 240, 255, 0.13)` 是硬编码 —— 亮色档不跟着变。
+   本块作为"装饰层"必须守变量化红线，故这里改用 color-mix 从 --cyan 派生
+   等价色（0.13 ≈ 13%），既与原观感一致，又能在亮色档自动收敛。 */
+@media (hover: hover) {
+  .post-card:hover {
+    box-shadow:
+      0 0 24px color-mix(in srgb, var(--cyan) 13%, transparent),
+      0 14px 40px var(--shadow-strong),
+      0 0 34px color-mix(in srgb, var(--violet) 22%, transparent),
+      0 0 50px color-mix(in srgb, var(--magenta) 12%, transparent);
+  }
+}
+
+/* ---------- 关于卡：角标花纹 ----------
+   .about-card 无 clip-path（与 .post-card 不同），故可四角自由发挥。
+   用 ::after 在右上角画一个 「◢◢」细纹角标（纯 border 拼接），
+   呼应 .about-card h3::before 的 ◢。 */
+.about-card {
+  position: relative;
+}
+.about-card::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+  opacity: var(--deco-soft);
+  background:
+    linear-gradient(135deg, transparent 46%, var(--magenta) 47% 53%, transparent 54%),
+    linear-gradient(135deg, transparent 70%, var(--cyan) 71% 75%, transparent 76%);
+  /* 用 mask 把角标裁成右上角的楔形 */
+  mask-image: linear-gradient(225deg, #000 0 45%, transparent 60%);
+  -webkit-mask-image: linear-gradient(225deg, #000 0 45%, transparent 60%);
+}
+
+/* ---------- 文章详情：左缘信号标尺 ----------
+   .post-full 是用户停留最久的阅读面，装饰必须最克制（可读性红线）。
+   做法：仅在**左内边距空白区**（padding 40/44px 之内）画一条极淡的竖向
+   刻度带（repeating-linear-gradient，每 8px 一格、每 5 格一长格），
+   定位在 padding 左侧边缘、不侵入正文 —— 文字左边界距它有 44px 缓冲。
+   常态透明度 0.10，绝不与文字抢注意力；它提供的是"这是台终端"的心理暗示。
+   用 .post-full::before；::after 留给未来（当前未占用）。 */
+.post-full {
+  position: relative;
+}
+.post-full::before {
+  content: "";
+  position: absolute;
+  top: 40px;
+  bottom: 36px;
+  left: 14px;
+  width: 6px;
+  pointer-events: none;
+  opacity: var(--deco-soft);
+  background:
+    /* 长刻度：每 40px 一格，长 5px */
+    repeating-linear-gradient(
+      to bottom,
+      var(--cyan) 0 1px, transparent 1px 8px
+    );
+  mask-image:
+    repeating-linear-gradient(to bottom, #000 0 5px, transparent 5px 8px),
+    linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  mask-composite: intersect;
+  -webkit-mask-image:
+    repeating-linear-gradient(to bottom, #000 0 5px, transparent 5px 8px),
+    linear-gradient(to bottom, transparent 0%, #000 12%, #000 88%, transparent 100%);
+  -webkit-mask-composite: source-in;
+}
+/* 移动端：.post-full 左内边距收到 20px，标尺会让它显挤 → 直接不画，
+   把空间全让给正文（可读性优先）。 */
+@media (max-width: 768px) {
+  .post-full::before { display: none; }
+}
+
+/* ---------- 右侧边栏：竖排名言 ----------
+   .wrap 最大宽 1120px，宽屏下两侧本就有余白。
+   在右侧空白里竖排一句赛博朋克格言，用 writing-mode: vertical-rl 实现，
+   fixed 定位跟随视口 —— 它永远待在正文（.wrap 内容区）之外，不遮任何字。
+   文字用 content（纯 CSS，无 DOM、无内联、CSP 友好）；配 --violet 微光。
+
+   为什么用格言而非装饰符号：用户明确要求"名言文字"，且竖排在右侧留白中
+   恰好呼应"霓虹灯牌"的观感；若塞进内容区则会干扰阅读，故限定在余白。
+   屏幕不够宽（< 1400px）时右侧余白消失 → 直接隐藏，绝不让它压到正文。 */
+.wrap::after {
+  content: "THE FUTURE IS ALREADY HERE — IT'S JUST NOT EVENLY DISTRIBUTED";
+  position: fixed;
+  top: 50%;
+  right: max(16px, calc((100vw - 1120px) / 2 - 40px));
+  transform: translateY(-50%);
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-family: var(--mono);
+  /* 字号随视口高度自适应：这行格言竖排总高 = 字符数 × (font-size + letter-spacing)。
+     61 个字符、固定 10.5px + 4px 间距时总高 885px，而原 max-height: 62vh 在
+     800~900px 高的常见窗口下只给 496~558px → 拦腰裁掉 37%~44% 的文字
+     （句子断在半句上，观感像"被切了一截"）。
+     改用 clamp 让字号跟着 vh 缩放，高度不足时整句等比缩小而非被裁。
+     斜率 1.05vh 在 1000px 高时触顶 10.5px（保设计意图）；下限取 7px：
+     此时总高 589px，640px 以上高度的视口都能完整容纳整句。
+     低于 640px 的极端矮窗（已属罕见）由下面的 max-height 媒体查询直接隐藏。
+     letter-spacing 同步改用 em，保证缩放时字距比例不变（否则小字号下会黏连）。
+
+     先写 px 再写 clamp：clamp() 在 Safari 13.1 以下 / 旧 Chromium 上不被识别，
+     整条声明会被丢弃 → 字号回落到继承值（16px），总高暴涨撑爆视口。
+     前一条 px 声明让这些浏览器至少拿到一个安全字号（虽然矮窗仍可能溢出，
+     但已被下面的 max-height:640px 查询兜底）。这是渐进增强的标准写法。 */
+  font-size: 9px;
+  font-size: clamp(7px, 1.05vh, 10.5px);
+  letter-spacing: 0.38em;
+  line-height: 1;
+  pointer-events: none;
+  z-index: 0;
+  color: var(--violet);
+  opacity: 0.16;
+  text-shadow: 0 0 8px color-mix(in srgb, var(--violet) 45%, transparent);
+  white-space: nowrap;
+  user-select: none;
+}
+/* 窄于 1400px：正文两侧余白不足以容纳竖排文字 → 隐藏，保可读性。
+   （1120 正文 + 两侧各 140 才够放这行字） */
+/* ⚠ 这一档**有意保留 1400**，不并入断点体系：它是右侧竖排名言的**版面空间阈值**
+   （.wrap 宽 1120，需两侧各留约 140px 才放得下竖排文字），不是"设备档"。
+   把它并到 1280 会让 1280~1400 区间的竖排名言挤在 80px 的空白里。 */
+@media (max-width: 1400px) {
+  .wrap::after { display: none; }
+  /* v4.0 B1：氛围的霓虹招牌（.atmo-layer[data-layer="signs"]）同样在窄于 1400 时
+     隐藏 —— 它占的正是 .wrap::after 那批"边缘留白位"，两种边缘装饰的存亡条件
+     天然一致。并入本块而非新开断点：宽度断点块总数有断言上限（R202d），
+     防"每修一处就加一档"。
+     带 !important 的原因：层显示的开关规则（html[data-atmo~="signs"] …）特异性
+     更高（0,3,0 vs 0,2,0），不加则本规则永远输。 */
+  .atmo-layer[data-layer="signs"] { display: none !important; }
+}
+/* 矮于 640px：字体已到 7px 下限，竖排总高约 589px，扣除上下留白（各 5%）后
+   需要 620px 以上的净高度才放得下 → 640px 视口起就不再安全。
+   与其让句子被裁断或顶出视口，不如整体隐藏（宽屏 + 极矮窗属罕见组合）。
+   这是 P0 修复后的第二道防线：字号自适应保"常见高度"，本查询兜"极端高度"。
+   断点取 640 而非 620 是为了留 20px 余量，避开字体渲染的亚像素误差。 */
+@media (max-height: 640px) {
+  .wrap::after { display: none; }
+}
+
+/* ---------- 空状态：终端光标框 ----------
+   .empty-glyph 已有 ▚ + glow + pulse。这里在它两侧补一对细括号，
+   组成「[ ▚ ]」的终端光标框 —— 纯符号装饰，不新增文字、不改 DOM。
+   用 .empty-state::before/::after（此前未占用）。
+   定位基准：.empty-state 已 text-align:center，glyph 是 display:block 的 44px 方块，
+   故用 left:50% + margin-left 左右各偏 ±(glyph 半宽 + 间距) 让括号刚好夹住它。
+   注：这里给 .empty-state 补 position:relative —— 它此前没有定位（无冲突）。 */
+.empty-state {
+  position: relative;
+}
+.empty-state::before,
+.empty-state::after {
+  content: "";
+  position: absolute;
+  top: 92px;
+  width: 16px;
+  height: 28px;
+  pointer-events: none;
+  opacity: var(--deco-soft);
+}
+.empty-state::before {
+  left: 50%;
+  margin-left: -54px;
+  border-left: 1px solid var(--cyan);
+  border-top: 1px solid var(--cyan);
+  border-bottom: 1px solid var(--cyan);
+}
+.empty-state::after {
+  left: 50%;
+  margin-left: 38px;
+  border-right: 1px solid var(--cyan);
+  border-top: 1px solid var(--cyan);
+  border-bottom: 1px solid var(--cyan);
+}
+
+/* ---------- Markdown 引用块：装饰引号 ----------
+   .md-body blockquote 已有品红左边线 + 渐变底 + 斜体（既有"名言"样式）。
+   再补一枚装饰性开引号（content: "❝"），强化"引文"语义。
+   用 ::before；::after 保留（当前未占用）。
+   注意：伪元素挂在 blockquote 上而非内部 <p> 上，故只渲染一次，
+   不会因多段落而重复出现。 */
+.md-body blockquote {
+  position: relative;
+}
+.md-body blockquote::before {
+  content: "❝";
+  position: absolute;
+  top: -4px;
+  left: 7px;
+  font-size: 24px;
+  line-height: 1;
+  color: var(--magenta);
+  opacity: 0.32;
+  pointer-events: none;
+  font-style: normal;
+}
+
+/* ---------- 页脚：全息分隔条 ----------
+   .site-footer 已有 border-top: 1px solid var(--line)。
+   在它上方再叠一条短的、居中的全息渐变段（.site-footer::before），
+   像信号塔的发射弧，把「页脚名言」与正文区分开。
+   注意：::before 需 absolute，故 .site-footer 已是 position:relative。 */
+.site-footer::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(320px, 60%);
+  height: 2px;
+  pointer-events: none;
+  background: var(--deco-holo);
+  opacity: 0.5;
+  mask-image: linear-gradient(90deg, transparent 0%, #000 20%, #000 80%, transparent 100%);
+  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 20%, #000 80%, transparent 100%);
+}
+
+/* ---------- 页脚名言：符号夹边 ----------
+   index.html 里最后一行是名言「THE STREET FINDS ITS OWN USES FOR THINGS」，
+   无独立 class（是 footer 的裸 <div>）。故用 :last-child 命中它，
+   在两侧加 ◇ 符号（用 ::before/::after）+ 微光，强化"引文"观感。
+   用 :last-child 而非 :last-of-type —— footer 内多个 div，只有它是最后一个。 */
+.site-footer > div:last-child {
+  position: relative;
+  color: var(--text-dim);
+  letter-spacing: 2.4px;
+}
+.site-footer > div:last-child::before,
+.site-footer > div:last-child::after {
+  content: "◇";
+  color: var(--cyan);
+  opacity: 0.55;
+  margin: 0 10px;
+  text-shadow: var(--glow-cyan);
+}
+/* 亮色档 --glow-cyan 已收敛为 2px 描边，此处不需要额外规则（同上文论证） */
+
+/* ---------- 响应式：小屏收敛装饰 ----------
+   720px 以下空间紧张，装饰必须让位给内容：
+     · 斜纹段最短 24px 已由 min-width 保证，不再额外处理
+     · 背景晕斑 blur 90px 在小屏设备上开销较大 → 降透明度
+     · 卡片角标在触屏无 hover，保持常态 faint 即可 */
+@media (max-width: 768px) {
+  .post-card::before,
+  .post-card::after { width: 12px; height: 12px; }
+}
+
+/* ---------- 触屏设备：hover 态退化为常显淡色 ----------
+   hover 在触屏上不可靠（点一下就"卡"在 hover 态）。
+   用 hover:none 媒体查询把卡片的角标 hover 增强关掉，
+   避免触屏用户看到一半亮一半不亮的角标。 */
+@media (hover: none) {
+  .post-card:hover::before,
+  .post-card:hover::after { opacity: var(--deco-soft); box-shadow: none; }
+  .logo:hover::after { opacity: 0; left: -120%; }
+}
+
+/* ============================================================
+   C6：亮色主题 ／ O11：暗色优先
+   项目已全面 CSS 变量化，故切换只需覆盖变量 + 修少数硬编码处。
+
+   ★ 默认身份是【暗色】，且不依赖系统设置。
+   站点本就是暗色设计（--bg-0 #04060d），故：
+
+     ① 暗色 = 无属性时的兜底。html 上没有任何 data-theme 时，
+        :root 的默认变量就是暗色 —— 不查系统、不查存储、零成本。
+     ② 亮色 = 显式选择。只有 html[data-theme="light"] 才套亮色变量表。
+
+   ⚠ 这里【刻意不再使用】@media (prefers-color-scheme: light)。
+   原先「跟随系统」是零闪烁的，但那正是问题所在：
+   系统偏好会绕过用户意愿，在每次冷启动时把用户锁定的配色改掉。
+   现在系统偏好完全不参与，配色只由「用户显式选择」决定。
+
+   为什么仍然零闪烁（FOUC 三关都堵住了）：
+     · 首访／从未选择过 → 无属性 → 兜底即暗色，HTML 解析阶段就是暗的。
+     · 曾手动选过     → 由 index.html 中【同源同步】的 js/theme-boot.js
+                        在解析 <body> 之前打上 data-theme，CSS 未生效前就已定色。
+       （不能靠内联 <script>：CSP 的 script-src 不含 'unsafe-inline'。
+         故用独立的同源同步脚本 —— 它无需等 defer 脚本，执行时机足够早。）
+   ============================================================ */
+
+/* --- 亮色变量：手动路径 --- */
+html[data-theme="light"] {
+  color-scheme: light;
+  --bg-0: #eef2f8;
+  --bg-1: #e4eaf4;
+  --bg-2: #d8e1ee;
+  --bg-3: #c6d3e6;
+  --panel: rgba(255, 255, 255, 0.94);
+  /* 3.0 B1：浅底压暗改由**派生参数**承担（不再是逐个硬编码霓虹）。
+     --hue-l 取 24% 而非原值的 28% —— 原 #007a91 的色相是 189，
+     统一到默认色相 184 后同样明度会偏亮，收 4 个点才与原观感、原对比度持平
+     （O9 的 WCAG AA 断言会真算这个对比度）。
+     ⚠ v3.4.0：辅助紫的 --vio-l 由 40% 收到 **28%**。原因是色相放开为自由滑杆后
+       做了全色相扫描：violet 是按 +96° 偏移派生的，当主色相落在 330°~45° 时
+       它正好漂进黄绿区（感知亮度最高），40% 明度下对比度只有 2.97 —— 远低于 AA。
+       28% 时最差 5.31 ✓（余量 0.8）。别凭手感把这个值调回去。 */
+  --hue-s: 100%; --hue-l: 24%;
+  --vio-s: 73%;  --vio-l: 28%;
+  --line: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.28);
+  --line-strong: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.6);
+  /* 语义色在浅底上换深一档的同色系（不随 hue 旋转，只随明度档变） */
+  --magenta: #c4104e;
+  --yellow: #7a6d00;
+  --green: #00784f;
+  --red: #cf1b3c;
+  --text: #2c3a4e;
+  /* v3.5.1：原 #64778f 对 #eef2f8 只有 4.08:1 → 提到 #5d6e84（4.63:1）。 */
+  --text-dim: #5d6e84;
+  --text-bright: #0c1520;
+  /* B1 正文排版三色的亮色档：与霓虹主色同一方法论 —— 浅底上压暗同色系。
+     实测对 --bg-0 #eef2f8 的对比度 ≈ 4.9~6.2:1（旧硬编码值仅 1.8~2.6:1）。 */
+  --md-h4: #0e6f80;
+  --md-em: #a34466;
+  --md-quote: #8f4664;
+  /* 发光在浅底上是糊的，收敛为极淡的描边感 */
+  --glow-cyan: 0 0 2px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35);
+  --glow-magenta: 0 0 2px rgba(196, 16, 78, 0.35);
+  --glow-yellow: 0 0 2px rgba(122, 109, 0, 0.35);
+  --code-bg: #0d1a24;
+  --code-text: #cfe9f5;
+  --head-glow: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.05);
+  /* 3.0 B2：浅底墨色 —— 高明度低饱和，仍由色相偏移区分模块 */
+  --ink-1: hsl(var(--hue) 42% 93%);
+  --ink-2: hsl(calc(var(--hue) + 40) 42% 93%);
+  --ink-3: hsl(calc(var(--hue) + 80) 40% 94%);
+  --ink-4: hsl(calc(var(--hue) + 140) 38% 94%);
+  --ink-5: hsl(calc(var(--hue) + 200) 36% 94%);
+  --ink-6: hsl(calc(var(--hue) + 260) 38% 94%);
+  --topbar-bg: rgba(255, 255, 255, 0.9);
+  --shadow-strong: rgba(0, 0, 0, 0.08);
+}
+
+/* --- C12：暖色档（warm） ---
+   亮色档是纯白底（--bg-0 #eef2f8），夜间/暗环境里偏刺眼。
+   暖色档把底色推向米黄/杏色，同时把文字压成暖褐，整屏色温降下来。
+
+   与亮色档的关系：**共用同一套结构**（都属"浅底"），只是把中性冷灰换成暖灰。
+   所以这里不是复制整份亮色表再改色，而是显式覆盖差异项 ——
+   结构项（--panel / --line / --code-* / --shadow-strong）沿用亮色档的值。
+   ⚠ 但 CSS 变量不会自动继承"另一个属性的值"，所以仍须把亮色表里
+   非默认的那几项在这里再写一遍，否则会回落到 :root 的暗色值（一片黑）。
+
+   验收口径：三档（dark / light / warm）的切换由 cycleTheme 循环，
+   主题名写在 html[data-theme] 上，是唯一权威。 */
+html[data-theme="warm"] {
+  color-scheme: light;
+  --bg-0: #f6efe4;
+  --bg-1: #efe6d8;
+  --bg-2: #e6dac7;
+  --bg-3: #d9c9b0;
+  --panel: rgba(255, 251, 244, 0.95);
+  /* 3.0 B1：暖档 = 浅底 + 再降饱和 + 保留暖褐色的结构线。
+     即「明度档」决定线的冷暖与整体明暗，「色相档」决定强调件的色相 ——
+     两者各管一段，互不干扰。派生参数由原值反推，故观感与 v2.9.10 一致。 */
+  --hue-s: 80%; --hue-l: 25%;
+  /* v3.4.0：同亮档的理由，辅助紫收到 32%（原 42%）—— 全色相扫描下最差 5.25 ✓ */
+  --vio-s: 46%; --vio-l: 32%;
+  --line: rgba(140, 96, 40, 0.28);
+  --line-strong: rgba(140, 96, 40, 0.6);
+  /* 语义色在暖底上换暖一档的深色系（不随 hue 旋转） */
+  --magenta: #b03050;
+  --yellow: #7d5a00;
+  --green: #4a6b1f;
+  --red: #b8322f;
+  --text: #4a3a2a;
+  /* v3.5.1：原 #7d6a55 是 4.52:1 —— 只在线上 0.02，稍有改动就会掉下去，一并提到 4.61:1。 */
+  --text-dim: #7b6954;
+  --text-bright: #2a1f14;
+  --md-h4: #0d6b74;
+  --md-em: #9c5a3c;
+  --md-quote: #8a5a3a;
+  --glow-cyan: 0 0 2px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35);
+  --glow-magenta: 0 0 2px rgba(176, 48, 80, 0.35);
+  --glow-yellow: 0 0 2px rgba(125, 90, 0, 0.35);
+  --code-bg: #2a2118;
+  --code-text: #f0e2cc;
+  --head-glow: rgba(140, 96, 40, 0.05);
+  /* 3.0 B2：暖档墨色 —— 与浅底同构，只把饱和度再压低一档（暖底上高饱和会发脏） */
+  --ink-1: hsl(var(--hue) 26% 92%);
+  --ink-2: hsl(calc(var(--hue) + 40) 26% 92%);
+  --ink-3: hsl(calc(var(--hue) + 80) 24% 93%);
+  --ink-4: hsl(calc(var(--hue) + 140) 22% 93%);
+  --ink-5: hsl(calc(var(--hue) + 200) 20% 93%);
+  --ink-6: hsl(calc(var(--hue) + 260) 22% 93%);
+  --topbar-bg: rgba(255, 251, 244, 0.92);
+  --shadow-strong: rgba(74, 58, 42, 0.1);
+}
+
+/* --- O11：原先这里的「跟随系统」media 块已移除 ---
+   @media (prefers-color-scheme: light) { html:not([data-theme="dark"]) { ... } }
+   它被删掉的理由不是"精简 CSS"，而是**它本身就是那个 bug**：
+   系统设为亮色时，未手动选过的用户会被静默判成亮色，与"默认暗色"直接冲突。
+   删掉后，未显式选择 = 无属性 = 走 :root 暗色兜底，语义唯一且可预测。
+
+   注意：删掉的是 media 块，不是亮色变量表本身 ——
+   上面 html[data-theme="light"] 那份保留完好，手动切换依旧可用。 */
+
+/* --- 硬编码处的主题适配 ---
+   做法是在原规则里改用变量（见 .md-body pre / .topbar / .grid-bg 的定义处），
+   而不是在这里再堆一层主题选择器去逐条覆盖 —— 变量天然只随当前主题取值。
+
+   ⚠ 关于 :not([data-theme="dark"])：随 O11 一并取消其用途。
+   它原先是配合「跟随系统」media 块使用的（语义为"系统亮色 且 用户没锁暗色"），
+   media 块删除后，这个选择器在本项目中已无任何合法用法。
+   若将来要加回任何主题分支，请【裸用】以外的方式——直接写
+   html[data-theme="light"] 显式命中，不要写否定式选择器。 */
+
+/* 网格线亮度：亮色主题下 --grid-line 已压到 5% 透明度，无需额外规则 */
+
+/* --- O9 标签频段色标的亮色适配 ---
+   结论：不需要任何新增规则，这里只记录原因，防止后人误加一套覆盖。
+   色标全部由 --tone 派生，而上面两份亮色变量表里的 5 个频段色
+   （--cyan #007a91 / --magenta #c4104e / --yellow #7a6d00
+    / --violet #7d1bb0 / --green #00784f）都是压暗后的同色系，
+   在 92% 白底（--bg-0 #eef2f8）上对比度 ≥ 4.5:1，满足正文级可读性。
+   底色是 9% 透明同色、边框是 42% 混合、下划线是实色 —— 三层都跟着变量走。
+
+/* --- 主题切换按钮 --- */
+.theme-toggle {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 3px 9px;
+  transition: all var(--t-slow);
+  user-select: none;
+  /* v3.5.0（外部审计 P2）：此前没有 nowrap，而它作为 flex item 又会被压缩
+     （flex-shrink:1）⇒ 「☾ DARK」在空格处折成**两个行盒**（实测 8x14 + 32x14），
+     按钮 65x38 而同级导航项都是 62px 高的单行 —— 桌面分辨率下同样存在。 */
+  white-space: nowrap;
+}
+.theme-toggle:hover {
+  color: var(--cyan);
+  border-color: var(--line-strong);
+  box-shadow: var(--glow-cyan);
+}
+/* v2.9.4：触发器展开态 —— 与 hover 同形，避免"面板开了但按钮看不出是它开的"。
+   用 [aria-expanded] 而不是加 .is-open 类：状态只有一个来源，
+   不会出现"类加了属性没加"的漂移（无障碍属性与视觉永远同步）。 */
+.theme-toggle[aria-expanded="true"] {
+  color: var(--cyan);
+  border-color: var(--line-strong);
+  box-shadow: var(--glow-cyan);
+}
+
+/* ---------- v2.9.4 主题罗盘：三档直选面板 ----------
+   借法自 Uiverse「旋转罗盘单选组」（三层虚线环 + 梯形切角），只取技法：
+     · 档位从"点一下转到下一档"改成"看见三个、点其中一个" —— 消除盲转
+     · 三层虚线环只在当前档位上转，兼作"这是当前值"的指示物
+     · 每档配自己的霓虹色（青/黄/品红），与站点三主题档一一对应
+   ⚠ 颜色一律走 var(--*)，不写死 —— 三个主题档下都要成立。
+
+   绝对定位而非挤进 nav 行内：nav 是 margin-left:auto 的弹性行，
+   任何占位元素都会把整行推歪（与 #radio-dock 同一套路子）。 */
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  clip-path: var(--clip-corner);
+  box-shadow: 0 10px 34px var(--shadow-strong);
+}
+/* ⚠ 必须显式写：上面 .theme-menu 设了 display:flex，
+   而 [hidden] 的默认样式权重更低 —— 不写这条，hidden 属性会失效，
+   面板变成"永远展开"。 */
+.theme-menu[hidden] { display: none; }
+
+.theme-swap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 122px;
+  /* 左侧留出环的位置：梯形 clip-path 会把左边缘整条切掉一块 */
+  padding: 7px 14px 7px 32px;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  /* 梯形切角：象形机械仪表的刻度片（原组件的形状语言） */
+  clip-path: polygon(16% 0%, 100% 0%, 84% 100%, 0% 100%);
+  cursor: pointer;
+  transition: color var(--t-normal), border-color var(--t-normal), background var(--t-normal);
+}
+/* 每档自带颜色 —— 写在自定义属性上，供选中态与辉光复用一次定义。 */
+.theme-swap[data-theme-val="dark"]  { --swap: var(--cyan); }
+.theme-swap[data-theme-val="light"] { --swap: var(--yellow); }
+.theme-swap[data-theme-val="warm"]  { --swap: var(--magenta); }
+
+/* 罗盘环：三层同心虚线环，选中时按不同周期反向自转 */
+.theme-swap-ring {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 14px; height: 14px;
+  margin-top: -7px;
+  border: 1px dashed currentColor;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+.theme-swap-ring::before,
+.theme-swap-ring::after {
+  content: "";
+  position: absolute;
+  border: 1px dashed currentColor;
+  border-radius: 50%;
+}
+.theme-swap-ring::before { inset: 2px; opacity: 0.75; }
+.theme-swap-ring::after { inset: -3px; opacity: 0.3; }
+
+@media (hover: hover) {
+  .theme-swap:hover { color: var(--text-bright); border-color: var(--line-strong); }
+}
+/* 选中态：换档位色 + 亮环 + 描边辉光。
+   drop-shadow 而非 box-shadow —— 元素带 clip-path，box-shadow 会被一起裁掉。 */
+.theme-swap.is-on {
+  color: var(--swap);
+  border-color: var(--swap);
+  background: rgba(255, 255, 255, 0.04);
+  filter: drop-shadow(0 0 0.25em color-mix(in srgb, var(--swap) 65%, transparent));
+}
+.theme-swap.is-on .theme-swap-ring { opacity: 1; animation: theme-rotor 2.6s linear infinite; }
+.theme-swap.is-on .theme-swap-ring::before { animation: theme-rotor 3.4s linear infinite reverse; }
+.theme-swap.is-on .theme-swap-ring::after { animation: theme-rotor 4.4s linear infinite; }
+@keyframes theme-rotor { to { transform: rotate(360deg); } }
+
+.theme-swap:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+/* ---------- 3.0 B1：罗盘升级为二维（明度 × 色相）----------
+   结构：.theme-menu（纵向两块）> .theme-block（标签 + .theme-row）
+     · 明度块沿用 .theme-swap（三档，梯形刻度片 + 三层虚线环）—— 一行未改
+     · 色相块用 .theme-hue（九档色卡），选中态用双层描边环
+   ⚠ 两块**各自**是独立的 role="radiogroup"：一个 radiogroup 只能承载单选语义，
+     把 12 个选项塞进同一组，读屏会把"明度"和"色相"念成一个九选一。 */
+.theme-block { display: flex; flex-direction: column; gap: 6px; }
+.theme-block-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.6px;
+  color: var(--text-dim);
+}
+.theme-row { display: flex; flex-direction: row; gap: 6px; }
+.theme-row[role="radiogroup"] { flex-wrap: wrap; max-width: 236px; }
+
+/* 色相色卡：每档一个纯色圆点。色值由 data-hue-val 驱动 ——
+   九条单行规则换九种色相，既不写死进 JS，也不依赖内联 style 属性。 */
+.theme-hue {
+  position: relative;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: border-color var(--t-normal), transform var(--t-normal);
+}
+.theme-hue-dot {
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  background: hsl(var(--sw) 85% 55%);
+}
+.theme-hue[data-hue-val="184"] { --sw: 184; }
+.theme-hue[data-hue-val="217"] { --sw: 217; }
+.theme-hue[data-hue-val="250"] { --sw: 250; }
+.theme-hue[data-hue-val="285"] { --sw: 285; }
+.theme-hue[data-hue-val="330"] { --sw: 330; }
+.theme-hue[data-hue-val="350"] { --sw: 350; }
+.theme-hue[data-hue-val="25"]  { --sw: 25; }
+.theme-hue[data-hue-val="38"]  { --sw: 38; }
+.theme-hue[data-hue-val="145"] { --sw: 145; }
+@media (hover: hover) {
+  .theme-hue:hover { border-color: var(--line-strong); transform: scale(1.12); }
+}
+/* 选中环用"面板底 + 色点色"的双层 box-shadow 描边：
+   border 只有 1px，在 22px 的圆点上太细，看不出"选的是它"。 */
+.theme-hue.is-on {
+  border-color: hsl(var(--sw) 85% 55%);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3px hsl(var(--sw) 85% 55%);
+}
+.theme-hue:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+
+/* ---------- v3.4.0：色相自由滑杆（0~359）----------
+   刻意用**原生** input[type=range] + accent-color 上色：
+   自定义拇指要写 -webkit-slider-thumb / -moz-range-thumb 好几套厂商前缀，
+   换来的只是"更花哨"；而原生控件的方向键 / Home / End / 读屏增减是白送的。 */
+.hue-slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  margin-bottom: var(--s2);
+}
+.hue-slider {
+  flex: 1;
+  min-width: 0;
+  accent-color: hsl(var(--hue) 85% 55%);
+  cursor: pointer;
+}
+.hue-slider:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+.hue-readout {
+  min-width: 38px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: right;
+}
+
+/* ============================================================
+   v3.1.0 B2 / v4.1 B2 街区化：首页「塔台」
+   ------------------------------------------------------------
+   骨架：Hero 占一屏（文档流 —— 滚过即结束，不是 sticky）→ 街区 12 列网格。
+   v4.1 把"网格盒子"改造成"街区"（bento → district）：
+     · Hero 主视觉 = 霓虹字标（SVG 描边点亮 —— 借 taozhiyy 的一笔写成技法）
+     · 街块（.block）= 建筑立面：灯牌招牌 + 挂架节点 + 雨棚条纹
+     · 街道主干线（.district-line）沿内容左缘，带流动信号光点
+     · 入场从"错峰淡入"改为"沿街点亮"（滚动驱动，降级 = 错峰）
+   布局骨架（12 列 + 紧凑）不变 —— "一屏看全站状态"是这个首页的优点，不砸。
+   双层语言沿用：街块容器走人味层圆角，招牌编号/读数走系统层。
+   ============================================================ */
+
+/* ---------- 霓虹字标（Hero 主视觉，v4.1）----------
+   描边动画全在 CSS：pathLength="100" 把每条路径归一化到 100，
+   stroke-dasharray/offset 直接用 100 —— 无需 JS 测 getTotalLength。
+   错峰用行内 --i（0.24s/格），单字时长 0.6s —— 节奏参数借自 taozhiyy
+   （Apple hello 式："一笔写成"的重叠感）。 */
+.wordmark {
+  display: block;
+  width: min(720px, 100%);
+  height: auto;
+  overflow: visible;   /* 发光不被 SVG 边界裁掉 */
+}
+.wordmark-glyph {
+  fill: none;
+  stroke: hsl(var(--hue) var(--hue-s) 74%);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: wordmark-draw 0.6s var(--t-bezier) forwards;
+  animation-delay: calc(var(--i) * 0.24s);
+}
+@keyframes wordmark-draw { to { stroke-dashoffset: 0; } }
+/* 主层：霓虹发光（两层 drop-shadow 堆叠 = 灯管芯 + 光晕） */
+.wordmark-main { filter: drop-shadow(0 0 5px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.8)) drop-shadow(0 0 16px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35)); }
+/* 单字母强调（R）：从 v3.1 的文字斜体升级为"故障的那一个字母"——
+   品红描边，与 echo 层的品红残影呼应；全站恰一处。 */
+.wordmark-main .hl { stroke: var(--magenta); }
+/* echo 层：偏移的品红描边 = RGB 分裂残影（第二份同路径，纯装饰）。
+   偏移用 SVG 用户单位（viewBox 宽 6000 → 显示 ~720px，15 单位 ≈ 1.8 显示像素）。 */
+.wordmark-echo { opacity: 0.45; transform: translate(15px, 8px); }
+.wordmark-echo .wordmark-glyph { stroke: var(--magenta); stroke-width: 1.6; }
+.hero-title { margin: 0 0 var(--s4); }
+
+/* ---------- 开场序列（Boot，v4.1）----------
+   首访首页的终端开机自检。theme-boot 在首绘前打 .boot-first（防"先闪内容
+   再盖开机屏"）；boot.js 播放并在结束时淡出移除。aria-hidden：纯仪式、
+   不承载信息 —— 读屏用户直接进内容（信息等价原则）。reduce 用户看不到它。
+   ⚠ 兜底：即使 boot.js 未执行/异常，boot-failsafe 动画也会在 ~3.2s 后
+     自动把开机屏淡出 —— 绝不允许它卡住页面（"没 JS 就白屏"是白屏事故的亲戚）。 */
+.boot-screen {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  padding: clamp(28px, 9vh, 96px) clamp(20px, 7vw, 110px);
+  background: var(--bg-0);
+  font-family: var(--mono);
+  transition: opacity var(--t-slow) ease, visibility var(--t-slow);
+}
+.boot-first .boot-screen {
+  display: block;
+  animation: boot-failsafe 0.5s ease 3.2s forwards;
+}
+.boot-screen.is-done { opacity: 0; visibility: hidden; pointer-events: none; }
+@keyframes boot-failsafe { to { opacity: 0; visibility: hidden; } }
+.boot-head {
+  margin-bottom: var(--s5);
+  font-size: var(--fs-xs);
+  letter-spacing: 2px;
+  color: var(--text-dim);
+}
+.boot-line {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: 2.1;
+  color: var(--text);
+  opacity: 0;
+  transition: opacity var(--t-fast) linear;
+}
+.boot-line.is-on { opacity: 1; }
+.boot-line b { font-weight: 400; color: var(--cyan); }
+.boot-line i { font-style: normal; color: var(--text-dim); }
+.boot-line.is-last { color: var(--text-bright); text-shadow: 0 0 10px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5); }
+.boot-bar {
+  margin-top: var(--s6);
+  max-width: 420px;
+  height: 3px;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.boot-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: hsl(var(--hue) var(--hue-s) var(--hue-l));
+  box-shadow: 0 0 12px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.8);
+  transition: width var(--t-normal) linear;
+}
+.boot-skip {
+  position: absolute;
+  right: clamp(20px, 5vw, 48px);
+  bottom: clamp(18px, 4vh, 40px);
+  font-size: var(--fs-2xs);
+  letter-spacing: 1.5px;
+  color: var(--text-dim);
+}
+.hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: min(calc(100vh - var(--topbar-h)), var(--banner-h-home));
+  margin-bottom: var(--s7);
+  overflow: hidden;
+}
+/* Banner 底色：只取主色相的一层极淡光晕 —— 不放背景图。
+   理由有二：图片要体积与预加载；而色相派生的光晕**会跟着用户选的色相变**。 */
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 55% at 25% 0%,
+      hsl(var(--hue) 45% 30% / 0.5), transparent 68%),
+    radial-gradient(ellipse 60% 50% at 90% 100%,
+      color-mix(in srgb, var(--violet) 22%, transparent), transparent 70%);
+  -webkit-mask-image: linear-gradient(180deg, #000 50%, transparent 100%);
+  mask-image: linear-gradient(180deg, #000 50%, transparent 100%);
+}
+.hero-inner {
+  position: relative;
+  width: 100%;
+  max-width: var(--w-wide);
+  margin: 0 auto;
+  padding: 0 20px;
+}
+.hero .page-head { margin-bottom: var(--s5); }
+.hero-sub {
+  max-width: 620px;
+  font-size: 17px;
+  line-height: 1.9;
+  color: var(--text);
+}
+/* 单字母强调（借 taozhiyy 的 FEELFRE**E**TOKEEP 技法）：
+   整屏只用一处 —— 多了就从"呼吸点"变成"花"。 */
+.hero .hl { font-style: italic; color: var(--cyan); }
+.hero-scroll {
+  position: absolute;
+  left: 50%;
+  bottom: var(--s6);
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.hero-scroll i {
+  display: inline-block;
+  margin-left: 4px;
+  font-style: normal;
+  color: var(--cyan);
+  animation: hero-bob 1.8s ease-in-out infinite;
+}
+@keyframes hero-bob { 50% { transform: translateY(4px); } }
+
+/* 滚到第二屏后引导淡出：原生滚动驱动动画。
+   不支持的浏览器落在 @supports 之外 —— 引导常显，是无害降级。 */
+@supports (animation-timeline: scroll()) {
+  .hero-scroll {
+    animation: hero-scroll-out linear both;
+    animation-timeline: scroll(root);
+    animation-range: 0 60vh;
+  }
+}
+@keyframes hero-scroll-out { to { opacity: 0; } }
+
+/* ---------- 街区（.district）：塔台的主街 ---------- */
+.district {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: var(--s5);
+  align-items: start;
+}
+/* 街道主干线：沿内容左缘的发光数据线（各街块的"接电"母线），
+   带一个缓慢下移的信号光点 —— 光污染的"基础设施"部分。窄屏由 768 断点隐藏。
+   v4.1.1：从 2px/32% 加强到 3px/60% —— 首版在实机上"看不见等于不存在"。 */
+.district-line {
+  position: absolute;
+  left: -22px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.6) 5%, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35) 95%, transparent);
+}
+.district-line::before {
+  content: "";
+  position: absolute;
+  left: -5px;
+  width: 13px;
+  height: 64px;
+  border-radius: 7px;
+  background: linear-gradient(180deg, transparent, hsl(var(--hue) var(--hue-s) 80% / 0.95), transparent);
+  box-shadow: 0 0 16px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.8);
+  animation: line-pulse 6.5s linear infinite;
+}
+@keyframes line-pulse {
+  0% { top: -6%; opacity: 0; }
+  8% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 104%; opacity: 0; }
+}
+
+/* ---------- 街块（.block）= 建筑立面 ---------- */
+.block {
+  position: relative;
+  grid-column: span 12;
+  padding: var(--s5);
+  border: 1px solid var(--line);
+  border-radius: var(--r-soft);     /* 人味层：与系统层切角同值 14px */
+  background: var(--ink-1);
+  overflow: hidden;
+}
+/* 雨棚条纹：每块顶沿的斑马纹（"沿街店面"的统一语言）。
+   v4.1.1：3px/60% → 5px/85%（首版实机不可见）。 */
+.block::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 5px;
+  background: repeating-linear-gradient(90deg, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.7) 0 16px, transparent 16px 32px);
+  opacity: 0.85;
+  pointer-events: none;
+}
+/* 跨度：主轴（精选/信号流）+ 街角（状态）+ 广场（频段/节奏/操作员） */
+.block-featured { grid-column: span 12; }
+.block-stream   { grid-column: span 8; }
+.block-stat     { grid-column: span 4; }
+.block-freq, .block-rhythm, .block-id { grid-column: span 4; }
+/* 一街块一墨色（沿 v3.1 的模块墨色分配；只染底与边 —— 文字与读数可读性不变）。
+   ⚠ 墨色的色相由 :root 的 --hue 偏移派生，故换色相时它们一起平移。 */
+.block[data-block="01"] { background: var(--ink-1); }
+.block[data-block="02"] { background: var(--ink-2); }
+.block[data-block="03"] { background: var(--ink-3); }
+.block[data-block="04"] { background: var(--ink-4); }
+.block[data-block="05"] { background: var(--ink-5); }
+.block[data-block="06"] { background: var(--ink-6); }
+
+/* ---------- 灯牌招牌（.block-sign）----------
+   v4.1.1 重做：首版只是"左缘一条 2px 细线 + 小号字"，实机观感约等于不存在。
+   现在是一块**发光横匾**：左缘粗光杆 + 右向渐隐的光底 + 灯箱编号 + 发光名称 ——
+   一眼能认出"这是店招"。挂架节点（.block-node）骑在光杆上。 */
+.block-sign {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+  padding: var(--s2) var(--s4) var(--s2) 14px;
+  border-left: 4px solid hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.9);
+  border-radius: 2px;
+  background: linear-gradient(90deg, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.14), transparent 72%);
+  box-shadow:
+    -7px 0 18px -6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.7),
+    inset 0 0 22px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.06);
+}
+.block-node {
+  position: absolute;
+  left: -8.5px;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  margin-top: -6.5px;
+  border: 3px solid hsl(var(--hue) var(--hue-s) 72% / 0.95);
+  border-radius: 50%;
+  background: var(--bg-0);
+  box-shadow: 0 0 12px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.8);
+}
+.block-no {
+  padding: 3px 10px;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  letter-spacing: 2px;
+  color: hsl(var(--hue) var(--hue-s) 78%);
+  border: 1px solid hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.8);
+  clip-path: var(--clip-corner-sm);
+  text-shadow: 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.8);
+  box-shadow: inset 0 0 12px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.22);
+}
+.block-name {
+  font-family: var(--mono);
+  font-size: var(--fs-base);
+  letter-spacing: 1.5px;
+  color: var(--text-bright);
+  text-shadow: 0 0 10px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.45);
+}
+.block-name i { font-style: normal; color: var(--text-dim); }
+.block-body { min-width: 0; }
+.block-note {
+  margin-top: var(--s4);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+/* 精选模块内的卡片贴着墨色底，不再叠第二层边框（避免"框套框"） */
+.block-featured .post-card { border-color: transparent; }
+
+/* ---------- MODULE 03 站台状态 ---------- */
+.stat-list { list-style: none; display: flex; flex-direction: column; gap: var(--s3); }
+.stat-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+  font-family: var(--mono);
+}
+.stat-k { min-width: 44px; font-size: 11px; letter-spacing: 1.2px; color: var(--text-dim); }
+.stat-v {
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-bright);
+  text-shadow: var(--glow-cyan);
+}
+.stat-list i { font-style: normal; font-size: 11px; color: var(--text-dim); }
+.hue-dot {
+  width: 9px;
+  height: 9px;
+  margin-left: auto;
+  border-radius: 50%;
+  background: hsl(var(--hue) 85% 55%);
+  box-shadow: 0 0 8px hsl(var(--hue) 85% 55% / 0.7);
+}
+
+/* ---------- MODULE 04 标签频段 ---------- */
+.freq-list { display: flex; flex-wrap: wrap; gap: var(--s2); }
+.freq-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--tone) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tone) 45%, transparent);
+}
+.freq-chip b { font-size: 10px; color: var(--text-dim); }
+
+/* ---------- MODULE 05 归档节奏 ---------- */
+.rhythm-list { list-style: none; display: flex; flex-direction: column; gap: var(--s2); }
+.rhythm-list li {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.rhythm-k { min-width: 52px; }
+.rhythm-bar {
+  min-width: 3px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--cyan), var(--violet));
+}
+.rhythm-n { margin-left: auto; color: var(--text-bright); }
+
+/* ---------- MODULE 06 身份卡（人味层：圆角 + 衬线）---------- */
+.id-card { display: flex; flex-direction: column; align-items: flex-start; gap: var(--s3); }
+.id-glyph { font-size: 22px; color: var(--violet); }
+.id-name {
+  font-family: var(--mono);
+  font-size: 18px;
+  letter-spacing: 2px;
+  color: var(--text-bright);
+}
+.id-line {
+  font-family: var(--font-serif-cn);
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text);
+}
+
+/* ---------- 沿街点亮（滚动驱动；降级 = 错峰入场）----------
+   基础路径（所有浏览器）：错峰淡入 —— 阶梯 0 → 250ms，一格 50ms。
+   增强路径（支持 animation-timeline 的浏览器）：每个街块"进入视口时点亮"
+   —— 走过街道、灯光依次亮起。这正是"自动巡览"的本站解法：
+   不做自动轮播（会打断阅读），而是"你走，它亮"。 */
+@keyframes block-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: none; }
+}
+.hero-inner, .block { animation: block-in 0.5s var(--t-bezier) backwards; }
+.block:nth-of-type(1) { animation-delay: 0ms; }
+.block:nth-of-type(2) { animation-delay: 50ms; }
+.block:nth-of-type(3) { animation-delay: 100ms; }
+.block:nth-of-type(4) { animation-delay: 150ms; }
+.block:nth-of-type(5) { animation-delay: 200ms; }
+.block:nth-of-type(6) { animation-delay: 250ms; }
+
+@supports (animation-timeline: view()) {
+  .block {
+    animation: block-light linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 55%;
+  }
+}
+@keyframes block-light {
+  from { opacity: 0.35; transform: translateY(18px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- 街区响应式（用 3.0 的体系断点：1024 / 768）---------- */
+@media (max-width: 1024px) {
+  .block-stream { grid-column: span 12; }
+  .block-stat, .block-freq, .block-rhythm, .block-id { grid-column: span 6; }
+  .hero { min-height: min(calc(100vh - var(--topbar-h)), var(--banner-h)); }
+}
+@media (max-width: 768px) {
+  .district { grid-template-columns: 1fr; }
+  .block, .block-stream, .block-stat, .block-freq, .block-rhythm, .block-id, .block-featured { grid-column: span 1; }
+  .district-line { display: none; }
+  .hero { min-height: 0; padding: var(--s8) 0 var(--s7); }
+  .hero-scroll { display: none; }
+  .wordmark { width: 100%; }
+}
+
+/* ============================================================
+   C9：阅读进度条 + 回到顶部
+   ------------------------------------------------------------
+   两个都是"长页面导航"的补充手段：
+     · 进度条回答"我读到哪儿了、还剩多少"（长文必备）
+     · 回到顶部回答"我要回去"（列表翻了几屏之后必备）
+
+   ★ 进度条为什么用 transform: scaleX() 而不是 width：
+     width 变化会触发 layout（重排整棵子树），每帧重排 = 滚动掉帧。
+     transform 只走 composite 层，不触碰布局 —— 这是滚动类动画的硬要求。
+     配合 transform-origin: left，视觉上等价于"从左向右生长"。
+
+   ★ 回顶按钮为什么必须是 <button>：
+     项目 CSP 的 script-src 不含 'unsafe-inline'，禁内联 onclick；
+     而且 <a href="#"> 会让 URL 多出一个无意义的历史记录项，
+     按浏览器"后退"会退回同一页而不返回上一页 —— 是已知的体验陷阱。
+   ============================================================ */
+.read-progress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  z-index: 10000;      /* 高于扫描线 9998，确保可见 */
+  pointer-events: none; /* 纯指示器，绝不能挡住下方任何可点击元素 */
+  background: transparent;
+}
+.read-progress-bar {
+  height: 100%;
+  width: 100%;
+  transform: scaleX(0);
+  transform-origin: 0 50%;   /* 从左端生长 */
+  background: linear-gradient(90deg, var(--cyan), var(--magenta));
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+  opacity: 1;
+  /* 进度条跟手即可，不加位移过渡 —— 加 transition 反而会"追不上"滚动。
+     只给透明度加过渡，让"未开始/已到底"的显隐是渐变的。 */
+  transition: opacity var(--t-normal);
+  will-change: transform;
+}
+/* 未开始 / 已到底时的收尾状态：隐藏，避免顶边留一条静止的线 */
+.read-progress[data-idle="1"] .read-progress-bar { opacity: 0; }
+
+.to-top {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 9999;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-size: 16px;
+  line-height: 1;
+  color: var(--cyan);
+  background: var(--bg-1);
+  border: 1px solid var(--line-strong);
+  clip-path: var(--clip-corner);
+  cursor: pointer;
+  /* 默认隐藏：只在"滚过一屏"之后才出现，避免短页面上的无意义悬浮物 */
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(10px);
+  transition: opacity var(--t-normal), transform var(--t-normal), visibility var(--t-normal);
+}
+.to-top[data-visible="1"] {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+.to-top:hover,
+.to-top:focus-visible {
+  color: var(--bg-0);
+  background: var(--cyan);
+  box-shadow: var(--glow-cyan);
+}
+@media (max-width: 768px) {
+  .to-top { right: 14px; bottom: 14px; }
+}
+
+/* ============================================================
+   C10：键盘可达 —— 焦点可见性
+   ------------------------------------------------------------
+   现状（改造前实测）：全站只有 2 处 :focus（.field input / .search-input），
+   而它们依赖的 `outline: none` 却出现在 3 处 —— 也就是说：
+     · 导航链接（HOME/ARCHIVE/…）、主题按钮、文章卡片、加载更多、
+       分页、"回到顶部"、模态框按钮、标签徽章、目录链接……
+       这些**全部用键盘可达**的元素，Tab 到它们身上【毫无视觉反馈】。
+   对键盘/读屏/运动障碍用户，这等于"蒙着眼睛走迷宫"。
+
+   做法：不逐个元素补样式（漏一个就白干），而是给
+   【所有可聚焦元素】统一加一圈霓虹青焦点环，再用 :focus-visible
+   区分"键盘聚焦"与"鼠标点击"——鼠标点按钮不该出现焦点环。
+
+   ⚠ 为什么敢用 :focus-visible：它是 2021 年后的基线特性
+   （Chrome 86+ / Firefox 85+ / Safari 15.4+）。对不支持的旧浏览器，
+   选择器整条失效 = 回退到浏览器默认焦点环 —— **仍然是可见的**，
+   属于优雅降级而非功能丢失。（对比：若写成 :focus 则会污染鼠标点击。）
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  /* 双层环：外圈深色描边保证在霓虹背景上也能看清边界 */
+  box-shadow: 0 0 0 4px rgba(0, 240, 255, 0.15);
+}
+/* 表单控件已自带 focus 光晕，叠加 outline 会显得脏，故收敛为一层更亮的边框 */
+.field input:focus-visible,
+.field textarea:focus-visible,
+.search-input:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.18);
+}
+/* 编辑器正文是内容区而非普通控件，焦点环贴在它有 1px 边框的父容器上更合适；
+   直接给它画环会在文本框内缘形成一圈突兀的框线。 */
+#editor-textarea:focus-visible { outline: none; }
+.editor-pane:focus-within {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 1px rgba(0, 240, 255, 0.25);
+}
+/* 模态框打开时把焦点环做得更醒目：模态是"必须处理"的中断态，
+   焦点跑丢的代价比页面内更高。 */
+.modal :focus-visible {
+  outline: 2px solid var(--magenta);
+  box-shadow: 0 0 0 4px rgba(255, 42, 109, 0.18);
+}
+/* 暗底上的链接：默认下划线在深色霓虹背景上本就偏弱，
+   键盘聚焦时补一道下划线强化（不只依赖颜色 —— WCAG 1.4.1 要求不能仅靠颜色传达信息）。 */
+a:focus-visible { text-decoration: underline; }
+
+/* 跳转到主内容：屏幕阅读器/键盘用户按 Tab 第一下就该能跳过导航。
+   平时视觉隐藏，聚焦时出现。 */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10001;
+  padding: 10px 16px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--bg-0);
+  background: var(--cyan);
+  text-decoration: none;
+  clip-path: var(--clip-corner);
+}
+.skip-link:focus {
+  left: 12px;
+  top: 12px;
+}
+
+/* 键盘快捷键说明（按 ? 唤起） */
+.kbd-help {
+  position: fixed;
+  inset: 0;
+  z-index: 10002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(4, 6, 13, 0.82);
+  backdrop-filter: blur(3px);
+}
+.kbd-help[hidden] { display: none; }
+.kbd-help-inner {
+  min-width: 300px;
+  max-width: 90vw;
+  padding: 22px 26px;
+  background: var(--bg-1);
+  border: 1px solid var(--line-strong);
+  clip-path: var(--clip-corner);
+  box-shadow: 0 0 40px rgba(0, 240, 255, 0.18);
+}
+.kbd-help-inner h3 {
+  font-family: var(--mono);
+  font-size: 13px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  margin-bottom: 14px;
+}
+.kbd-help-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  font-size: 13px;
+  color: var(--text);
+  padding: 5px 0;
+  border-bottom: 1px dashed rgba(95, 115, 145, 0.2);
+}
+.kbd-help-row:last-child { border-bottom: none; }
+.kbd-help-row kbd {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--cyan);
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+/* ============================================================
+   C14+ / C18 / C19 / C16：详情页三件套 · 阅读时长 · 收容所 · 标签管理
+
+   这一批全是「加到既有页面上」的结构，故集中放一块，避免散落各处。
+   命名前缀 trail- / mark- / tagadmin- 便于与既有类区分。
+   ============================================================ */
+
+/* ---------- C18：阅读时长（卡片 + 详情页元信息行） ---------- */
+.meta-read,
+.post-meta .meta-read {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ---------- C19：收藏按钮 ----------
+   ⚠ 卡片上的收藏按钮是绝对定位的悬浮件：
+     它不能影响卡片既有排版（否则每张卡的高度都会变，列表节奏被打乱），
+     所以脱离文档流、贴右下角。
+   ⚠ z-index 必须高于封面压字层（.cover-press 是 z-index:1），
+     否则在有封面的卡片上按钮会被封面盖住、点不到。 */
+.post-card { position: relative; }
+
+.card-mark {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-0) 72%, transparent);
+  border: 1px solid var(--line);
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 15px;
+  line-height: 1;
+  transition: color var(--t-fast), border-color var(--t-fast), background var(--t-fast);
+}
+.card-mark .mark-glyph { pointer-events: none; }
+.card-mark:hover {
+  color: var(--cyan);
+  border-color: var(--cyan);
+  background: color-mix(in srgb, var(--bg-0) 88%, transparent);
+}
+.card-mark.is-on {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+/* v4.9.0：未登录时的锁定态 —— 按钮仍可点（点了引导去登录），
+   但要一眼看出"现在还不能收藏"，否则访客会以为点了没反应。
+   ⚠ 不做 pointer-events:none / disabled —— 那会连"为什么不能点"都问不出来。
+   ⚠ v4.9.1 去掉 opacity：本项目 R59h 明令"灰字规则不得额外叠 opacity"
+     （叠了会把辛苦提上来的对比度又打回去，只有真·禁用态豁免）。
+     这里靠**颜色**表达暗淡即可 —— 锁的造型（钢色锁体 + 品红锁梁）已足够可读。 */
+.card-mark.is-locked,
+.btn-mark.is-locked {
+  color: var(--text-dim);
+  border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
+}
+.card-mark.is-locked:hover,
+.btn-mark.is-locked:hover {
+  color: var(--cyan);
+  border-color: color-mix(in srgb, var(--cyan) 65%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 28%, transparent),
+              0 0 14px color-mix(in srgb, var(--cyan) 18%, transparent);
+}
+
+/* ---------- v4.9.1：锁定态的霓虹锁（内联 SVG，替代原来的 🔒 emoji）----------
+   为什么换掉 emoji：emoji 是**彩色位图字体**，颜色不跟 CSS 变量走、各平台字形还不同
+   （Windows 是黄色挂锁、macOS 是灰锁），在这个全站由 --hue 驱动的配色体系里像贴纸。
+
+   ⚠ 借法自（"只借技法、不搬组件"这条旧约定已于 2026-10-01 被站长取消，
+     改为"要搬先报备、同意后再落地"，见 HANDOVER §5；这一处仍是自绘、无第三方代码）：
+     · React Bits「Electric Border」—— 通电边缘的辉光层次（这里落在锁梁的发光上）
+     · React Bits「Target Cursor」—— "四角闭合/锁定"的意象（本站用切角锁体承接）
+     · Uiverse 静态素材的纯 CSS 描边 + 扫描线技法
+     颜色一律换成本站变量：锁体走 currentColor、锁梁走 --magenta、
+     悬停高亮走 --cyan —— 因此三套主题 × 九档色相全部自动跟随，无需额外代码。
+
+   几何：锁体是**切角矩形**（四角各切一刀），与全站 .clip-corner 同一套语言；
+   锁梁两段留缝，像未闭合的电路。 */
+.mark-lock {
+  display: block;
+  width: 15px;
+  height: 15px;
+  overflow: visible;                 /* 辉光要能溢出 24×24 视框，否则被裁掉 */
+  transition: transform var(--t-fast);
+}
+.card-mark .mark-lock { width: 16px; height: 16px; }
+/* 锁体：切角轮廓 + **暗色填充**。为什么不留纯线框：16px（卡片按钮里）时
+   线框会显得单薄、像没画完；填一层接近背景的暗色，视觉上才是"一块封住的金属"，
+   同时轮廓仍然靠描边读出来（对比度不依赖填充）。 */
+.mark-lock .lk-body {
+  fill: color-mix(in srgb, var(--bg-0) 78%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: miter;            /* 切角要"硬"，圆角就软了 */
+  filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
+}
+.mark-lock .lk-hole {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: miter;
+}
+.mark-lock .lk-shackle {
+  fill: none;
+  stroke: var(--magenta);            /* 锁梁用强调色：一眼看出"封住了" */
+  stroke-width: 1.7;
+  stroke-linecap: square;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--magenta) 55%, transparent));
+}
+.mark-lock .lk-scan {
+  stroke: var(--cyan);
+  stroke-width: 1.1;
+  opacity: 0;                        /* 静止时不可见，仅悬停时扫过 */
+}
+/* 悬停：整锁轻微上浮 + 扫描线自上而下扫一遍（通电感） */
+.card-mark.is-locked:hover .mark-lock,
+.btn-mark.is-locked:hover .mark-lock { transform: translateY(-1px); }
+.card-mark.is-locked:hover .lk-scan,
+.btn-mark.is-locked:hover .lk-scan { animation: lk-scan 1.1s linear infinite; }
+@keyframes lk-scan {
+  0%   { transform: translateY(-3.6px); opacity: 0; }
+  25%  { opacity: .75; }
+  75%  { opacity: .75; }
+  100% { transform: translateY(3.6px); opacity: 0; }
+}
+
+/* 空态里的大号霓虹锁（收藏页 ACCESS REQUIRED / 标签管理 ACCESS DENIED）。
+   与按钮里那把是**同一段图元**（#neon-lock），只是放大 —— 空态原来的 🔒 emoji
+   在深色霓虹底上像贴纸：emoji 是彩色位图字体，颜色不跟 CSS 变量走。 */
+.empty-glyph-lock .mark-lock {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto;
+}
+.empty-glyph-lock .mark-lock .lk-body,
+.empty-glyph-lock .mark-lock .lk-hole { stroke-width: 1.3; }
+.empty-glyph-lock .mark-lock .lk-shackle { stroke-width: 1.4; }
+.empty-glyph-lock .mark-lock .lk-body { stroke: var(--text-dim); }
+
+/* 键盘可达：卡片获得焦点时，收藏按钮也应有可见焦点环 */
+.card-mark:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+}
+
+/* 详情页的收藏按钮：带文字，与元信息行同排 */
+.btn-mark { display: inline-flex; align-items: center; gap: 6px; }
+.btn-mark .mark-glyph { font-size: 13px; }
+.btn-mark.is-on {
+  color: var(--yellow);
+  border-color: var(--yellow);
+}
+
+/* ---------- C14+：详情页页尾三件套 ---------- */
+.trail-block {
+  margin-top: 34px;
+  padding-top: 22px;
+  border-top: 1px solid var(--line);
+}
+.trail-head {
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 1px;
+  color: var(--cyan);
+  margin: 0 0 14px;
+  text-shadow: var(--glow-cyan);
+}
+.trail-sub {
+  color: var(--text-dim);
+  font-weight: normal;
+  font-size: 12px;
+  text-shadow: none;
+}
+.trail-list { list-style: none; margin: 0; padding: 0; }
+.trail-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.trail-item:last-child { border-bottom: none; }
+.trail-link {
+  flex: 1;
+  color: var(--text);
+  text-decoration: none;
+  transition: color var(--t-fast);
+}
+.trail-link:hover { color: var(--cyan); }
+.trail-share {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--cyan);
+  border: 1px solid var(--line);
+  padding: 1px 6px;
+  white-space: nowrap;
+}
+.trail-date {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* 上一篇 / 下一篇：左右两栏，窄屏堆叠 */
+.trail-pager {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.trail-prev, .trail-next {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--text);
+  min-height: 62px;
+  transition: border-color var(--t-fast), color var(--t-fast);
+}
+.trail-next { text-align: right; }
+.trail-prev:hover, .trail-next:hover { border-color: var(--cyan); color: var(--cyan); }
+.pager-dir {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.pager-title { font-size: 14px; }
+/* 没有上/下一篇时：保留格子与文案，但不做可点击样式 ——
+   直接隐藏会让两栏塌成一栏，视觉上像"少了一块"。 */
+.trail-none { opacity: 0.45; cursor: default; }
+.trail-none:hover { border-color: var(--line); color: var(--text); }
+
+.trail-back {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ---------- C16：标签管理列表 ---------- */
+.tagadmin-list { list-style: none; margin: 0; padding: 0; }
+.tagadmin-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  margin-bottom: 8px;
+  transition: border-color var(--t-fast);
+}
+.tagadmin-item:hover { border-color: var(--line-strong); }
+.tagadmin-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+}
+.tagadmin-count {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* ============================================================
+   C15：打印样式
+
+   现状是 0 处 @media print —— 深色底直接进打印机，既费墨又几乎不可读。
+   目标：把深底霓虹站转成"白纸黑字"，并砍掉一切屏幕专属装饰。
+
+   三条边界：
+     ① 装饰层（网格/扫描线/噪点/光幕/晕斑）全部 display:none —— 它们只服务屏幕
+     ② 链接要把 URL 展开出来，否则纸上只见"点击这里"而无处可点
+     ③ 交互件（按钮、导航、进度条、回顶、收藏、分页）一律隐藏
+   ============================================================ */
+@media print {
+  /* ① 装饰层与背景 */
+  /* v4.9.3：搜索页的背景插画也不进纸 —— 深色霓虹图打印出来是一片灰污，
+     而且它只是装饰（文字在 .search-hero-inner 里，照常打印）。 */
+  /* v5.2.0：常驻电台控制台也不进纸（它是屏幕专属的实体机器造型）。 */
+  .radio-console,
+  .search-hero::before, .search-hero::after,
+  html, body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .search-hero { border-color: #ccc !important; background: #fff !important; }
+  .search-hero .empty-state,
+  .search-hero .empty-state .empty-glyph,
+  .search-hero .empty-state .empty-code,
+  .search-hero .empty-state .empty-hint { color: #000 !important; text-shadow: none !important; }
+  /* ② 交互件隐藏
+     v3.1.0 B2：Hero 的光晕背景与滚动引导也一并隐藏 ——
+     纸面上"向下滚动"是无效指令，而那块色相光晕打印出来是一片灰污。
+     v4.1 B2：开场屏/街区母线/字标残影同样不上纸（临时层与纯发光装饰）。
+     注意**只隐藏这些装饰层**：Hero 里的标题与街块里的卡片是要印的。 */
+  .topbar, .skip-link, .progress-bar, .to-top,
+  .card-mark, .btn-mark, .trail-back,
+  .nav-user, .theme-toggle, .theme-menu, .toast-wrap,
+  .search-bar, .load-more-wrap, #btn-theme,
+   /* v5.6.2：旧电台迷你条/面板的隐藏项已删（容器 v5.2.0 就没了）。
+      常驻控制台的隐藏项在上面 ① 装饰层那组（.radio-console）。 */
+  .uptime-hud, .hero-bg, .hero-scroll, .toc, .console-nav,
+  .boot-screen, .district-line, .wordmark-echo {
+    display: none !important;
+  }
+  /* ③ 正文转纸面排版 */
+  .wrap { min-height: 0 !important; max-width: 100% !important; padding: 0 !important; }
+  .post-full, .post-card, .about-card, .form-panel {
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
+  }
+  .post-title, h1, h2, h3, h4 { color: #000 !important; text-shadow: none !important; }
+  .md-body, .md-body p, .md-body li, .card-summary { color: #111 !important; }
+  a { color: #000 !important; text-decoration: underline; }
+  /* v2.9.7：.crumb 在屏幕上是渐变文字（color:transparent + background-clip:text）。
+     纸面上浏览器默认不打印背景图 ⇒ 渐变没了、字又是透明的 → 这一整行凭空消失。
+     必须还原成实色并取消文字裁切。 */
+  .page-head .crumb {
+    color: #000 !important;
+    background: none !important;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+  }
+  /* 链接 URL 展开（排除锚点/空链接，避免打印出一堆 (#)） */
+  .md-body a[href]:not([href^="#"]):after {
+    content: " (" attr(href) ")";
+    font-size: 11px;
+    color: #555;
+    word-break: break-all;
+  }
+  /* 封面/配图：限制高度，避免一张图占满整页 */
+  .post-cover, .card-cover, .md-body img {
+    max-height: 260px;
+    object-fit: contain;
+    page-break-inside: avoid;
+  }
+  .post-card, .trail-item, .trail-block { page-break-inside: avoid; }
+}
+
+/* ============================================================
+   v2.8.0 ~ v5.1.0：电台（RADIO）
+   ------------------------------------------------------------
+   ⚠ v5.6.2 清理（审计清单 ④）：v2.8.0 那套「迷你条 dock + 弹出面板」的样式
+   已整段删除 —— `.radio-dock*` / `.radio-panel*` / `.radio-track*` /
+   `.radio-btn*` / `.radio-now*` / `.radio-seek` / `.radio-volume` / `.radio-bar` /
+   `.radio-time` / `.radio-ctrls` / `.radio-vol*` / `.radio-list*` / `.radio-empty*` /
+   `.radio-embed*` / `.radio-drop` / `.radio-hint` / `.radio-err` / `.radio-mark` /
+   `.radio-glyph` / `.radio-dock-arrow`，以及 `body.has-radio .wrap` 让位规则、
+   `@keyframes radio-pulse` / `radio-marquee`、reduce 块里为它们写的三条归零。
+   证据：这些类名在 views.js / app.js / index.html 里**零标记**（容器 v5.2.0 移除、
+   渲染函数 v5.6.1 删除），只剩 CSS 自己在引用自己。
+   ⚠ 还在用的两批，别误删：
+     · 电台页 → `.radio-page-tip` / `.radio-board` / `.radio-card*` / `.radio-compose`
+       / `.radio-field` / `.radio-select` / `.radio-src-head` / `.radio-form*` / `.radio-op*`
+     · 常驻控制台 → `.radio-console` / `.rc-*`（复古收音机那套，见下方 v5.1.0 段）
+   ============================================================ */
+
+/* ---------- 条目表单（v5.0.0 起） ----------
+   ⚠ 下面这几个类是**电台页**新增条目表单在用的（views.js 的 radioView /
+     data-radio-compose）：.radio-form / .radio-form-msg / .radio-form-ops / .radio-field。
+   ⚠ v5.6.2 清理：.radio-embed*（旧面板里摆官方 iframe 的那套）已删 ——
+     现在 iframe 摆在常驻控制台里，走 .rc-frame / .rc-fallback（见下方 v5.1.0 段）。 */
+
+/* 上传表单 */
+.radio-form {
+  margin-top: 10px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--bg-2) 70%, transparent);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.radio-form[hidden] { display: none; }
+   v5.1.0：电台常驻控制台（复古收音机）+ 电台页
+   样式参考 GitHub/Codeberg 上那批复古播放器（kitsune、Junk Phonic 9000、cliamp）：
+   木纹外壳 + 金属面板 + 调谐刻度 + VU 电平表 + 旋钮，再叠本站霓虹点缀。
+   ⚠ 控制台是**固定定位**且挂在 #app 之外 —— 它的唯一使命是"切页面不断歌"，
+     所以不要把它塞回页面流里（那会随着路由重绘被销毁）。
+   ⚠ 复古材质用的是本块内的局部变量：它模拟的是一台**实体机器**，
+     材质不该跟着网站主题（霓虹/浅色）一起翻 —— 与"封面压字""搜索页插画"同一套思路。 */
+.radio-console {
+  --rc-wood-1: #3a2c1c;
+  --rc-wood-2: #17110a;
+  --rc-metal: #6b5636;
+  --rc-amber: #ffb347;
+  --rc-cream: #f2e4c8;
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+  max-width: calc(100% - 36px);
+}
+.radio-console[hidden] { display: none; }
+.radio-console[data-mode="full"] {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(760px, calc(100% - 36px));
+  bottom: 22px;
+}
+.rc-case {
+  background: linear-gradient(180deg, var(--rc-wood-1), var(--rc-wood-2));
+  border: 1px solid var(--rc-metal);
+  border-radius: 10px;
+  padding: 9px 12px 11px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .6), inset 0 1px 0 rgba(255, 255, 255, .08);
+}
+/* 调谐刻度：一条米色刻度带 + 一根会随条目移动的指针 */
+.rc-tune { position: relative; height: 13px; margin-bottom: 8px; border-bottom: 1px solid rgba(255, 179, 71, .35); }
+.rc-tune-scale {
+  position: absolute; inset: 0 0 auto 0; height: 8px;
+  background: repeating-linear-gradient(90deg, rgba(242, 228, 200, .55) 0 1px, transparent 1px 9px);
+}
+.rc-tune-needle {
+  position: absolute; top: -2px; left: 40%; width: 2px; height: 13px;
+  background: var(--rc-amber); box-shadow: 0 0 8px var(--rc-amber);
+  animation: rc-sweep 7s ease-in-out infinite;
+}
+.rc-freq {
+  position: absolute; right: 0; top: -3px;
+  font: 10px/1 var(--mono); color: var(--rc-amber); letter-spacing: 1px;
+}
+@keyframes rc-sweep { 0%, 100% { left: 12%; } 50% { left: 78%; } }
+.rc-body { display: flex; align-items: center; gap: 12px; }
+/* 扬声器网：斜纹 + 内阴影，做出"网罩"的质感 */
+.rc-grille {
+  flex: 0 0 34px; align-self: stretch; border-radius: 5px;
+  background:
+    repeating-linear-gradient(45deg, rgba(0, 0, 0, .55) 0 2px, rgba(255, 255, 255, .05) 2px 4px),
+    linear-gradient(180deg, #2b2117, #120d08);
+  border: 1px solid rgba(107, 86, 54, .8);
+  box-shadow: inset 0 0 10px rgba(0, 0, 0, .8);
+}
+.radio-console[data-mode="mini"] .rc-grille, .radio-console[data-mode="mini"] .rc-tune { display: none; }
+.rc-slot { flex: 1 1 auto; min-width: 0; }
+.rc-frame { display: block; border: 1px solid rgba(107, 86, 54, .9); background: #000; max-width: 100%; }
+.rc-fallback { display: inline-block; margin-top: 5px; font: 10px/1.4 var(--mono); color: rgba(242, 228, 200, .6); text-decoration: none; border-bottom: 1px dotted currentColor; }
+.rc-fallback:hover { color: var(--rc-amber); }
+.rc-side { flex: 0 0 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 190px; }
+.rc-title { font: 12px/1.3 var(--mono); color: var(--rc-cream); text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.rc-sub { font: 10px/1.3 var(--mono); color: rgba(242, 228, 200, .55); text-align: right; }
+/* VU 电平表：装饰用（iframe 内部状态读不到，不做假同步） */
+.rc-vu { display: flex; align-items: flex-end; gap: 2px; height: 14px; }
+.rc-vu i { width: 3px; background: linear-gradient(180deg, var(--rc-amber), #7a4a12); height: 30%; animation: rc-vu 1.6s ease-in-out infinite; }
+.rc-vu i:nth-child(2) { animation-delay: .18s; }
+.rc-vu i:nth-child(3) { animation-delay: .36s; }
+.rc-vu i:nth-child(4) { animation-delay: .54s; }
+.rc-vu i:nth-child(5) { animation-delay: .72s; }
+@keyframes rc-vu { 0%, 100% { height: 22%; } 50% { height: 92%; } }
+/* 旋钮：金属同心圆 + 指针，点了进电台页 */
+.rc-knob {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 1px solid #8a7048;
+  background:
+    conic-gradient(from 210deg, rgba(255, 255, 255, .18), rgba(0, 0, 0, .35) 60%, rgba(255, 255, 255, .12)),
+    radial-gradient(circle at 35% 30%, #6f5a3c, #241a10);
+  box-shadow: inset 0 0 6px rgba(0, 0, 0, .8);
+}
+.rc-knob:hover { border-color: var(--rc-amber); box-shadow: 0 0 10px rgba(255, 179, 71, .45), inset 0 0 6px rgba(0, 0, 0, .8); }
+
+/* 电台页 */
+.radio-page-tip {
+  border-left: 2px solid var(--cyan);
+  padding: 6px 0 6px 10px;
+  margin: 0 0 20px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.radio-page-tip b { color: var(--cyan); font-weight: 400; }
+.radio-board { list-style: none; margin: 0 0 22px; padding: 0; display: grid; gap: 8px; }
+.radio-card {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-1) 80%, transparent);
+  padding: 9px 11px;
+}
+.radio-card.is-current { border-color: var(--cyan); box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 30%, transparent); }
+.radio-card-play { flex: 0 0 auto; width: 26px; height: 26px; border: 1px solid var(--line-strong); background: transparent; color: var(--cyan); cursor: pointer; }
+.radio-card.is-current .radio-card-play { color: var(--yellow); border-color: var(--yellow); }
+.radio-card-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.radio-card-title { color: var(--text-bright); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.radio-card-artist { color: var(--text-dim); font-size: 11px; }
+.radio-card-id { font: 10px/1 var(--mono); color: var(--magenta); letter-spacing: 1px; }
+.radio-card-ops { flex: 0 0 auto; display: flex; gap: 3px; }
+.radio-op { width: 22px; height: 22px; border: 1px solid var(--line); background: transparent; color: var(--text-dim); cursor: pointer; font-size: 10px; }
+.radio-op:hover { color: var(--cyan); border-color: var(--cyan); }
+.radio-op-del:hover { color: var(--red); border-color: var(--red); }
+.radio-compose { border: 1px solid var(--line); padding: 14px; display: grid; gap: 10px; max-width: 560px; }
+.radio-select {
+  background: var(--bg-0); border: 1px solid var(--line); color: var(--text-bright);
+  font-family: var(--sans); font-size: 12px; padding: 7px 9px;
+}
+.radio-select:focus { outline: none; border-color: var(--cyan); }
+/* 电台页底部要给固定控制台留出空间，否则最后一条被盖住 */
+.radio-console[data-mode="full"] ~ #app { padding-bottom: 240px; }
+
+/* reduce 块：控制台的装饰动画也归零（本文件末尾的 reduce 块会兜住动画，
+   这里只处理 VU/指针那两个无限循环） */
+.radio-field { display: flex; flex-direction: column; gap: 4px; }
+/* v4.9.5：音源二选一的分隔小标题（外链/内链）。做成一条带左侧色标的窄行，
+   让"从这里开始是音源"在视觉上切开，不至于被当成又一个普通字段。 */
+.radio-src-head {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--cyan);
+  border-left: 2px solid var(--cyan);
+  padding-left: 7px;
+  margin-top: 2px;
+}
+.radio-src-head b { color: var(--magenta); font-weight: 400; }
+.radio-field > span {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
+.radio-field input[type="text"] {
+  background: var(--bg-0);
+  border: 1px solid var(--line);
+  color: var(--text-bright);
+  font-family: var(--sans);
+  font-size: 12px;
+  padding: 7px 9px;
+  width: 100%;
+  min-width: 0;
+}
+.radio-field input[type="text"]:focus { outline: none; border-color: var(--cyan); }
+.radio-field input[type="file"] {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text);
+  width: 100%;
+  min-width: 0;
+}
+.radio-form-ops { display: flex; gap: 8px; justify-content: flex-end; }
+.radio-form-msg {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--yellow);
+  line-height: 1.5;
+}
+.radio-form-msg[hidden] { display: none; }
+
+/* ⚠ v5.6.3：这里原是 @keyframes radio-pulse（旧迷你条的电平脉冲）。
+   v5.6.2 删它时只删到第一个 `}`，把后半个 keyframe（`50% { … }` + 收尾 `}`）
+   落成了孤儿片段 —— 浏览器会静默忽略，但整份样式的括号配平因此一直差 1。
+   本次清理删净；门禁里也加了「CSS 结构性守卫」（见 49 号）防止再犯。 */
+
+/* ============================================================
+   v4.0 B1：氛围系统（Atmosphere）—— 出厂「光污染」
+
+   9 层注册：材质 3（noise/scanline/grid）+ 光 6（glow/bloom/signs/stardust/pulse/rain）。
+   开关：html[data-atmo] 是【层列表】（空格分隔）。它有三个写入者，同一份契约：
+     · theme-boot.js —— 首绘前写全局兜底集（防"先裸后亮"）
+     · scene.js     —— 路由切换时按场景温差校正
+     · atmo.js      —— 帧率不足时自动降档（性能保底）
+   载体：index.html 里两个容器 —— .atmo-under（内容之下）/ .atmo-over（内容之上），
+   每层一个 <i class="atmo-layer" data-layer="…">。
+
+   光污染的边界（方案 §4.2 红线的落地）：
+     · 「光」层拉满（glow/bloom/signs/stardust/pulse/rain）；
+     · 「材质」层保持低强度 —— 颗粒纹理加深不会得到"更多光"，只会变成花屏；
+     · 全部层不得进入正文阅读层级（z-index 分区固定，见下）；
+     · 闪烁频率全部 ≤ 3Hz（WCAG 2.3.1，见各 keyframes 注释）。
+   ============================================================ */
+
+/* ---------- 容器与逐层开关 ---------- */
+.atmo {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;   /* 红线：不挡任何交互 */
+  overflow: hidden;
+}
+.atmo-under { z-index: 0; }      /* 内容之下：后续 DOM 的内容自然盖住它 */
+.atmo-over  { z-index: 9996; }   /* 内容之上（topbar 100 / 模态 200+）、toast(10000) 之下 */
+.atmo-layer { position: absolute; inset: 0; display: none; }
+
+html[data-atmo~="noise"]    .atmo-layer[data-layer="noise"],
+html[data-atmo~="scanline"] .atmo-layer[data-layer="scanline"],
+html[data-atmo~="grid"]     .atmo-layer[data-layer="grid"],
+html[data-atmo~="glow"]     .atmo-layer[data-layer="glow"],
+html[data-atmo~="bloom"]    .atmo-layer[data-layer="bloom"],
+html[data-atmo~="signs"]    .atmo-layer[data-layer="signs"],
+html[data-atmo~="stardust"] .atmo-layer[data-layer="stardust"],
+html[data-atmo~="pulse"]    .atmo-layer[data-layer="pulse"],
+html[data-atmo~="rain"]     .atmo-layer[data-layer="rain"] { display: block; }
+
+/* ---------- ① 材质层（低强度 —— 是"材质"，不是"光"）---------- */
+
+/* 噪点（胶片颗粒）：内联 SVG turbulence 平铺，≈5% 强度。 */
+.atmo-layer[data-layer="noise"] {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+  opacity: 0.05;
+}
+
+/* 扫描线（CRT 条纹）：3px 周期、单像素暗线，等效明度差 ≈5%（评审数据：再深杀可读性）。 */
+.atmo-layer[data-layer="scanline"] {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0 2px,
+    rgba(0, 0, 0, 0.16) 2px 3px
+  );
+}
+/* 浅底档减半：暗线在浅色上观感更重（v3.5.0 已有同一思路的教训） */
+html[data-theme="light"] .atmo-layer[data-layer="scanline"],
+html[data-theme="warm"]  .atmo-layer[data-layer="scanline"] {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent 0 2px,
+    rgba(0, 0, 0, 0.07) 2px 3px
+  );
+}
+
+/* 透视网格：双向线性渐变，42px 格；顶部浓、向下渐隐（"地平线"感）。 */
+.atmo-layer[data-layer="grid"] {
+  background-image:
+    linear-gradient(to right, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.10) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.10) 1px, transparent 1px);
+  background-size: 42px 42px;
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%);
+  mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%);
+}
+
+/* ---------- ② 光层（拉满 —— 光污染的"光"在这里）---------- */
+
+/* 光晕：v2.6 的 body 晕斑正式回归（当时为修"短页面空旷"；v3.6 全删后失去）。
+   三团径向渐变（主色 / 品红 / 幽紫），随 --hue 旋转。 */
+.atmo-layer[data-layer="glow"] {
+  background:
+    radial-gradient(58% 44% at 12% 6%, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.15), transparent 72%),
+    radial-gradient(46% 38% at 88% 10%, rgba(255, 42, 109, 0.09), transparent 72%),
+    radial-gradient(70% 55% at 50% 104%, hsl(calc(var(--hue) + var(--vio-off)) var(--vio-s) var(--vio-l) / 0.12), transparent 72%);
+}
+
+/* 光溢出：屏幕上下边缘的整体洇光（screen 混合提亮）—— CRT 辉光感。
+   浅底档几乎不可见属预期（屏幕本身已亮，bloom 无意义），不另设覆盖。 */
+.atmo-layer[data-layer="bloom"] {
+  background:
+    radial-gradient(120% 42% at 50% -8%, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.16), transparent 62%),
+    radial-gradient(110% 36% at 50% 108%, hsl(calc(var(--hue) + var(--vio-off)) var(--vio-s) var(--vio-l) / 0.11), transparent 62%);
+  mix-blend-mode: screen;
+}
+
+/* 霓虹招牌：页面左右边缘的竖排灯牌（< 1400 由 1400 断点块隐藏）。 */
+.atmo-layer[data-layer="signs"] b {
+  position: absolute;
+  writing-mode: vertical-rl;
+  font-family: var(--mono);
+  font-weight: 400;   /* 用真实字重，避免合成粗体的粗糙边缘 */
+  font-size: 13px;
+  letter-spacing: 0.5em;
+  color: hsl(var(--hue) var(--hue-s) 72%);
+  text-shadow:
+    0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.9),
+    0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
+  opacity: 0.5;
+  animation: atmo-flicker 7s infinite;
+}
+.atmo-layer[data-layer="signs"] b:first-child { left: 16px; top: 24%; }
+.atmo-layer[data-layer="signs"] b:last-child  { right: 16px; bottom: 16%; }
+
+/* 星尘：微光点阵平铺 + 缓慢漂移 + 明暗呼吸。 */
+.atmo-layer[data-layer="stardust"] {
+  background-image:
+    radial-gradient(1.6px 1.6px at 18% 22%, rgba(255, 255, 255, 0.85), transparent),
+    radial-gradient(1.2px 1.2px at 64% 12%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.4px 1.4px at 38% 58%, hsl(var(--hue) var(--hue-s) 80% / 0.7), transparent),
+    radial-gradient(1.1px 1.1px at 82% 44%, rgba(255, 255, 255, 0.55), transparent),
+    radial-gradient(1.5px 1.5px at 8% 76%, hsl(var(--hue) var(--hue-s) 80% / 0.6), transparent),
+    radial-gradient(1.2px 1.2px at 52% 88%, rgba(255, 255, 255, 0.5), transparent),
+    radial-gradient(1.3px 1.3px at 92% 80%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.1px 1.1px at 28% 40%, rgba(255, 255, 255, 0.5), transparent);
+  background-size: 460px 460px;
+  animation: atmo-dust-drift 28s linear infinite alternate, atmo-dust-blink 9s ease-in-out infinite;
+}
+
+/* 脉冲扫掠：低频光带自顶部渐入、扫过全屏（11s 一趟）。 */
+.atmo-layer[data-layer="pulse"]::before {
+  content: "";
+  position: absolute;
+  left: -6%;
+  right: -6%;
+  height: 36vh;
+  background: linear-gradient(180deg,
+    transparent,
+    hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.10) 45%,
+    transparent);
+  animation: atmo-sweep 11s linear infinite;
+}
+
+/* 数字雨：v4.4.1 起为「DOM 列」实现 —— 整列由 transform 下落（合成器线程），
+   拖尾长度由 JS 精确控制在 4~7 字符（TAIL_MIN/MAX），亮度梯度在这里：头亮尾暗、
+   整体压柔（尾字符 0.32 透明度）。离屏即随元素消失——不再有擦除残留。
+   旧实现（Canvas + destination-out 半透明擦除）的拖尾是"擦不干净"的副产品，
+   长度随帧率漂移且会累积残影，本版整体退役。 */
+.rain-col {
+  position: absolute;
+  top: 0;
+  display: block;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.4;
+  color: hsl(var(--hue) var(--hue-s) 58% / 0.32);
+  pointer-events: none;
+  /* ⚠ will-change 只给**动画元素自己**，不给父层 —— 见下方注释。
+     实测（2026-09-30，v4.4.1 收尾）：把 will-change 提到父层 .atmo-layer 上
+     反而更差（滚动损耗 7.9% → 9.8%）：父层 contain:strict 后，
+     列的 translateY 动画不再能"共享父层的合成上下文"，合成器要为每列单独分配。
+     结论：**逐列 will-change: transform 是最优**（列数即合成层数，COL_W 才是主旋钮）。 */
+  will-change: transform;
+  contain: layout style paint;
+  animation: rain-fall linear infinite;
+}
+.rain-col b { display: block; font-weight: 400; }
+/* 头亮尾暗：nth-last-child(1) = 列内最下方 = 头字符。
+   ⚠ 发光（text-shadow）只给**头字符**一个、且 blur 收到 5px ——
+   实测教训：头 1+2 都带 7px 光晕时，滚动帧率被发光合成拖低约 8%；
+   收成"单头小光晕"后回落到 3% 内（发光是最贵的 CSS 效果之一）。 */
+.rain-col b:nth-last-child(1) {
+  color: hsl(var(--hue) var(--hue-s) 78% / 0.85);
+  text-shadow: 0 0 5px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.55);
+}
+.rain-col b:nth-last-child(2) {
+  color: hsl(var(--hue) var(--hue-s) 66% / 0.52);
+}
+.rain-col b:nth-last-child(3) { opacity: 0.55; }
+.rain-col b:nth-last-child(4) { opacity: 0.35; }
+/* 页面隐藏时暂停（atmo.js 的 setRainPaused 挂 .is-paused） */
+.atmo-layer.is-paused .rain-col { animation-play-state: paused; }
+@keyframes rain-fall {
+  from { transform: translateY(-170px); }
+  to   { transform: translateY(calc(100vh + 200px)); }
+}
+
+/* ---------- 氛围动画（闪烁频率全部远低于 WCAG 2.3.1 的 3Hz 上限）---------- */
+@keyframes atmo-flicker {
+  /* 7 秒周期内 3 次快速明暗（≈0.43Hz）—— 招牌"接触不良"感，不构成光敏风险 */
+  0%, 91%, 100% { opacity: 0.5; }
+  92% { opacity: 0.24; }
+  93% { opacity: 0.55; }
+  94% { opacity: 0.2; }
+  95% { opacity: 0.5; }
+}
+@keyframes atmo-dust-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 64px 46px; }
+}
+@keyframes atmo-dust-blink {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 0.45; }
+}
+@keyframes atmo-sweep {
+  0%   { top: -42vh; opacity: 0; }
+  10%  { opacity: 1; }
+  86%  { opacity: 1; }
+  100% { top: 112vh; opacity: 0; }
+}
+
+/* ============================================================
+   v4.0 B1：滚动条美化（暗色霓虹风；Chromium 121+/Firefox 走标准属性，
+   老 WebKit/Safari 走 ::-webkit- 伪元素 —— 两套都给，渐进增强）。
+   轨道一律 transparent：站内存在多个滚动容器（body/TOC/终端…），
+   写死底色会在非 body 容器里露馅。
+   ============================================================ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35) transparent;
+}
+::-webkit-scrollbar { width: 11px; height: 11px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.28);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: content-box;   /* 用透明描边做"内缩"，轨道透出不露边界 */
+}
+@media (hover: hover) {
+  ::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.55); }
+}
+/* 浅底档提高实度（浅色上低透明度不够醒目） */
+html[data-theme="light"] ::-webkit-scrollbar-thumb,
+html[data-theme="warm"]  ::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.45);
+}
+
+/* ============================================================
+   v4.2 B3「阅读舱」：终端阅读框 + 行号 + 迷你地图 + 时间线档案
+   ------------------------------------------------------------
+   借两个设计体系的手法、转译为霓虹语言（"抄"的是语法，不是配色）：
+     · Wired（杂志编辑系）：衬线管叙事 / byline 的呼吸感 / hairline 做叙事分隔
+       —— 落在阅读舱的 lead 首段、元信息条、章节分隔上；
+     · Linear（工具系）：行式变更记录 / 表面阶梯 / 字距纪律
+       —— 落在归档时间线（年份牌 + 发光轴）与迷你地图（章节长度条 + 游标）上。
+   ============================================================ */
+
+/* ---------- 终端阅读框 ---------- */
+.reading-frame {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: var(--r-soft);
+  background: color-mix(in srgb, var(--bg-1) 55%, transparent);
+  padding: var(--s4) var(--s5) var(--s5);
+}
+/* 顶部工具条：解码读数 + 行号开关（系统层语言：等宽 / 字距 / 切角） */
+.rf-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding-bottom: var(--s3);
+  margin-bottom: var(--s4);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 1px;
+}
+.rf-tag { color: hsl(var(--hue) var(--hue-s) 70%); text-shadow: 0 0 7px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5); }
+.rf-stats { color: var(--text-dim); }
+.rf-btn {
+  margin-left: auto;
+  padding: 3px 10px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  clip-path: var(--clip-corner-sm);
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+.rf-btn:hover { color: var(--cyan); border-color: var(--line-strong); }
+.rf-btn[aria-pressed="true"] {
+  color: hsl(var(--hue) var(--hue-s) 72%);
+  border-color: var(--line-strong);
+  text-shadow: 0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
+}
+
+/* ---------- 行号 gutter（终端流；body.linenum-off 一键关闭）----------
+   计数只对正文的直系块级元素；blockquote 不参与（它有自己的引号装饰，
+   且在叙事里是"附属块"）。行号用绝对定位进左侧 gutter，故给块加 relative。 */
+body:not(.linenum-off) .md-body { padding-left: 38px; }
+.md-body { counter-reset: mdline; }
+.md-body > p, .md-body > h2, .md-body > h3, .md-body > ul, .md-body > ol, .md-body > pre {
+  counter-increment: mdline;
+  position: relative;
+}
+body:not(.linenum-off) .md-body > p::before,
+body:not(.linenum-off) .md-body > h2::before,
+body:not(.linenum-off) .md-body > h3::before,
+body:not(.linenum-off) .md-body > ul::before,
+body:not(.linenum-off) .md-body > ol::before,
+body:not(.linenum-off) .md-body > pre::before {
+  content: counter(mdline, decimal-leading-zero);
+  position: absolute;
+  left: -38px;
+  top: .35em;
+  width: 30px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  line-height: 1;
+  letter-spacing: 0;
+  color: hsl(var(--hue) var(--hue-s) 60% / 0.38);
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ---------- 编辑级叙事（Wired 转译）---------- */
+/* byline 呼吸：元信息条两侧 hairline，字距放松 —— "编辑横条"感 */
+.post-meta {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: var(--s3) 0;
+  letter-spacing: 0.5px;
+}
+/* lead 首段：衬线 + 提亮 —— 杂志的"导语段"语法（中文=宋体系衬线） */
+.md-body > p:first-child {
+  font-family: var(--font-serif-cn);
+  font-size: 1.06em;
+  line-height: 1.95;
+  color: var(--text-bright);
+}
+/* 章节分隔：h2 上方一条发光 hairline */
+.md-body > h2 {
+  padding-top: var(--s4);
+  border-top: 1px solid hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.18);
+}
+
+/* ---------- TOC 迷你地图（结构 + 位置一图看清）---------- */
+.toc { position: relative; }   /* 游标定位上下文 */
+.toc-list { position: relative; }
+/* 游标：骑在左侧轨道（violet 边）上滑动，指示"你读到哪一章" */
+.toc-cursor {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  transition: top var(--t-normal) ease;
+  pointer-events: none;
+}
+/* 章节长度条：亮色段 = 该章节占全文的比例（--seg 由 buildToc 计算） */
+.toc-bar {
+  display: block;
+  height: 2px;
+  margin: 2px 8px 4px;
+  background: linear-gradient(90deg,
+    hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.55) 0 var(--seg, 40%),
+    hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.12) var(--seg, 40%) 100%);
+}
+.toc-lv3 .toc-bar { margin-left: 24px; }
+
+/* ---------- 归档：时间线轴 + 年份牌（Linear changelog 语法转译）---------- */
+.archive-main { position: relative; padding-left: 30px; }
+.archive-main::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: linear-gradient(180deg,
+    transparent,
+    hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.4) 6%,
+    hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.4) 94%,
+    transparent);
+}
+/* 月份节点：骑在轴上的发光圆环 */
+.archive-month { position: relative; }
+.archive-month::after {
+  content: "";
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: var(--bg-0);
+  border: 2px solid hsl(var(--hue) var(--hue-s) 70% / 0.9);
+  box-shadow: 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
+}
+/* 年份牌：描边空心大字（档案感） */
+.archive-year {
+  margin: 0 0 var(--s3);
+  font-family: var(--mono);
+  font-size: var(--fs-3xl);
+  font-weight: 400;
+  letter-spacing: -1px;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.55);
+  text-shadow: 0 0 22px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.25);
+}
+
+/* ---------- 证件：档案卡（FILE 编号 + 翻阅点亮）---------- */
+.about-file {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 1.5px;
+  color: hsl(var(--hue) var(--hue-s) 65% / 0.5);
+}
+/* 翻阅流：卡片进入视口时点亮（降级 = 无动画，直接显示） */
+@supports (animation-timeline: view()) {
+  .about-card {
+    animation: block-light linear both;
+    animation-timeline: view();
+    animation-range: entry 0% entry 55%;
+  }
+}
+
+/* ============================================================
+   v4.3 B4「控制台」：命令终端 + 点击反馈 + 装置面板（三区）
+   ------------------------------------------------------------
+   装置③ 命令终端：Ctrl+` 唤起，底部滑出；遮罩点击/Esc/关闭键三路可退；
+   z 序：9997（氛围 over 之上、toast 之下 —— 终端里的提示仍能被 toast 覆盖）。
+   装置④ 点击反馈：pointerdown 处扩散光环（z 10070 最顶），仅 hover 设备。
+   装置面板：罗盘扩为四块（明度/色相/氛围/装置），加高加滚动。
+   ============================================================ */
+
+/* ---------- 命令终端（装置③）---------- */
+.console-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 9997;
+}
+.console-wrap[hidden] { display: none; }
+.console-mask {
+  position: absolute;
+  inset: 0;
+  background: rgba(2, 4, 10, 0.55);
+}
+.console-panel {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(16px, 7vh, 72px);
+  transform: translateX(-50%);
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(440px, 62vh);
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--bg-1) 94%, transparent);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-soft);
+  box-shadow:
+    0 0 44px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.22),
+    inset 0 0 46px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.04);
+  animation: console-in 0.22s var(--t-bezier);
+  backdrop-filter: blur(6px);
+}
+@keyframes console-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(16px); }
+  to   { opacity: 1; transform: translateX(-50%); }
+}
+.console-head {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--line);
+}
+.console-title {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 1.5px;
+  color: hsl(var(--hue) var(--hue-s) 70%);
+  text-shadow: 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
+}
+.console-btn {
+  padding: 2px 9px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  clip-path: var(--clip-corner-sm);
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+.console-btn:hover { color: var(--cyan); border-color: var(--line-strong); }
+.console-out {
+  flex: 1;
+  min-height: 130px;
+  overflow-y: auto;
+  padding: var(--s3) var(--s4);
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  line-height: 1.9;
+}
+.console-line { white-space: pre-wrap; word-break: break-word; color: var(--text); }
+.console-line.dim { color: var(--text-dim); }
+.console-line.ok { color: var(--green); }
+.console-line.err { color: var(--magenta); }
+.console-line.cmd { color: var(--text-bright); }
+.console-in-row {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  padding: var(--s3) var(--s4);
+  border-top: 1px solid var(--line);
+}
+.console-caret { font-family: var(--mono); color: var(--cyan); }
+.console-in {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: var(--mono);
+  font-size: var(--fs-sm);
+  color: var(--text-bright);
+  caret-color: var(--cyan);
+}
+.console-in::placeholder { color: var(--text-dim); }
+
+/* ---------- 点击反馈（装置④）---------- */
+.tap-ripple {
+  position: fixed;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border: 1.5px solid hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.9);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 10070;
+  animation: tap-ring 0.5s ease-out forwards;
+}
+@keyframes tap-ring {
+  from { transform: scale(0.4); opacity: 1; }
+  to   { transform: scale(5.5); opacity: 0; }
+}
+.tap-ripple.is-heavy {
+  border-width: 2px;
+  box-shadow:
+    0 0 16px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.7),
+    inset 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
+  animation-duration: 0.66s;
+}
+
+/* ---------- 装置面板扩展（罗盘第四块起）---------- */
+/* 面板加高加滚动：四块内容在矮屏上会伸出视口 */
+.theme-menu {
+  max-height: calc(100vh - var(--topbar-h) - 26px);
+  overflow-y: auto;
+}
+.atmo-mode, .tap-mode {
+  padding: 4px 10px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+.atmo-mode:hover, .tap-mode:hover { color: var(--cyan); border-color: var(--line-strong); }
+.atmo-mode[aria-checked="true"],
+.tap-mode[aria-checked="true"] {
+  color: hsl(var(--hue) var(--hue-s) 72%);
+  border-color: var(--line-strong);
+  text-shadow: 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
+  box-shadow: inset 0 0 10px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.15);
+}
+.atmo-layers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-top: 8px;
+}
+.atmo-layer-btn {
+  padding: 3px 6px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  color: var(--text-dim);
+  background: color-mix(in srgb, var(--bg-2) 60%, transparent);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  transition: color var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.atmo-layer-btn[aria-pressed="true"] {
+  color: var(--text-bright);
+  border-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.6);
+  box-shadow: inset 0 0 10px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.18);
+  text-shadow: 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
+}
+.atmo-reset, .device-toggle, .device-action {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 5px 10px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  color: var(--text-dim);
+  background: transparent;
+  border: 1px solid var(--line);
+  cursor: pointer;
+  text-align: left;
+  transition: color var(--t-fast), border-color var(--t-fast);
+}
+.atmo-reset:hover, .device-toggle:hover, .device-action:hover {
+  color: var(--cyan);
+  border-color: var(--line-strong);
+}
+.device-toggle[aria-checked="true"] {
+  color: var(--yellow);
+  border-color: color-mix(in srgb, var(--yellow) 45%, transparent);
+  text-shadow: 0 0 8px rgba(249, 240, 2, 0.4);
+}
+.devices-sub {
+  display: block;
+  margin: 6px 0 4px;
+  font-family: var(--mono);
+  font-size: var(--fs-2xs);
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+/* ============================================================
+   C13：尊重「减少动效」偏好（prefers-reduced-motion）
+
+   这不是"锦上添花的无障碍选项"，是本项目此前**真实缺失**的一条：
+   全站（含 CRT 扫描线、故障抖动、加载跑马灯、各处 transition）
+   对前庭功能障碍用户会造成眩晕、恶心、偏头痛等生理不适。
+   对方在系统里已经明确表达了"少动一点"，站点却完全没听。
+
+   ★ 为什么放在文件【最后】：靠层叠顺序覆盖前面的规则。
+     块内的 `*` 通配规则与具体类规则同权重时，后写的赢；
+     少数需要 !important 的地方（用户偏好理应压过作者样式）已显式标注。
+
+   三层压制，按"消失 → 静止 → 加速"排序：
+     ① 纯装饰动画：直接关闭（扫描线、网格呼吸、脉冲）
+     ② 位移动画：只留终点、去掉过程（fadein / toast 进出）
+     ③ 过渡时长：全局归零（按钮、边框、滑轨的 transition）
+   ============================================================ */
+/* ============================================================
+   v3.5.0：小屏顶栏（≤480）—— 外部审计 P1
+   ------------------------------------------------------------
+   症状：≤420px 时 .nav 内各项总宽约 775px，超出的部分被 body{overflow-x:hidden}
+   静默裁掉 —— STASH / ABOUT / ACCESS / 主题按钮**全部点不到**，
+   而页面上看不出任何异常（这正是"被掩盖的溢出"最坏的地方：用户会以为自己点错了）。
+
+   解法：窄屏让导航**换行成两行**（信息零损失、所有项都可点），
+   并把 --topbar-h 同步调高 —— 顶栏是 sticky，变高不会压正文，
+   但 6 处 sticky 辅助栏（TOC / 控制台导航 / 归档小工具 / 搜索吸附条）都读它，
+   不调就会滑到页头底下。
+
+   ⚠ 放在 reduce 块之前 = 位于所有其它媒体查询之后 ⇒ 同特异性下由它胜出。
+   ============================================================ */
+@media (max-width: 480px) {
+  :root { --topbar-h: 104px; }
+  .topbar-inner { height: auto; padding: 6px 12px; gap: 8px 10px; flex-wrap: wrap; }
+  /* 换行后 margin-left:auto 会把 nav 推到右端再折行 ⇒ 窄屏必须取消 */
+  .nav { margin-left: 0; flex-wrap: wrap; gap: 3px; width: 100%; }
+  .nav a { padding: 7px 10px; font-size: 11px; }
+  .logo-sub { display: none; }
+  .theme-toggle { white-space: nowrap; }
+}
+
+/* v3.5.0（外部审计 P5.5）：扫描线在深底上含蓄，在**浅底上却成了可见的横条纹**
+   （实测每 3px 约 8/255 的明暗差，空荡的 hero 区尤其明显）。
+   根因是它用 mix-blend-mode: multiply —— 深底上乘出来的差异极小，
+   浅底（#eef2f8）上却直接显影。这里对两个浅底档单独压到原来的 40%，
+   保留"扫描线"的质感，但不再抢视线（不直接隐藏：那是这个站的语言之一）。 */
+
+@media (prefers-reduced-motion: reduce) {
+  /* ---- ⓪ v4.0：氛围动画层直接不渲染 ---- */
+  /* 动画层（雨/星尘/脉冲/招牌闪烁）整体关闭 —— 不是压时长，是不渲染
+     （atmo.js 侧同步：reduce 下不会启动 rain 的 Canvas，探针也不跑）。
+     静态层（噪点/扫描线/网格/光晕/光溢）保留但稍减，氛围不塌、不眩晕。
+     带 !important 的原因与其他层显示规则一致：开关规则特异性更高。 */
+  .atmo-layer[data-layer="rain"],
+  .atmo-layer[data-layer="stardust"],
+  .atmo-layer[data-layer="pulse"],
+  .atmo-layer[data-layer="signs"] { display: none !important; }
+  .atmo-layer[data-layer="glow"],
+  .atmo-layer[data-layer="bloom"] { opacity: 0.6; }
+
+  /* ---- ① 关闭装饰性持续动画 ---- */
+
+  /* CRT 扫描线与暗角：纯视觉噪音，且是满屏的重复条纹 ——
+     对动效敏感人群是最刺眼的一项，直接不渲染。 */
+
+  /* 背景网格：静态时无害，但它跟着视口固定，
+     在部分浏览器上会因 scroll 触发重绘抖动，一并关掉动画只留网格。 */
+
+  /* v2.5.0 背景极光漂移（body::before 的 22s 缓慢位移+缩放）。
+     它是"环境氛围动画"但语义上仍属装饰性持续动画 —— 前庭敏感用户
+     同样会受缓慢大范围位移影响，故直接停掉（静止的色雾仍在，
+     视觉上就是一层静态柔光，无损失）。 */
+
+  /* 站点标志的故障抖动（hover 触发）—— 抖动幅度大、频率高 */
+  .logo:hover .logo-mark,
+  .logo:hover .logo-mark::before,
+  .logo:hover .logo-mark::after { animation: none !important; }
+
+  /* 编辑器的状态脉冲点（.editor-pane-head .dot，pulse 2s 无限） */
+  .editor-pane-head .dot { animation: none !important; }
+
+  /* 打字机光标（.type-cursor::after，pulse 0.9s steps(1) 闪烁）
+     —— 高频闪烁对光敏性癫痫同样是风险项，直接常亮。 */
+  .type-cursor::after { animation: none !important; opacity: 1; }
+
+  /* ---- ② 位移动画：保留"出现/消失"的可见性，去掉位移过程 ---- */
+  /* 关键：不能把 animation 整个 none 掉 —— fadein 同时承担了
+     "从 opacity:0 变为可见"的职责（@keyframes fadein 的 to 才是 opacity:1），
+     去掉会让元素永久停在 opacity:0 上 = 内容消失。故只压时长，让它瞬间到位。 */
+  .post-card,
+  .modal,
+  .toast,
+  .toast.hide { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; }
+
+  /* ---- ③ 过渡：全局归零 ---- */
+  /* 三档时长变量集中归零 → 所有用 var(--t-*) 的地方一次生效；
+     再兜一层 * 通配，覆盖少数直接写死时长的历史代码与第三方样式。
+
+     ⚠ 带 !important：本块（@media）与定义这些变量的 :root（无媒体查询）
+     特异性完全相同（都是 :root），@media 不增加特异性 —— 最终取值只由
+     "谁在文件里更靠后"决定。不加 !important 就等于把这四档归零押在
+     "本块永远排在文件最后"这个隐式约定上；一旦有人把本块上移（整理代码、
+     或把新的响应式块追加到末尾），减少动效会静默失效且看不出任何变化。
+     用 !important 把隐式顺序依赖改成显式优先级。 */
+  :root {
+    --t-fast: 0.001ms !important;
+    --t-normal: 0.001ms !important;
+    --t-slow: 0.001ms !important;
+    /* O17：装饰专用时长同样必须归零。此前只列了三档通用时长，--t-sweep 漏在外面
+       —— 当时无害纯属巧合（唯一使用者 .logo:hover::after 被下面的 display:none 关掉了），
+       但任何将来复用 --t-sweep 的元素都会在"减少动效"下真的跑 0.55s，直接违背无障碍承诺。
+       此处补齐；R72k 断言"每个时长型 --t-* 定义都必须出现在本块内"，防止再次遗漏。 */
+    --t-sweep: 0.001ms !important;
+    /* v2.5.0：背景极光漂移时长同步归零（R72k 断言的"每个时长型 --t-*
+       都必须在本块内"直接覆盖到它；漏了会静默跑满 22s 位移）。 */
+  }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* 平滑滚动改回瞬时：从页尾"滑"到页首的长距离动画
+     是前庭不适的主要来源之一（C9 的回到顶部也依赖这一条）。 */
+  html { scroll-behavior: auto !important; }
+
+  /* C9：回顶按钮的进场位移（translateY(10px) → 0）在减少动效下没有意义，
+     直接去掉位移初始值，让它原地显现。 */
+  .to-top { transform: none !important; }
+
+  /* O17：装饰层的位移动画同样要停。
+     · logo 扫描光泽：hover 时 left 从 -120% 扫到 130% —— 横贯整个 logo 的
+       长距离位移，正是最该关掉的一类。直接不显示（它本就是纯装饰，
+       关掉不影响任何信息传达；logo 文字的故障抖动语义由既有规则处理）。
+     · 卡片角标的 hover 提亮是 opacity 过渡，已被上面 `*` 的
+       transition-duration 归零覆盖，无需额外规则；这里显式列出是为了
+       让"装饰层在减少动效下的表现"这一意图可被测试与后人一眼看到。 */
+  .logo:hover::after { display: none !important; }
+  .post-card::before,
+  .post-card::after,
+  .about-card::after { transition: none !important; }
+
+  /* 毛玻璃背景在滚动时每帧重算模糊，低端设备上是最容易掉帧的一项。
+     覆盖 C9/C10 新增的浮层（帮助面板也是 backdrop-filter）。
+     ⚠ v5.6.2：这里原先是 `.topbar, .kbd-help, .radio-dock-inner, .radio-panel` ——
+       电台那两项随审计清单 ④ 删除（旧浮层早没了）。电台现在的常驻控制台是
+       **不透明木纹外壳**，本来就没有 backdrop-filter，所以无需登记。 */
+  .topbar,
+  .kbd-help { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+
+  /* v2.9.4：主题罗盘的三层虚线环 —— 纯装饰自转，停转。
+     ⚠ 只能关动画，不能 display:none：这三层环同时是"当前档位"的指示物，
+     关掉显示会让用户看不出自己选的是哪一档（与 fadein 同类，
+     承担可见性/信息职责的动画一律只压时长或只停转）。 */
+  .theme-swap.is-on .theme-swap-ring, .theme-swap.is-on .theme-swap-ring::before, .theme-swap.is-on .theme-swap-ring::after { animation: none !important; }
+
+  /* v2.9.5：搜索框的旋转光晕同样停转 —— 光晕本身保留（它同时是"此处已聚焦"
+     的指示物），只是不再流转。
+     ⚠ 那个 7s 是裸时长写在 animation 里，不被 --t-* 收敛（R66m 只管 transition）、
+     也不被 R72k 扫到（它只认 --t-* 变量）⇒ 必须在这里显式关掉，别指望兜底。
+     ⚠ 写成单行：R112e 数的是「reduce 块内不含 } 的选择器/声明行 < 20」，
+     当前预算为 0，多一行非单行规则就会把"减少动效"顶爆。 */
+  .search-field:focus-within::before { animation: none !important; opacity: 0.5; }
+
+
+  /* v2.9.8：ABOUT 在线时长 HUD 的两处动效 —— 电流弧停跑、LIVE 点停闪。
+     LIVE 点虽小，steps(1) 的高频明暗切换对光敏人群同样是风险项。
+     ⚠ 2.2s/1.6s 都是裸时长 animation，R66m/R72k 够不着 ⇒ 必须在这里显式关。
+     ⚠ 单行写法：R112e 数的是「reduce 块内不含 } 的行」，预算为 0。 */
+  .uptime-arc::before, .uptime-live i { animation: none !important; }
+
+  /* v2.9.10：计时数字的呼吸 + 电光炸裂（爆环/枝纹/抖动）。
+     呼吸是"常驻循环"，比一次性过渡更持续地消耗前庭耐受 —— 一并停掉，
+     只保留 drop-shadow 的静态辉光（不脉动但仍有霓虹感）。
+     电光三组全在 hover 触发，减少动效下连悬停也不炸。
+     ⚠ 单行写法：R112e 数的是「reduce 块内不含 } 的行」，预算为 0。 */
+  .uptime-num b { animation: none !important; }
+
+  /* v3.1.0 B2 / v4.1 B2：首页的动效 —— 错峰入场（含 Hero）、滚动引导的浮沉与淡出、
+     沿街点亮（view timeline）、街区母线的流动光点、字标描边。
+     入场那一下对前庭敏感人群尤其不友好（整屏元素依次位移），必须停；
+     字标改为"直接完整显示"（静态霓虹仍在，只是不描边）；开机屏直接不出现。
+     ⚠ 单行写法：R112e 数的是「reduce 块内不含 } 的行」，预算为 0。 */
+  .hero-inner, .block, .hero-scroll, .hero-scroll i { animation: none !important; }
+  .about-card { animation: none !important; }
+  .console-panel { animation: none !important; }
+  .tap-ripple { display: none !important; }
+  .district-line::before { animation: none !important; opacity: 0 !important; }
+  .wordmark-glyph { animation: none !important; stroke-dashoffset: 0 !important; }
+  .wordmark-echo { display: none !important; }
+  .boot-first .boot-screen { display: none !important; }
+  .uptime-num b::before, .uptime-num b::after { animation: none !important; opacity: 0 !important; }
+
+  /* O17：全屏 blur 层的开销比上面两个浮层更大 —— body::before 是
+     position:fixed + inset:-20%（140% 视口面积）+ filter:blur(90px)，
+     滚动时持续参与合成，每帧重算模糊。减少动效的诉求本就包含"别让我晕 + 别卡"
+     （前庭不适 + 低端设备降级），故这里一并压掉硬模糊，保留 mask 渐隐
+     （渐变晕斑仍在，只是边缘略清晰，观感差异在 opacity 0.035 下几乎不可见）。
+
+     ⚠ 必须带 !important：body::before 被三个媒体上下文共同改写 ——
+     基础 / @media(max-width:768px)(blur 60px) / 本块（v3.5.0 起断点已收敛，不再引行号）
+     三者特异性完全相同(0,1,0)，@media 本身不增加特异性，故最终取值只由
+     "谁在文件里更靠后"决定。本块当前在最后 → 不加 !important 也能赢；
+     但只要有人日后把 720px 块挪到文件末尾（顺手整理代码时的常见操作），
+     手机 + 减少动效的组合就会静默失效（被 blur(60px) 反覆盖）。
+     用 !important 把这个隐式顺序依赖改成显式优先级 —— 与本块 backdrop-filter
+     的既有写法保持一致，也符合"reduce 块是最终裁决者"的语义。
+     注：本块内其它规则（.post-card::before 等）的特异性高于基础规则，
+     不受此问题影响，无需一并加 !important。 */
+  /* v4.9.1：锁定态的霓虹锁 —— 尊重「减少动效」偏好。
+     ⚠ 必须显式归零：@keyframes lk-scan 是**无限循环**动画，
+       不像进场动画那样跑一次就停，漏掉这条会一直闪。
+     与本站既有做法一致（见 .wordmark-glyph 的同处处理）。 */
+  /* v5.5.0：左半侧雷达扫掠 / 回波闪烁 / 频谱跳动一律归零 */
+  .holo-radar::after, .holo-radar i, .holo-bars i { animation: none !important; }
+  .holo-radar i { opacity: .6 !important; }
+  .holo-bars i { height: 40% !important; }
+  /* v5.4.0：首页全息面板的扫描线 / 故障字错位 / 呼吸灯一律归零 */
+  .holo-uptime.glitch::before, .holo-uptime.glitch::after { animation: none !important; }
+  .holo-card { transform: none !important; }
+  /* v5.1.0：控制台的两个无限循环装饰动画（指针扫频 / VU 电平） */
+  .rc-tune-needle, .rc-vu i { animation: none !important; }
+  .rc-tune-needle { left: 40% !important; }
+  .card-mark.is-locked:hover .lk-scan,
+  .btn-mark.is-locked:hover .lk-scan { animation: none !important; opacity: 0 !important; }
+  .card-mark.is-locked:hover .mark-lock,
+  .btn-mark.is-locked:hover .mark-lock { transform: none !important; }
+
+}
+
+/* ============================================================
+   v5.4.0：首页两栏 —— 左「二次元全息」面板 / 右「身份卡」
+   ⚠ 站长 2026-10-01 放宽了规矩：可以照抄开源代码、颜色不必死守主题变量。
+     本块的技法参考（均为开源，逐条署名）：
+       · 故障字 glitch：alddesign/cyberpunk-css（纯 CSS 库）
+       · 霓虹切角边框 / 扫描线：@laddtnov/cyberpunk-ui + Uiverse（MIT）卡片
+       · 全息倾斜 + 虹彩反光：DevCard 3D 的思路（跟随鼠标倾斜 + 渐变高光）
+     颜色按站长新规**自由取色**（全息紫青 + 洋红），只有"该跟换肤联动"的部分才挂主题变量。
+   ⚠ 动效一律在文件末尾的 reduce 块里显式归零。
+   ============================================================ */
+.holo-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 18px;
+  margin: 0 0 26px;
+}
+
+/* ---------- 右：身份卡（全息倾斜） ---------- */
+.holo-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 42, 190, .38);
+  background: linear-gradient(160deg, #0b0a1a 0%, #12081c 55%, #06060f 100%);
+  padding: 18px 18px 16px;
+  transform-style: preserve-3d;
+  transition: transform var(--t-fast);
+  will-change: transform;
+}
+/* 虹彩反光：随倾斜变化的斜向高光（DevCard 3D 的思路） */
+.holo-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .10) 45%, rgba(0, 240, 255, .12) 52%, rgba(255, 42, 190, .12) 58%, transparent 72%);
+  opacity: 0;
+  transition: opacity var(--t-fast);
+  pointer-events: none;
+}
+.holo-card.is-tilting::after { opacity: 1; }
+.holo-id-top { display: flex; align-items: center; gap: 12px; }
+.holo-avatar {
+  width: 52px; height: 52px; flex: 0 0 auto;
+  border: 1px solid rgba(120, 240, 255, .5);
+  background: radial-gradient(circle at 35% 30%, rgba(0, 240, 255, .35), rgba(122, 92, 255, .25) 60%, transparent);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 20px; color: #eafcff;
+  box-shadow: 0 0 18px rgba(0, 240, 255, .28) inset;
+}
+.holo-name { font-size: 19px; color: #f2f7ff; letter-spacing: 1px; }
+.holo-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.holo-tag {
+  font: 10px/1 var(--mono); letter-spacing: 1px;
+  border: 1px solid rgba(122, 92, 255, .45);
+  color: #b9a8ff; padding: 4px 7px;
+}
+.holo-now {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed rgba(122, 92, 255, .28);
+}
+.holo-now-label { font: 10px/1 var(--mono); letter-spacing: 2px; color: #8d86b8; }
+.holo-now-title { margin-top: 6px; font-size: 13px; color: #dfe7ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.holo-now-sub { font: 10px/1.5 var(--mono); color: #7e78a8; }
+
+
+/* ---------- v5.5.0：左半侧花样（雷达扫掠 / 信号频谱） ----------
+   技法来源（开源，就地署名）：
+     · 雷达扫掠 = fwdtools「Radar Sweep Scan Loader」与 CSDN「纯 CSS 雷达扫描动画」的
+       conic-gradient 扇形扫掠技法，这里改成"盘 + 一圈刻度 + 扫掠扇 + 回波点"
+     · 霓虹切角与配色 = sebyx07/cybercore-css（纯 CSS 赛博朋克框架）的霓虹美学
+   颜色按站长新规自由取（紫青 + 洋红 + 琥珀），不强行挂主题变量。
+   ⚠ 动效仅三处（扫掠 / 回波闪烁 / 频谱跳动），全部在 reduce 块归零。 */
+/* v5.5.1：雷达盘做大做细 —— 尺寸 108→144、三层同心圆、十字准线、15° 主刻度 */
+.holo-radar {
+  position: relative;
+  width: 144px; height: 144px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1px solid rgba(122, 92, 255, .5);
+  background:
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, .12), transparent 64%),
+    /* 三层同心圆：repeating-radial-gradient 一圈一段，比画 SVG 便宜 */
+    repeating-radial-gradient(circle at 50% 50%, rgba(122, 92, 255, .30) 0 1px, transparent 1px 22px),
+    /* 十字准线：两条 1px 细线 */
+    linear-gradient(0deg, transparent calc(50% - .5px), rgba(122, 92, 255, .28) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(122, 92, 255, .28) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)),
+    #07070f;
+  box-shadow: inset 0 0 22px rgba(122, 92, 255, .28), 0 0 18px rgba(122, 92, 255, .12);
+  overflow: hidden;
+}
+/* 一圈刻度：repeating-conic-gradient 只画扇区线，比 SVG 便宜 */
+.holo-radar::before {
+  content: '';
+  position: absolute; inset: 8px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(140, 120, 255, .55) 0 .5deg, transparent .5deg 15deg);
+  -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
+          mask: radial-gradient(circle, transparent 62%, #000 63%);
+}
+/* 扫掠扇：conic-gradient 扇形 + rotate 动画 */
+.holo-radar::after {
+  content: '';
+  position: absolute; inset: 6px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, rgba(0, 240, 255, .55) 0deg, rgba(0, 240, 255, .12) 34deg, transparent 60deg, transparent 360deg);
+  animation: holo-sweep 4.6s linear infinite;
+}
+@keyframes holo-sweep { to { transform: rotate(360deg); } }
+/* 回波点：三个固定坐标的亮点，错峰闪烁 */
+.holo-radar i {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  background: #6ef0ff; box-shadow: 0 0 8px #6ef0ff;
+  animation: holo-echo 3.2s ease-in-out infinite;
+}
+.holo-radar i:nth-child(1) { left: 66%; top: 34%; animation-delay: .2s; }
+.holo-radar i:nth-child(2) { left: 38%; top: 62%; animation-delay: 1.1s; background: #ff6ea8; box-shadow: 0 0 8px #ff6ea8; }
+.holo-radar i:nth-child(3) { left: 72%; top: 70%; animation-delay: 2.0s; }
+@keyframes holo-echo { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+
+/* 信号频谱：一排高低不一的柱子（纯 CSS，装饰用） */
+.holo-bars { display: flex; align-items: flex-end; gap: 3px; height: 34px; margin-top: 12px; }
+.holo-bars i {
+  flex: 1 1 0; min-width: 2px;
+  background: linear-gradient(180deg, #6ef0ff, rgba(122, 92, 255, .35));
+  height: 30%;
+  animation: holo-bar 1.9s ease-in-out infinite;
+}
+.holo-bars i:nth-child(3n) { background: linear-gradient(180deg, #ff6ea8, rgba(122, 92, 255, .35)); }
+.holo-bars i:nth-child(1) { animation-delay: .05s; } .holo-bars i:nth-child(2) { animation-delay: .18s; }
+.holo-bars i:nth-child(3) { animation-delay: .31s; } .holo-bars i:nth-child(4) { animation-delay: .44s; }
+.holo-bars i:nth-child(5) { animation-delay: .57s; } .holo-bars i:nth-child(6) { animation-delay: .70s; }
+.holo-bars i:nth-child(7) { animation-delay: .83s; } .holo-bars i:nth-child(8) { animation-delay: .96s; }
+.holo-bars i:nth-child(9) { animation-delay: 1.09s; } .holo-bars i:nth-child(10) { animation-delay: 1.22s; }
+.holo-bars i:nth-child(11) { animation-delay: 1.35s; } .holo-bars i:nth-child(12) { animation-delay: 1.48s; }
+@keyframes holo-bar { 0%, 100% { height: 22%; } 50% { height: 100%; } }
+/* 左半侧的"仪表行"：雷达 + 说明文字并排 */
+.holo-gauge { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
+.holo-gauge-text { font: 11px/1.7 var(--mono); color: #8d86b8; letter-spacing: 1px; min-width: 0; }
+.holo-gauge-text b { color: #cbb8ff; font-weight: 400; }
+

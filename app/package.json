@@ -1,0 +1,36 @@
+{
+  "name": "neon-diary",
+  "version": "5.7.0",
+  "private": true,
+  "description": "NEON://DIARY — 赛博朋克个人博客（纯静态 + 云服务）",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "gate": "node tests/run-all.js",
+    "fault": "node tests/fault-matrix.js",
+    "regress": "node tests/regress.js",
+    "sandbox": "node tests/sandbox-p2.js",
+    "baseline": "node tools/baseline-cases.js",
+    "feed": "node tools/gen-feed.js",
+    "build": "npm run gate && npm run feed",
+    "preversion": "npm run gate",
+    "version:check": "node tools/check-version.js"
+  },
+  "devDependencies": {
+    "jsdom": "^24.0.0"
+  },
+  "comments": {
+    "gate": "发布铁律：全绿才允许发布（故障注入 + 功能回归 + 行为沙箱）",
+    "fault": "单跑故障注入矩阵（7 场景）",
+    "regress": "单跑功能回归（28 个 case，由 tests/regress.js 编排）",
+    "sandbox": "单跑行为沙箱（TOC/搜索/归档真交互）",
+    "feed": "E2 解锁 C4：构建期拉云端已发布文章生成静态 feed.xml",
+    "build": "完整构建 = 门禁 + 产物生成",
+    "preversion": "bump 前自动跑门禁，防止带病发版",
+    "split": "D3 拆分器：把 tests/regress.js 按 case 拆成 tests/cases/*.js 并刷新 manifest（新增 case 后跑）",
+    "baseline": "刷新各 case 的断言数基线（增删断言后必须跑，否则对账报红）",
+    "version:check": "校验 version.js / index.html / LOG 三处一致"
+  }
+}
