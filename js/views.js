@@ -220,6 +220,23 @@
       '<span class="empty-hint">' + esc(state.error) + '</span></div>';
   }
 
+  /* v4.9.1：锁定态用的霓虹锁（**内联 SVG**，不用 <use>/sprite）。
+     ⚠ 为什么不用 sprite + <use>：<use> 克隆出的内容活在**影子树**里，
+       `.mark-lock .lk-body` 这类选择器**进不去**，于是描边规则全部失效、
+       path 退回默认 fill:#000 —— 实测渲染成一块黑色实心疙瘩（截图才发现）。
+       同理，悬停时那条扫描线也永远动不了。内联之后选择器与动画都正常。
+     ⚠ 这段必须与 app.js 的 LOCK_SVG **字面一致**：两处渲染出不同的锁，
+       正是本项目踩过的"半新半旧"那类事故（卡片版 / 详情页版 / 空态版三处都用它）。 */
+  function lockSvg() {
+    return '<svg class="mark-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+      '<path class="lk-shackle" d="M8.4 10.6V8.2a3.6 3.6 0 0 1 7.2 0v2.4"/>' +
+      '<path class="lk-body" d="M6.6 10.6h10.8l1.6 1.6v6.6l-1.6 1.6H6.6L5 18.8v-6.6z"/>' +
+      '<circle class="lk-hole" cx="12" cy="14.5" r="1.5"/>' +
+      '<path class="lk-hole" d="M12 15.9v2.4"/>' +
+      '<path class="lk-scan" d="M5.4 12.4h13.2"/>' +
+      '</svg>';
+  }
+
   function postCard(p) {
     /* 注意：数据库行字段是 cover_ref（snake_case）。
        此处曾误写 coverRef（camelCase）导致首页封面从不渲染，v1.5.0 修复。 */
@@ -249,13 +266,16 @@
        aria-pressed 让读屏知道当前是否已收藏（配合 C10）。 */
     var marked = !!(p._marked);
     /* v4.9.0：未登录时按钮仍是可点的（点了给"需要登录"的引导），
-       但要**看起来**像锁上的 —— 否则访客会以为点了没反应。 */
+       但要**看起来**像锁上的 —— 否则访客会以为点了没反应。
+       v4.9.1：锁不再用 🔒 emoji（与霓虹风格不搭），改为内联 SVG 图元
+       `#neon-lock`（定义在 index.html 的 sprite 里，currentColor 穿过 <use> 继承，
+       所以颜色自动跟随按钮 —— 换主题/色相不用改一行代码）。 */
     var locked = !!p._markLocked;
     var markHtml = '<button type="button" class="card-mark' + (marked ? ' is-on' : '') + (locked ? ' is-locked' : '') +
       '" data-mark="' + p.id + '" aria-pressed="' + (marked ? 'true' : 'false') +
       '" title="' + (locked ? '登录后可收藏' : (marked ? '取消收藏' : '收藏这条信号')) + '"' +
       ' aria-label="' + (locked ? '登录后可收藏：' : (marked ? '取消收藏：' : '收藏这条信号：')) + esc(p.title) + '">' +
-      '<span class="mark-glyph" aria-hidden="true">' + (locked ? '🔒' : (marked ? '◈' : '◇')) + '</span></button>';
+      '<span class="mark-glyph" aria-hidden="true">' + (locked ? lockSvg() : (marked ? '◈' : '◇')) + '</span></button>';
     return '' +
       /* F1 卡片键盘可达：tabindex 让整卡进入 Tab 序，role=link + aria-label
          告诉读屏这是一个"链接到文章"的元素及其目的地。
@@ -808,7 +828,7 @@
     var markBtn = '<button type="button" class="btn btn-ghost btn-mark' + (marked ? ' is-on' : '') + (markLocked ? ' is-locked' : '') +
       '" id="post-mark" data-mark="' + p.id + '" aria-pressed="' + (marked ? 'true' : 'false') + '"' +
       ' title="' + (markLocked ? '登录后可收藏' : (marked ? '取消收藏' : '收藏这条信号')) + '">' +
-      '<span class="mark-glyph" aria-hidden="true">' + (markLocked ? '🔒' : (marked ? '◈' : '◇')) + '</span>' +
+      '<span class="mark-glyph" aria-hidden="true">' + (markLocked ? lockSvg() : (marked ? '◈' : '◇')) + '</span>' +
       (markLocked ? '登录后可收藏' : (marked ? '已收藏' : '收藏')) + '</button>';
     /* v3.2.0 B3 / v4.2 B3：正文改为「阅读栅格」——正文列 + TOC 辅助栏。
        v4.2 在栅格之上叠加「终端阅读框」：工具条（解码读数 + 行号开关）+ 行号 gutter。
@@ -1203,7 +1223,7 @@
     /* ★ v4.9.0 门槛：未登录只能浏览。
        与「标签管理」同一处理 —— 给明确引导，而不是渲染一个点了没反应的界面。 */
     if (state.needLogin) {
-      html += '<div class="empty-state"><span class="empty-glyph">🔒</span><span class="empty-code">ACCESS REQUIRED</span>' +
+      html += '<div class="empty-state"><span class="empty-glyph empty-glyph-lock">' + lockSvg() + '</span><span class="empty-code">ACCESS REQUIRED</span>' +
         '<span class="empty-hint">收藏是账号功能：登录后才能收藏，未登录只能浏览。' +
         '登录后收藏跟着账号走 —— 换设备也在。</span>' +
         '<div style="margin-top:22px"><button class="btn" id="marks-login">去登录 / ACCESS</button></div></div>';

@@ -54,11 +54,15 @@ async function run() {
     T(CN, 'R285 访客首页渲染出卡片（前置条件成立）', ok, ok ? '' : '卡片没渲染出来');
 
     const btn = ctx.doc.querySelector('.post-card .card-mark');
-    T(CN, 'R285b 访客的收藏按钮显示**锁定态**（is-locked + 锁形 + 说明文案）',
+    /* v4.9.1：锁从 🔒 emoji 换成**内联** SVG（不是 <use>/sprite —— 影子树里类选择器
+       进不去，描边会失效、渲染成黑色实心块，实测截图才发现）。
+       判据钉三件事：有 SVG、里面有锁体 path、且锁体带 class（css 靠它描边）。 */
+    T(CN, 'R285b 访客的收藏按钮显示**锁定态**（内联霓虹锁 SVG + 说明文案）',
       !!btn && btn.classList.contains('is-locked') &&
-      /登录后可收藏/.test(btn.getAttribute('title') || '') &&
-      /🔒/.test(btn.textContent || ''),
-      btn ? ('class=' + btn.className + ' title=' + btn.getAttribute('title')) : '按钮不存在');
+      !!btn.querySelector('svg.mark-lock .lk-body') &&
+      !!btn.querySelector('svg.mark-lock .lk-shackle') &&
+      /登录后可收藏/.test(btn.getAttribute('title') || ''),
+      btn ? ('class=' + btn.className + ' path=' + !!btn.querySelector('.mark-lock .lk-body')) : '按钮不存在');
 
     const before = cloudWrites(ctx).length;
     clickMark(ctx, 0);

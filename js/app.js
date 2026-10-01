@@ -210,6 +210,19 @@
   var LEGACY_MARK_KEY = 'neon_bookmarks';   /* v4.9.0 之前的本机键（只用于一次性迁移） */
   var marksLoaded = false;                  /* 是否已从云端取过一次（区分"空"与"还没取"） */
 
+  /* v4.9.1：锁定态用的霓虹锁 —— **内联 SVG**，与 views.js 的 lockSvg() 字面一致。
+     ⚠ 不能用 sprite + <use>：克隆内容在影子树里，类选择器进不去 —— 描边会失效、
+       渲染成黑色实心块（实测截图才发现），扫描线动画也无从触发。
+     图元造型与配色全在 css/style.css 的 .mark-lock 里，靠 currentColor 跟随按钮，
+     所以换主题 / 换色相不用改这里一行。 */
+  var LOCK_SVG = '<svg class="mark-lock" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' +
+    '<path class="lk-shackle" d="M8.4 10.6V8.2a3.6 3.6 0 0 1 7.2 0v2.4"/>' +
+    '<path class="lk-body" d="M6.6 10.6h10.8l1.6 1.6v6.6l-1.6 1.6H6.6L5 18.8v-6.6z"/>' +
+    '<circle class="lk-hole" cx="12" cy="14.5" r="1.5"/>' +
+    '<path class="lk-hole" d="M12 15.9v2.4"/>' +
+    '<path class="lk-scan" d="M5.4 12.4h13.2"/>' +
+    '</svg>';
+
   function isLoggedIn() {
     return !!(State.session && State.session.user);
   }
@@ -280,7 +293,7 @@
   }
 
   /* 按状态重画一个收藏按钮（图标 / 类名 / aria / 文案 / title 一处收口）
-     三态：locked（未登录，显示锁）｜on（已收藏）｜off（未收藏） */
+     三态：locked（未登录，显示霓虹锁）｜on（已收藏 ◈）｜off（未收藏 ◇） */
   function paintMark(btn, on, locked) {
     if (!btn) return;
     locked = !!locked;
@@ -289,7 +302,14 @@
     btn.classList.toggle('is-locked', locked);
     btn.setAttribute('aria-pressed', active ? 'true' : 'false');
     var glyph = btn.querySelector('.mark-glyph');
-    if (glyph) glyph.textContent = locked ? '🔒' : (active ? '◈' : '◇');
+    if (glyph) {
+      /* v4.9.1：锁是 SVG（innerHTML）、收藏态是文字字形（textContent）——
+         两者互斥，切换时必须显式覆盖，否则会留下上一次的残留节点。
+         ⚠ 这段结构必须与 views.js 的 lockSvg() 字面一致（卡片版与详情页版
+           渲染出不同的锁，正是本项目踩过的"半新半旧"那类事故）。 */
+      if (locked) glyph.innerHTML = LOCK_SVG;
+      else glyph.textContent = active ? '◈' : '◇';
+    }
     btn.setAttribute('title', locked ? '登录后可收藏' : (active ? '取消收藏' : '收藏这条信号'));
     /* 详情页那个是带文字的大按钮，文案要跟着变（只替换尾部文本节点） */
     if (btn.id === 'post-mark') {
@@ -1982,7 +2002,7 @@
     if (!State.session) {
       app.innerHTML = '<div class="page-head"><h1>TAG CONTROL</h1>' +
         '<div class="crumb">频段管理 · <b>需要作者身份</b></div></div>' +
-        '<div class="empty-state"><span class="empty-glyph">🔒</span><span class="empty-code">ACCESS DENIED</span>' +
+        '<div class="empty-state"><span class="empty-glyph empty-glyph-lock">' + LOCK_SVG + '</span><span class="empty-code">ACCESS DENIED</span>' +
         '<span class="empty-hint">标签管理是写操作，请先登录</span>' +
         '<div style="margin-top:22px"><a class="btn" href="#/login">接入系统 ▸</a></div></div>';
       window.scrollTo(0, 0);

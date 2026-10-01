@@ -3869,18 +3869,96 @@ a:focus-visible { text-decoration: underline; }
 }
 /* v4.9.0：未登录时的锁定态 —— 按钮仍可点（点了引导去登录），
    但要一眼看出"现在还不能收藏"，否则访客会以为点了没反应。
-   ⚠ 不做 pointer-events:none / disabled —— 那会连"为什么不能点"都问不出来。 */
+   ⚠ 不做 pointer-events:none / disabled —— 那会连"为什么不能点"都问不出来。
+   ⚠ v4.9.1 去掉 opacity：本项目 R59h 明令"灰字规则不得额外叠 opacity"
+     （叠了会把辛苦提上来的对比度又打回去，只有真·禁用态豁免）。
+     这里靠**颜色**表达暗淡即可 —— 锁的造型（钢色锁体 + 品红锁梁）已足够可读。 */
 .card-mark.is-locked,
 .btn-mark.is-locked {
-  opacity: .55;
-  color: var(--dim, #7a8394);
-  border-color: rgba(122, 131, 148, .45);
+  color: var(--text-dim);
+  border-color: color-mix(in srgb, var(--text-dim) 45%, transparent);
 }
 .card-mark.is-locked:hover,
 .btn-mark.is-locked:hover {
   color: var(--cyan);
-  opacity: .85;
+  border-color: color-mix(in srgb, var(--cyan) 65%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 28%, transparent),
+              0 0 14px color-mix(in srgb, var(--cyan) 18%, transparent);
 }
+
+/* ---------- v4.9.1：锁定态的霓虹锁（内联 SVG，替代原来的 🔒 emoji）----------
+   为什么换掉 emoji：emoji 是**彩色位图字体**，颜色不跟 CSS 变量走、各平台字形还不同
+   （Windows 是黄色挂锁、macOS 是灰锁），在这个全站由 --hue 驱动的配色体系里像贴纸。
+
+   ⚠ 借法自（只借技法，不搬组件 —— 与 v2.9.4/v2.9.5 借 Uiverse 时的规矩一致）：
+     · React Bits「Electric Border」—— 通电边缘的辉光层次（这里落在锁梁的发光上）
+     · React Bits「Target Cursor」—— "四角闭合/锁定"的意象（本站用切角锁体承接）
+     · Uiverse 静态素材的纯 CSS 描边 + 扫描线技法
+     颜色一律换成本站变量：锁体走 currentColor、锁梁走 --magenta、
+     悬停高亮走 --cyan —— 因此三套主题 × 九档色相全部自动跟随，无需额外代码。
+
+   几何：锁体是**切角矩形**（四角各切一刀），与全站 .clip-corner 同一套语言；
+   锁梁两段留缝，像未闭合的电路。 */
+.mark-lock {
+  display: block;
+  width: 15px;
+  height: 15px;
+  overflow: visible;                 /* 辉光要能溢出 24×24 视框，否则被裁掉 */
+  transition: transform var(--t-fast);
+}
+.card-mark .mark-lock { width: 16px; height: 16px; }
+/* 锁体：切角轮廓 + **暗色填充**。为什么不留纯线框：16px（卡片按钮里）时
+   线框会显得单薄、像没画完；填一层接近背景的暗色，视觉上才是"一块封住的金属"，
+   同时轮廓仍然靠描边读出来（对比度不依赖填充）。 */
+.mark-lock .lk-body {
+  fill: color-mix(in srgb, var(--bg-0) 78%, transparent);
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: miter;            /* 切角要"硬"，圆角就软了 */
+  filter: drop-shadow(0 0 4px color-mix(in srgb, currentColor 45%, transparent));
+}
+.mark-lock .lk-hole {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: miter;
+}
+.mark-lock .lk-shackle {
+  fill: none;
+  stroke: var(--magenta);            /* 锁梁用强调色：一眼看出"封住了" */
+  stroke-width: 1.7;
+  stroke-linecap: square;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--magenta) 55%, transparent));
+}
+.mark-lock .lk-scan {
+  stroke: var(--cyan);
+  stroke-width: 1.1;
+  opacity: 0;                        /* 静止时不可见，仅悬停时扫过 */
+}
+/* 悬停：整锁轻微上浮 + 扫描线自上而下扫一遍（通电感） */
+.card-mark.is-locked:hover .mark-lock,
+.btn-mark.is-locked:hover .mark-lock { transform: translateY(-1px); }
+.card-mark.is-locked:hover .lk-scan,
+.btn-mark.is-locked:hover .lk-scan { animation: lk-scan 1.1s linear infinite; }
+@keyframes lk-scan {
+  0%   { transform: translateY(-3.6px); opacity: 0; }
+  25%  { opacity: .75; }
+  75%  { opacity: .75; }
+  100% { transform: translateY(3.6px); opacity: 0; }
+}
+
+/* 空态里的大号霓虹锁（收藏页 ACCESS REQUIRED / 标签管理 ACCESS DENIED）。
+   与按钮里那把是**同一段图元**（#neon-lock），只是放大 —— 空态原来的 🔒 emoji
+   在深色霓虹底上像贴纸：emoji 是彩色位图字体，颜色不跟 CSS 变量走。 */
+.empty-glyph-lock .mark-lock {
+  width: 42px;
+  height: 42px;
+  margin: 0 auto;
+}
+.empty-glyph-lock .mark-lock .lk-body,
+.empty-glyph-lock .mark-lock .lk-hole { stroke-width: 1.3; }
+.empty-glyph-lock .mark-lock .lk-shackle { stroke-width: 1.4; }
+.empty-glyph-lock .mark-lock .lk-body { stroke: var(--text-dim); }
 
 /* 键盘可达：卡片获得焦点时，收藏按钮也应有可见焦点环 */
 .card-mark:focus-visible {
@@ -5382,4 +5460,13 @@ body:not(.linenum-off) .md-body > pre::before {
      的既有写法保持一致，也符合"reduce 块是最终裁决者"的语义。
      注：本块内其它规则（.post-card::before 等）的特异性高于基础规则，
      不受此问题影响，无需一并加 !important。 */
+  /* v4.9.1：锁定态的霓虹锁 —— 尊重「减少动效」偏好。
+     ⚠ 必须显式归零：@keyframes lk-scan 是**无限循环**动画，
+       不像进场动画那样跑一次就停，漏掉这条会一直闪。
+     与本站既有做法一致（见 .wordmark-glyph 的同处处理）。 */
+  .card-mark.is-locked:hover .lk-scan,
+  .btn-mark.is-locked:hover .lk-scan { animation: none !important; opacity: 0 !important; }
+  .card-mark.is-locked:hover .mark-lock,
+  .btn-mark.is-locked:hover .mark-lock { transform: none !important; }
+
 }
