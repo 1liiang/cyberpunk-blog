@@ -1445,8 +1445,12 @@
           ? '<div class="radio-embed">' +
               '<div class="radio-embed-hint">网易云音乐 · 官方外链播放器（在播放器里点播放）</div>' +
               '<iframe class="radio-embed-frame" src="' + esc(st.embedUrl) + '"' +
-                ' width="330" height="66" frameborder="0" allow="autoplay" loading="lazy"' +
+                ' width="330" height="66" frameborder="0" allow="autoplay"' +
                 ' title="网易云音乐外链播放器"></iframe>' +
+              /* 兜底：个别网络/地区可能加载不出来，给一条能直接打开的链接
+                 （外链播放器本身也是网易云官方页面，打开即为同一首歌） */
+              '<a class="radio-embed-fallback" href="' + esc(st.embedUrl) + '" target="_blank" rel="noopener noreferrer">' +
+                '播放器加载不出来？在新窗口打开 ↗</a>' +
             '</div>'
           : '') +
         '<div class="radio-now">' +

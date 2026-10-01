@@ -4624,6 +4624,17 @@ body.has-radio .wrap { padding-top: 84px; }
   margin-bottom: 6px;
 }
 .radio-embed-frame { display: block; border: 1px solid var(--line); background: #000; max-width: 100%; }
+.radio-embed-fallback {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
+.radio-embed-fallback:hover { color: var(--cyan); }
 
 .radio-field { display: flex; flex-direction: column; gap: 4px; }
 /* v4.9.5：音源二选一的分隔小标题（外链/内链）。做成一条带左侧色标的窄行，
