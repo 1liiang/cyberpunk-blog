@@ -2174,10 +2174,11 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg,
-    rgba(4, 6, 13, .74) 0%,
-    rgba(4, 6, 13, .42) 44%,
-    rgba(4, 6, 13, .94) 100%);
+  /* 两层遮罩：左侧更暗（文字在那边）、上下收边（避免图的亮部顶到边框）——
+     原图的视觉重心是人物（在中右），文字若居中就会压在脸上。 */
+  background:
+    linear-gradient(90deg, rgba(4, 6, 13, .93) 0%, rgba(4, 6, 13, .74) 34%, rgba(4, 6, 13, .30) 62%, rgba(4, 6, 13, .18) 100%),
+    linear-gradient(180deg, rgba(4, 6, 13, .70) 0%, rgba(4, 6, 13, .30) 40%, rgba(4, 6, 13, .88) 100%);
 }
 .search-hero-inner {
   position: relative;
@@ -2185,13 +2186,15 @@ body {
   min-height: 320px;
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* 文字靠左：让开人物的脸，同时吃满左侧那层更暗的遮罩（可读性 + 构图都更稳） */
+  justify-content: flex-start;
+  padding: 0 clamp(20px, 6%, 64px);
 }
 /* 暗色孤岛：这里的文字不跟主题走（理由见上） */
-.search-hero .empty-state { padding: 44px 20px; color: #b9c6da; }
+.search-hero .empty-state { padding: 44px 0; text-align: left; color: #b9c6da; }
 .search-hero .empty-state .empty-glyph { color: #6ef0ff; text-shadow: 0 0 18px rgba(0, 240, 255, .45); }
 .search-hero .empty-state .empty-code { color: #ff6ea8; text-shadow: 0 0 14px rgba(255, 42, 109, .35); }
-.search-hero .empty-state .empty-hint { color: #cfd9e8; }
+.search-hero .empty-state .empty-hint { color: #cfd9e8; max-width: 30ch; display: block; }
 
 .search-bar {
   display: flex;
