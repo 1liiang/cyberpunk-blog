@@ -4227,59 +4227,6 @@ a:focus-visible { text-decoration: underline; }
 }
 
 /* ============================================================
-   v2.8.0 ~ v5.1.0：电台（RADIO）
-   ------------------------------------------------------------
-   ⚠ v5.6.2 清理（审计清单 ④）：v2.8.0 那套「迷你条 dock + 弹出面板」的样式
-   已整段删除 —— `.radio-dock*` / `.radio-panel*` / `.radio-track*` /
-   `.radio-btn*` / `.radio-now*` / `.radio-seek` / `.radio-volume` / `.radio-bar` /
-   `.radio-time` / `.radio-ctrls` / `.radio-vol*` / `.radio-list*` / `.radio-empty*` /
-   `.radio-embed*` / `.radio-drop` / `.radio-hint` / `.radio-err` / `.radio-mark` /
-   `.radio-glyph` / `.radio-dock-arrow`，以及 `body.has-radio .wrap` 让位规则、
-   `@keyframes radio-pulse` / `radio-marquee`、reduce 块里为它们写的三条归零。
-   证据：这些类名在 views.js / app.js / index.html 里**零标记**（容器 v5.2.0 移除、
-   渲染函数 v5.6.1 删除），只剩 CSS 自己在引用自己。
-       / `.radio-field` / `.radio-select` / `.radio-src-head` / `.radio-form*` / `.radio-op*`
-     · 常驻控制台 → `.radio-console` / `.rc-*`（复古收音机那套，见下方 v5.1.0 段）
-   ============================================================ */
-
-.radio-form {
-  margin-top: 10px;
-  padding: 12px;
-  background: color-mix(in srgb, var(--bg-2) 70%, transparent);
-  border: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-.radio-form[hidden] { display: none; }
-   v5.1.0：电台常驻控制台（复古收音机）+ 电台页
-   样式参考 GitHub/Codeberg 上那批复古播放器（kitsune、Junk Phonic 9000、cliamp）：
-   木纹外壳 + 金属面板 + 调谐刻度 + VU 电平表 + 旋钮，再叠本站霓虹点缀。
-   ⚠ 控制台是**固定定位**且挂在 #app 之外 —— 它的唯一使命是"切页面不断歌"，
-     所以不要把它塞回页面流里（那会随着路由重绘被销毁）。
-   ⚠ 复古材质用的是本块内的局部变量：它模拟的是一台**实体机器**，
-     材质不该跟着网站主题（霓虹/浅色）一起翻 —— 与"封面压字""搜索页插画"同一套思路。 */
-/* 调谐刻度：一条米色刻度带 + 一根会随条目移动的指针 */
-@keyframes rc-sweep { 0%, 100% { left: 12%; } 50% { left: 78%; } }
-/* 扬声器网：斜纹 + 内阴影，做出"网罩"的质感 */
-/* VU 电平表：装饰用（iframe 内部状态读不到，不做假同步） */
-@keyframes rc-vu { 0%, 100% { height: 22%; } 50% { height: 92%; } }
-/* 旋钮：金属同心圆 + 指针，点了进电台页 */
-
-/* 电台页 */
-/* 电台页底部要给固定控制台留出空间，否则最后一条被盖住 */
-
-/* reduce 块：控制台的装饰动画也归零（本文件末尾的 reduce 块会兜住动画，
-   这里只处理 VU/指针那两个无限循环） */
-/* v4.9.5：音源二选一的分隔小标题（外链/内链）。做成一条带左侧色标的窄行，
-   让"从这里开始是音源"在视觉上切开，不至于被当成又一个普通字段。 */
-
-/* ⚠ v5.6.3：这里原是 @keyframes radio-pulse（旧迷你条的电平脉冲）。
-   v5.6.2 删它时只删到第一个 `}`，把后半个 keyframe（`50% { … }` + 收尾 `}`）
-   落成了孤儿片段 —— 浏览器会静默忽略，但整份样式的括号配平因此一直差 1。
-   本次清理删净；门禁里也加了「CSS 结构性守卫」（见 49 号）防止再犯。 */
-
-/* ============================================================
    v5.7.0（P2）：低端设备档 —— html[data-tier="low"]
 
    起因（实测取证）：全站 64 条规则用了 box-shadow / filter:blur / backdrop-filter，
@@ -5248,15 +5195,6 @@ body:not(.linenum-off) .md-body > pre::before {
   border: 1px solid rgba(122, 92, 255, .45);
   color: #b9a8ff; padding: 4px 7px;
 }
-.holo-now {
-  margin-top: 14px; padding-top: 12px;
-  border-top: 1px dashed rgba(122, 92, 255, .28);
-}
-.holo-now-label { font: 10px/1 var(--mono); letter-spacing: 2px; color: #8d86b8; }
-.holo-now-title { margin-top: 6px; font-size: 13px; color: #dfe7ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.holo-now-sub { font: 10px/1.5 var(--mono); color: #7e78a8; }
-
-
 /* ---------- v5.5.0：左半侧花样（雷达扫掠 / 信号频谱） ----------
    技法来源（开源，就地署名）：
      · 雷达扫掠 = fwdtools「Radar Sweep Scan Loader」与 CSDN「纯 CSS 雷达扫描动画」的
