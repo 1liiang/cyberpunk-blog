@@ -16,7 +16,9 @@
      · jsdom 无真实 Audio —— 必须用桩，且要观测 setAttribute 等调用而非只读属性
    ============================================================ */
 const { makeSuite, standalone } = require('../case-runner');
-const { SRC, stripComments, stripJsLineComments } = require('../common');
+const { SRC, stripComments, stripJsLineComments, ROOT } = require('../common');
+const fs = require('fs');
+const path = require('path');
 
 /* 顶层规则遍历器（剥选择器内注释，同 33/34 号）。
    ⚠ 返回 [sel, body] 数组对，不是 {sel, body} 对象。 */
@@ -412,10 +414,32 @@ async function run() {
       dockIdx > 0 && dockIdx < bodyStart,
       'dock 位置 idx=' + dockIdx + '，main idx=' + bodyStart);
 
-    T('界面 · 挂载', 'R150b radio.js 在 app.js 之前加载（初始化时可用）',
-      html.indexOf('js/radio.js') > 0 &&
-      html.indexOf('js/radio.js') < html.indexOf('js/app.js'),
-      '加载顺序错误');
+    /* ⚠ v5.7.2 退役：R150b「radio.js 在 app.js 之前加载」。
+       这条断言**一直处于假绿状态**：它 `html.indexOf('js/radio.js')` 命中的是
+       index.html 里那段**注释**（"v2.8.0：电台播放器内核。必须在 app.js 之前"），
+       而不是任何 <script> 标签 —— 因为 v5.2.0 起 radio.js 就随旧小条撤下了，
+       v5.6.3 连文件本身也删了。也就是说它在"没有任何 radio.js 加载"的情况下
+       永远判绿（顺序比对的是注释位置与 app.js 的位置）。
+       这正是本项目最危险的一类断言：注释盲的"字面顺序"断言。
+       → 换成下面 R150c：**真去磁盘上核每个 script/link 引用的目标是否存在**。
+         判据从"某个字符串出现过"升级为"引用的东西真的在"，
+         能抓住"删了文件忘删引用 / 改名忘改引用"这一整类 bug。 */
+    const refMissing = (function () {
+      /* ⚠ 必须先剥 HTML 注释 —— R150b 就栽在这（注释里的路径骗过了 indexOf） */
+      const code = html.replace(/<!--[\s\S]*?-->/g, ' ');
+      const re = /<(?:script|link)\b[^>]*?(?:src|href)="([^"]+)"/gi;
+      const miss = [];
+      let m;
+      while ((m = re.exec(code))) {
+        const u = m[1];
+        if (/^(https?:|data:|mailto:|#|\/\/)/i.test(u)) continue;   /* 外链/内联不算 */
+        if (!fs.existsSync(path.join(ROOT, u.split('?')[0]))) miss.push(u);
+      }
+      return miss;
+    })();
+    T('界面 · 挂载', 'R150c index.html 引用的每个本地 script/link 目标都真实存在（删文件忘删引用即红）',
+      refMissing.length === 0,
+      refMissing.length ? ('缺失引用: ' + refMissing.join(', ')) : '引用的本地资源全部存在');
   }
 
   /* ================= ④ app.js 接线 ================= */
