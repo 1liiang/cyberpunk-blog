@@ -106,9 +106,12 @@
   }
 
   function snapshot() {
-    var cur = (pos >= 0 && pos < order.length) ? rows[order[pos]] : null;
+    var cur = currentRow();
     return {
       ready: ready,
+      /* v4.9.10：**每次快照都按当前曲目重算** —— 不缓存、不依赖副作用，
+         这样无论从哪条路径切过来（设置列表 / playAt / next / 自动跳），界面都能拿到正确值 */
+      embedUrl: isEmbedRow(cur) ? cur.source_url : '',
       count: rows.length,
       index: pos,
       current: cur || null,
@@ -131,6 +134,19 @@
   /* 归一化取址函数的返回值：
      字符串 → 永久地址（ttl 0）；对象 → 限时地址（ttl 秒）。
      这样调用方想升级成「带 token 的限时直链」不用改内核。 */
+  /* v4.9.10：这一行是不是「官方外链播放器」（网易云 outchain）。
+     ⚠ 判定必须能**只看行**得出 —— 不能依赖"取地址那条路走没走到"：
+       实测 playAt() 不经过 attachCurrent，靠副作用的 embedUrl 会一直是空，
+       面板里就永远不出现官方播放器。 */
+  function isEmbedRow(row) {
+    return !!(row && typeof row.source_url === 'string' &&
+      /^https:\/\/music\.163\.com\/outchain\/player/i.test(row.source_url));
+  }
+
+  function currentRow() {
+    return (pos >= 0 && pos < order.length) ? rows[order[pos]] : null;
+  }
+
   function normalizeSource(r) {
     if (!r) return null;
     if (typeof r === 'string') return { url: r, ttl: 0 };
@@ -251,8 +267,9 @@
 
   async function doPlay() {
     if (!audio) return false;
-    /* 外链曲目由官方播放器自己发声，本站的 play() 无事可做（也不该报错） */
-    if (embedUrl) { pushState(); return false; }
+    /* 外链曲目由官方播放器自己发声，本站的 play() 无事可做（也不该报错）。
+       按 currentRow() 判定而不是缓存变量 —— 理由同 snapshot。 */
+    if (isEmbedRow(currentRow())) { pushState(); return false; }
     if (pos < 0) {
       if (!order.length) return false;
       pos = 0;
