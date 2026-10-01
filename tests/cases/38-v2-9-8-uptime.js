@@ -189,9 +189,13 @@ async function run() {
     /* 离开 ABOUT 再回来：停表后重开，读数仍然正确（不残留旧值/不 NaN） */
     ctx.w.location.hash = '#/';
     await new Promise(function (r) { setTimeout(r, 120); });
-    T(CN, 'R180j 离开 ABOUT 后 HUD 随页面卸载（无残留节点）',
-      !ctx.doc.getElementById('uptime-sec'),
-      '仍有残留节点');
+    /* v5.4.0：HUD 从 ABOUT 页**迁到首页**（站长选 B），
+         所以判据改成"离开**首页**后卸载" —— 意图不变，只是换了宿主页面。 */
+      ctx.w.location.hash = '#/tags';
+      await waitFor(function () { return !ctx.doc.getElementById('uptime-sec'); }, 3000);
+      T(CN, 'R180j 离开首页后 HUD 随页面卸载（无残留节点）',
+        !ctx.doc.getElementById('uptime-sec'),
+        '仍有残留节点');
     ctx.w.location.hash = '#/about';
     await waitFor(function () { return !!ctx.doc.getElementById('uptime-sec'); }, 3000);
     await new Promise(function (r) { setTimeout(r, 150); });

@@ -5700,6 +5700,9 @@ body:not(.linenum-off) .md-body > pre::before {
      ⚠ 必须显式归零：@keyframes lk-scan 是**无限循环**动画，
        不像进场动画那样跑一次就停，漏掉这条会一直闪。
      与本站既有做法一致（见 .wordmark-glyph 的同处处理）。 */
+  /* v5.4.0：首页全息面板的扫描线 / 故障字错位 / 呼吸灯一律归零 */
+  .holo-panel::after, .holo-uptime.glitch::before, .holo-uptime.glitch::after, .holo-live i { animation: none !important; }
+  .holo-card { transform: none !important; }
   /* v5.1.0：控制台的两个无限循环装饰动画（指针扫频 / VU 电平） */
   .rc-tune-needle, .rc-vu i { animation: none !important; }
   .rc-tune-needle { left: 40% !important; }
@@ -5709,3 +5712,138 @@ body:not(.linenum-off) .md-body > pre::before {
   .btn-mark.is-locked:hover .mark-lock { transform: none !important; }
 
 }
+
+/* ============================================================
+   v5.4.0：首页两栏 —— 左「二次元全息」面板 / 右「身份卡」
+   ⚠ 站长 2026-10-01 放宽了规矩：可以照抄开源代码、颜色不必死守主题变量。
+     本块的技法参考（均为开源，逐条署名）：
+       · 故障字 glitch：alddesign/cyberpunk-css（纯 CSS 库）
+       · 霓虹切角边框 / 扫描线：@laddtnov/cyberpunk-ui + Uiverse（MIT）卡片
+       · 全息倾斜 + 虹彩反光：DevCard 3D 的思路（跟随鼠标倾斜 + 渐变高光）
+     颜色按站长新规**自由取色**（全息紫青 + 洋红），只有"该跟换肤联动"的部分才挂主题变量。
+   ⚠ 动效一律在文件末尾的 reduce 块里显式归零。
+   ============================================================ */
+.holo-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 18px;
+  margin: 0 0 26px;
+}
+
+/* ---------- 左：全息面板 ---------- */
+.holo-panel {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(122, 92, 255, .45);
+  background:
+    radial-gradient(120% 120% at 0% 0%, rgba(122, 92, 255, .18), transparent 55%),
+    radial-gradient(120% 120% at 100% 100%, rgba(255, 42, 190, .16), transparent 55%),
+    linear-gradient(180deg, #0a0a18, #05050f);
+  padding: 18px 20px 20px;
+}
+/* 全息网格：纯 CSS 两层重复渐变，比 SVG 便宜 */
+.holo-panel::before {
+  content: '';
+  position: absolute; inset: 0;
+  background:
+    repeating-linear-gradient(0deg, rgba(140, 120, 255, .10) 0 1px, transparent 1px 26px),
+    repeating-linear-gradient(90deg, rgba(140, 120, 255, .10) 0 1px, transparent 1px 26px);
+  pointer-events: none;
+}
+/* 扫描线：一条缓慢下移的亮带 */
+.holo-panel::after {
+  content: '';
+  position: absolute; left: 0; right: 0; height: 34%;
+  background: linear-gradient(180deg, transparent, rgba(120, 240, 255, .07) 55%, transparent);
+  animation: holo-scan 7s linear infinite;
+  pointer-events: none;
+}
+@keyframes holo-scan { 0% { top: -34%; } 100% { top: 100%; } }
+.holo-head {
+  position: relative;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  font: 11px/1 var(--mono); letter-spacing: 3px; color: #9f8cff;
+}
+.holo-live { display: inline-flex; align-items: center; gap: 6px; color: #45ffb0; letter-spacing: 1px; }
+.holo-live i { width: 7px; height: 7px; border-radius: 50%; background: #45ffb0; box-shadow: 0 0 10px #45ffb0; animation: holo-blink 2.4s ease-in-out infinite; }
+@keyframes holo-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* 大字读数：故障字（glitch）技法来自 cyberpunk-css —— 双份伪元素错位 + 青/洋红分离 */
+.holo-uptime {
+  position: relative;
+  margin: 14px 0 4px;
+  font-family: var(--mono);
+  font-size: clamp(30px, 5.4vw, 54px);
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #eafcff;
+  text-shadow: 0 0 18px rgba(120, 240, 255, .55), 0 0 46px rgba(122, 92, 255, .35);
+}
+.holo-uptime.glitch::before, .holo-uptime.glitch::after {
+  content: attr(data-text);
+  position: absolute; left: 0; top: 0; width: 100%;
+  pointer-events: none;
+}
+.holo-uptime.glitch::before { color: #00f0ff; transform: translate(-2px, 1px); opacity: .8; animation: holo-glitch-a 3.6s steps(2, end) infinite; }
+.holo-uptime.glitch::after { color: #ff2abe; transform: translate(2px, -1px); opacity: .7; animation: holo-glitch-b 4.2s steps(2, end) infinite; }
+@keyframes holo-glitch-a { 0%, 92%, 100% { clip-path: inset(0 0 0 0); } 93% { clip-path: inset(12% 0 62% 0); } 96% { clip-path: inset(58% 0 18% 0); } }
+@keyframes holo-glitch-b { 0%, 90%, 100% { clip-path: inset(0 0 0 0); } 91% { clip-path: inset(70% 0 8% 0); } 95% { clip-path: inset(24% 0 46% 0); } }
+
+/* 四格读数：天/时/分/秒 */
+.holo-grid { position: relative; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 14px 0 12px; }
+.holo-cell {
+  border: 1px solid rgba(122, 92, 255, .30);
+  background: rgba(10, 10, 26, .6);
+  padding: 9px 10px 10px;
+  text-align: center;
+}
+.holo-cell span { display: block; font: 10px/1 var(--mono); letter-spacing: 2px; color: #8d86b8; margin-bottom: 6px; }
+.holo-cell b { font-family: var(--mono); font-size: clamp(18px, 2.6vw, 26px); font-weight: 700; color: #cbb8ff; text-shadow: 0 0 14px rgba(122, 92, 255, .6); }
+.holo-cell.is-sec b { color: #ffd166; text-shadow: 0 0 14px rgba(255, 209, 102, .6); }
+.holo-foot { position: relative; font: 11px/1.6 var(--mono); color: #7e78a8; letter-spacing: 1px; }
+
+/* ---------- 右：身份卡（全息倾斜） ---------- */
+.holo-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(255, 42, 190, .38);
+  background: linear-gradient(160deg, #0b0a1a 0%, #12081c 55%, #06060f 100%);
+  padding: 18px 18px 16px;
+  transform-style: preserve-3d;
+  transition: transform var(--t-fast);
+  will-change: transform;
+}
+/* 虹彩反光：随倾斜变化的斜向高光（DevCard 3D 的思路） */
+.holo-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255, 255, 255, .10) 45%, rgba(0, 240, 255, .12) 52%, rgba(255, 42, 190, .12) 58%, transparent 72%);
+  opacity: 0;
+  transition: opacity var(--t-fast);
+  pointer-events: none;
+}
+.holo-card.is-tilting::after { opacity: 1; }
+.holo-id-top { display: flex; align-items: center; gap: 12px; }
+.holo-avatar {
+  width: 52px; height: 52px; flex: 0 0 auto;
+  border: 1px solid rgba(120, 240, 255, .5);
+  background: radial-gradient(circle at 35% 30%, rgba(0, 240, 255, .35), rgba(122, 92, 255, .25) 60%, transparent);
+  display: grid; place-items: center;
+  font-family: var(--mono); font-size: 20px; color: #eafcff;
+  box-shadow: 0 0 18px rgba(0, 240, 255, .28) inset;
+}
+.holo-name { font-size: 19px; color: #f2f7ff; letter-spacing: 1px; }
+.holo-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.holo-tag {
+  font: 10px/1 var(--mono); letter-spacing: 1px;
+  border: 1px solid rgba(122, 92, 255, .45);
+  color: #b9a8ff; padding: 4px 7px;
+}
+.holo-now {
+  margin-top: 14px; padding-top: 12px;
+  border-top: 1px dashed rgba(122, 92, 255, .28);
+}
+.holo-now-label { font: 10px/1 var(--mono); letter-spacing: 2px; color: #8d86b8; }
+.holo-now-title { margin-top: 6px; font-size: 13px; color: #dfe7ff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.holo-now-sub { font: 10px/1.5 var(--mono); color: #7e78a8; }
+

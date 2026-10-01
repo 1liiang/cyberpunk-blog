@@ -1350,6 +1350,62 @@
     } catch (e) { /* 场景框架异常不拖累渲染 */ }
   }
 
+  /* ---------- v5.4.0：首页两栏（左全息读数 / 右身份卡） ----------
+     ⚠ 在 app.js 注入而不是改 homeView：homeView 结构被多处断言钉着，前置注入是**纯加法**。
+     ⚠ 读数沿用既有 id 与 class/data-born，所以"建站时间单一来源"那套契约不变（只是搬了位置）。 */
+  var holoTickTimer = null;
+  /* ⚠ v5.4.0：**不许在这里写日期字面量** —— 单一来源是 views.js 的 SITE_BORN，
+     运行时优先从 DOM 的 data-born 读（这正是既有那套"读数不重复日期"的契约）。 */
+  function holoBorn() {
+    var el = document.querySelector('[data-born]');
+    if (el && el.getAttribute('data-born')) return el.getAttribute('data-born');
+    return (V() && V().SITE_BORN) || '';
+  }
+  function holoParts() {
+    var d = Math.max(0, Date.now() - new Date(holoBorn()).getTime());
+    var s = Math.floor(d / 1000);
+    return { days: Math.floor(s / 86400), hours: Math.floor(s % 86400 / 3600),
+             mins: Math.floor(s % 3600 / 60), secs: s % 60,
+             date: holoBorn().slice(0, 10).replace(/-/g, '.') };
+  }
+  function holoPad(n) { return (n < 10 ? '0' : '') + n; }
+  function holoText(p) { return p.days + 'D ' + holoPad(p.hours) + ':' + holoPad(p.mins) + ':' + holoPad(p.secs); }
+  function holoPaint() {
+    var p = holoParts();
+    var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
+    set('uptime-days', p.days); set('uptime-hours', holoPad(p.hours));
+    set('uptime-min', holoPad(p.mins)); set('uptime-sec', holoPad(p.secs));
+    var big = document.querySelector('[data-holo-uptime]');
+    if (big) { var txt = holoText(p); big.textContent = txt; big.setAttribute('data-text', txt); }
+  }
+  function holoNowPaint() {
+    var cur = null;
+    try { cur = rcCurrent(); } catch (e) { cur = null; }
+    var tEl = document.querySelector('[data-holo-now]');
+    var sEl = document.querySelector('[data-holo-now-sub]');
+    /* ⚠ 站长选了"诚实版"：网易云是跨域 iframe，真实播放态**读不到**（同源策略所限）——
+       所以这里只说"当前条目"，绝不写"正在播放"。 */
+    if (tEl) tEl.textContent = cur ? (cur.title || '未命名') : '电台待命';
+    if (sEl) sEl.textContent = cur ? ((cur.artist || '') + (cur.kind === 'playlist' ? ' · 歌单' : ' · 单曲') + ' · 当前条目') : '还没有条目';
+  }
+  function injectHoloHero() {
+    if (typeof document === 'undefined') return;
+    var app = document.getElementById('app');
+    if (!app || !V().holoHero) return;
+    if (app.querySelector('.holo-hero')) { holoPaint(); holoNowPaint(); return; }
+    var p = holoParts();
+    app.insertAdjacentHTML('afterbegin', V().holoHero({
+      days: p.days, hours: p.hours, mins: p.mins, secs: p.secs, bootDate: p.date,
+      uptimeText: holoText(p), nickname: State.nickname || '漓光', tags: ['站长', '作者']
+    }));
+    holoPaint(); holoNowPaint();
+    if (holoTickTimer) clearInterval(holoTickTimer);
+    holoTickTimer = setInterval(function () {
+      if (!document.querySelector('.holo-hero')) { clearInterval(holoTickTimer); holoTickTimer = null; return; }
+      holoPaint();
+    }, 1000);
+  }
+
   /* ---------- v5.1.0：电台页与常驻控制台 ---------- */
   var RC_KEY = 'neon_radio_current';   /* 当前选中条目（本机记住，切页面不丢） */
   var RC_STATE = { items: [], curId: '', error: '', loaded: false, mounted: '' };
@@ -1614,6 +1670,7 @@ function route() {
   function renderHome(tag) {
     State.home = { page: 1, pageSize: 8, posts: [], total: 0, loading: true, error: null, tagName: tag, hasMore: false };
     app.innerHTML = V().homeView(State.home);
+    injectHoloHero();
     window.scrollTo(0, 0);
     loadHome(false);
   }
@@ -1635,6 +1692,7 @@ function route() {
     }
     s.loading = false;
     app.innerHTML = V().homeView(s);
+    injectHoloHero();
     /* 列表页封面：只要缩略图（B1），无缩略图的旧图由数据层自动回退 */
     hydrateImages(app, { thumb: true });
     if (append) {
