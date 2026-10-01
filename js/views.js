@@ -663,8 +663,16 @@
       return html;
     }
     if (!q) {
-      html += '<div class="empty-state"><span class="empty-glyph">⌕</span><span class="empty-code">READY</span>' +
-        '<span class="empty-hint">索引已就绪 · 共 ' + (state.total || 0) + ' 条信号待扫描</span></div>' +
+      /* v4.9.3：空态加背景插画（站长提供的图）—— "一点开这一页就能看到"。
+         ⚠ 图走 CSS 的 .search-hero::before（纯装饰，不进无障碍树、也能被打印样式单独关掉），
+           并叠两层遮罩：原图很亮（霓虹粉），不压暗会把 READY 与提示文字吃掉。
+         ⚠ **结果态不铺图** —— 那会跟列表抢注意力，长列表滚动时也更花。 */
+      html += '<div class="search-hero">' +
+          '<div class="search-hero-inner">' +
+            '<div class="empty-state"><span class="empty-glyph">⌕</span><span class="empty-code">READY</span>' +
+              '<span class="empty-hint">索引已就绪 · 共 ' + (state.total || 0) + ' 条信号待扫描</span></div>' +
+          '</div>' +
+        '</div>' +
         partialNote(state);
       return html;
     }

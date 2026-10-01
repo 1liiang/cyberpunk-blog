@@ -2140,6 +2140,59 @@ body {
 .code-copy.copied { color: var(--green); border-color: var(--green); }
 
 /* ---------- C1：搜索 ---------- */
+/* ---------- v4.9.3：搜索页空态的背景插画 ----------
+   站长提供的图（assets/search-bg.jpg，1067×600 / 62KB —— 由 1280×720 PNG 568KB 压出；
+   窄屏另有 search-bg-narrow.jpg 720×460 / 37KB，避免手机上被裁成一条）。
+
+   ⚠ 三层处理缺一不可：
+     ① opacity + saturate 压一档 —— 原图是霓虹粉的亮图，原样铺会把文字吃掉
+     ② ::after 渐变遮罩 —— 上深下更深，让 READY 与提示文字在图的任何区域都读得清
+     ③ 文字用**固定的浅色**而不是主题变量 —— 照片的亮度不随主题变，
+        若跟着亮色主题翻成深字，就会变成"深字压深图"。所以这块是**暗色孤岛**：
+        与站点的霓虹招牌/封面压字同一套思路（见 .cover-press）。
+   ⚠ 用 background-image 而非 <img>：它是纯装饰，不该进无障碍树；
+     也方便打印样式单独关掉（深色插画进打印机既费墨又糊）。
+   ⚠ 结果态不铺图（见 views.js 的 searchView）：那会跟列表抢注意力。 */
+.search-hero {
+  position: relative;
+  margin-top: 24px;
+  min-height: 320px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg-1);
+}
+.search-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  /* 38% 的纵向焦点：原图人物在上半部，居中会把脸裁掉 */
+  background: url("../assets/search-bg.jpg") center 38% / cover no-repeat;
+  opacity: .55;
+  filter: saturate(1.05) contrast(1.02);
+}
+.search-hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    rgba(4, 6, 13, .74) 0%,
+    rgba(4, 6, 13, .42) 44%,
+    rgba(4, 6, 13, .94) 100%);
+}
+.search-hero-inner {
+  position: relative;
+  z-index: 2;
+  min-height: 320px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 暗色孤岛：这里的文字不跟主题走（理由见上） */
+.search-hero .empty-state { padding: 44px 20px; color: #b9c6da; }
+.search-hero .empty-state .empty-glyph { color: #6ef0ff; text-shadow: 0 0 18px rgba(0, 240, 255, .45); }
+.search-hero .empty-state .empty-code { color: #ff6ea8; text-shadow: 0 0 14px rgba(255, 42, 109, .35); }
+.search-hero .empty-state .empty-hint { color: #cfd9e8; }
+
 .search-bar {
   display: flex;
   gap: 10px;
@@ -2359,6 +2412,12 @@ body {
   .archive-badges { flex-basis: 100%; }
   .archive-link { flex-basis: calc(100% - 52px); }
   .archive-day { margin-left: auto; }
+  /* v4.9.3：搜索页背景插画——窄屏换矮裁切（原图 16:9 在手机上会被裁成一条，
+     焦点移回人物），并压低高度，免得整屏只剩一张图。
+     ⚠ 按纪律并入既有断点块，不新开 @media（R202d 守"宽度断点块 ≤16"）。 */
+  .search-hero, .search-hero-inner { min-height: 236px; }
+  .search-hero::before { background-image: url("../assets/search-bg-narrow.jpg"); background-position: center 30%; }
+  .search-hero .empty-state { padding: 30px 16px; }
 }
 
 /* ============================================================
@@ -4103,10 +4162,18 @@ a:focus-visible { text-decoration: underline; }
 @media print {
   /* ① 装饰层与背景 */
   .grid-bg, .scanlines, .bg-noise,
+  /* v4.9.3：搜索页的背景插画也不进纸 —— 深色霓虹图打印出来是一片灰污，
+     而且它只是装饰（文字在 .search-hero-inner 里，照常打印）。 */
+  .search-hero::before, .search-hero::after,
   html, body {
     background: #fff !important;
     color: #000 !important;
   }
+  .search-hero { border-color: #ccc !important; background: #fff !important; }
+  .search-hero .empty-state,
+  .search-hero .empty-state .empty-glyph,
+  .search-hero .empty-state .empty-code,
+  .search-hero .empty-state .empty-hint { color: #000 !important; text-shadow: none !important; }
   /* ② 交互件隐藏
      v3.1.0 B2：Hero 的光晕背景与滚动引导也一并隐藏 ——
      纸面上"向下滚动"是无效指令，而那块色相光晕打印出来是一片灰污。
