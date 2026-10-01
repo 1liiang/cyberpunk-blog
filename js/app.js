@@ -1659,18 +1659,30 @@
 
   /* ---------- 拉曲目列表 ----------
      ⚠ 本函数**永不 reject**（内部已消化错误）：调用方（openRadioPanel）
-     直接 .then 重绘即可，不需要再挂 catch。 */
+     直接 .then 重绘即可，不需要再挂 catch。
+
+     v4.9.1：**在途去重**。原先并发调用会各发一次请求 —— 实测首屏同一秒出现
+     两个一模一样的 public_radio GET（两条路径都拉了列表），而本机到新加坡
+     一次往返就要 ~1.2s，纯属白等。只在"在途"期间共享：请求一结束就清空，
+     所以上传/删除之后仍然会真刷新。 */
+  var radioLoadPromise = null;
   async function loadRadioTracks() {
-    try {
-      var rows = await need('Radio').list();
-      RadioUI.rows = rows || [];
-      RadioUI.loaded = true;
-      if (window.NEONRadio) window.NEONRadio.setList(radioQueue(), true);
-    } catch (e) {
-      /* 保持 loaded=false，下次开面板会重试（网络抖动自愈） */
-      RadioUI.loaded = false;
-      toast(errMsg(e, '曲目列表加载失败'), 'error');
-    }
+    if (radioLoadPromise) return radioLoadPromise;
+    radioLoadPromise = (async function () {
+      try {
+        var rows = await need('Radio').list();
+        RadioUI.rows = rows || [];
+        RadioUI.loaded = true;
+        if (window.NEONRadio) window.NEONRadio.setList(radioQueue(), true);
+      } catch (e) {
+        /* 保持 loaded=false，下次开面板会重试（网络抖动自愈） */
+        RadioUI.loaded = false;
+        toast(errMsg(e, '曲目列表加载失败'), 'error');
+      } finally {
+        radioLoadPromise = null;
+      }
+    })();
+    return radioLoadPromise;
   }
 
   /* 交给播放内核的队列。
@@ -3709,28 +3721,35 @@
         State.session = null; /* 无会话 = 访客模式，正常 */
       }
       /* v4.9.0：把账号的收藏取回内存（渲染路径靠它保持同步）。
-         顺序要紧：先迁移旧的本机收藏，再刷新 —— 否则迁移进来的那几条不在缓存里。 */
-      try {
-        if (isLoggedIn()) { await migrateLegacyMarks(); }
-        await refreshMarks();
-      } catch (e) { /* 收藏取不回不影响其余功能 */ }
+         v4.9.1：**改为不阻塞首屏** —— 实测 bookmarks 一个来回 ~350ms（收藏多时更久），
+         `await` 在 route() 之前等于让用户多盯一会儿白屏。改成先渲染、后回填：
+         数据回来时 repaintMarks() 会就地补上收藏态（它本来就是为"同 hash 不重绘"写的）。 */
+      if (!isLoggedIn()) {
+        State.marks = new Set();   /* 访客没有收藏可取，同步完成即可 */
+        marksLoaded = true;
+      } else {
+        migrateLegacyMarks().then(refreshMarks).then(function () { repaintMarks(); }, function () {});
+      }
       /* 认证状态监听 */
       try {
         need('Auth').onAuthStateChange(function (event, session) {
           State.session = session || null;
           if (event === 'SIGNED_IN') {
             syncNicknameFromSession(session);
-            /* 登录后才谈得上收藏：先迁移旧的、再取回列表，最后决定去哪。
-               ⚠ 若这次登录是"点收藏被拦下来"触发的，就回到收藏页 ——
+            /* 登录后才谈得上收藏。v4.9.1：迁移 + 取回都放**后台**做 ——
+               实测这两个往返合计 350ms 起（旧版本地收藏多时是 N 次写入），
+               挡在跳转前面就是用户嘴里的"点了登录没反应"。
+               先把界面交出去（此刻缓存是空的 → 按钮按锁定态画），
+               数据回来再 repaintMarks() 补上已收藏的那些。
+               ⚠ 若这次登录是"点收藏被拦下来"触发的，仍然要回收藏页 ——
                  否则用户会被扔进 CONSOLE，而他只是想收藏一篇文章。 */
-            migrateLegacyMarks().then(refreshMarks).then(function () {
-              var want = State.pendingMark;
-              State.pendingMark = null;
-              repaintMarks();            /* 身份变了：就地重画收藏按钮 */
-              safeRenderNav();
-              safeRoute();
-              location.hash = want ? '#/marks' : '#/admin';
-            }, function () { location.hash = '#/admin'; });
+            migrateLegacyMarks().then(refreshMarks).then(function () { repaintMarks(); }, function () {});
+            var want = State.pendingMark;
+            State.pendingMark = null;
+            repaintMarks();
+            safeRenderNav();
+            safeRoute();
+            location.hash = want ? '#/marks' : '#/admin';
           }
           if (event === 'SIGNED_OUT') {
             State.session = null;
