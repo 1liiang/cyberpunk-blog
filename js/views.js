@@ -1445,7 +1445,8 @@
           ? '<div class="radio-embed">' +
               '<div class="radio-embed-hint">网易云音乐 · 官方外链播放器（在播放器里点播放）</div>' +
               '<iframe class="radio-embed-frame" src="' + esc(st.embedUrl) + '"' +
-                ' width="330" height="66" frameborder="0" allow="autoplay"' +
+                ' width="330" height="' + (/type=0/.test(st.embedUrl) ? '430' : '66') + '"' +
+                ' frameborder="0" allow="autoplay"' +
                 ' title="网易云音乐外链播放器"></iframe>' +
               /* 兜底：个别网络/地区可能加载不出来，给一条能直接打开的链接
                  （外链播放器本身也是网易云官方页面，打开即为同一首歌） */
@@ -1520,12 +1521,18 @@
               '<input type="text" data-radio-field="artist" maxlength="200" placeholder="可留空"></label>' +
             '<label class="radio-field"><span>专辑</span>' +
               '<input type="text" data-radio-field="album" maxlength="200" placeholder="可留空"></label>' +
-            '<div class="radio-src-head">音源（<b>二选一</b>）</div>' +
-            '<label class="radio-field"><span>音频文件</span>' +
-              '<input type="file" data-radio-field="file" accept="audio/*,.mp3,.m4a,.aac,.ogg,.wav,.flac"></label>' +
-            '<label class="radio-field"><span>…或 https 直链</span>' +
+            '<div class="radio-src-head">网易云条目（<b>贴链接或 id，单曲/歌单都行</b>）</div>' +
+            /* v5.0.0：本地文件上传整条路已移除（站长拍板：只留网易云外链）。
+               贴歌曲页 / 歌单页 / outchain 页 / 裸 id 都认 —— 解析在数据层（parseNetease）。 */
+            '<label class="radio-field"><span>网易云链接或 id *</span>' +
               '<input type="text" data-radio-field="url" inputmode="url" spellcheck="false"' +
-                ' placeholder="https://…（外链音源，库里只存这条地址）"></label>' +
+                ' placeholder="歌曲页 / 歌单页 / 裸 id，例如 2003621098 或 2867512990"></label>' +
+            '<label class="radio-field"><span>类型</span>' +
+              '<select data-radio-field="kind" class="radio-select">' +
+                '<option value="auto">自动识别（推荐）</option>' +
+                '<option value="song">单曲</option>' +
+                '<option value="playlist">歌单</option>' +
+              '</select></label>' +
             '<div class="radio-form-ops">' +
               '<button type="button" class="btn btn-sm" data-radio-act="cancel-add">取消</button>' +
               '<button type="button" class="btn btn-sm btn-cyan" data-radio-act="submit-add">加入频段</button>' +
@@ -1534,12 +1541,11 @@
           '</div>' : '') +
         '<div class="radio-hint">' +
           (canManage
-            ? '提示：音频随曲目存在云端库中，<b>所有人（含未登录访客）</b>都可直接收听' +
-              (audioLimitText() ? '；单曲上限 ' + audioLimitText() + '。' : '。') +
-              /* v4.9.5：把"内容责任"写在站长看得见的地方 —— 外链模式只提供管道，
-                 不校验、也不背书所贴音频的来源与授权。 */
-              '<br>外链音源只存地址、不复制文件：请自行确认所贴音频的来源与授权（本站不做校验）。'
-            : '提示：按播放键即可收听。') +
+            ? /* v5.0.0：整站电台就是**网易云官方外链播放器** —— 音乐由网易云提供与播放，
+                 本站只存"哪一首/哪个歌单"。卡片里写清这一点，省得来人以为是自建播放器。 */
+              '提示：本站电台使用 <b>网易云音乐官方外链播放器</b>（单曲 66px / 歌单 430px），' +
+              '所有访客都能直接收听；播放与版权由网易云处理。'
+            : '提示：点条目即可收听。') +
         '</div>' +
       '</div>';
   }

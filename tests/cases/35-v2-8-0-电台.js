@@ -375,8 +375,11 @@ async function run() {
       !!RC && Array.isArray(RC.V) && RC.V.indexOf('has_data') >= 0,
       RC ? 'RADIO_VIEW_ONLY = [' + RC.V.join(',') + ']' : '常量块抽取/求值失败');
 
-    T('数据层', 'R141f 读清单含 has_data（列表要靠它判断能不能播）',
-      !!RC && cols(RC.F).indexOf('has_data') >= 0,
+    /* v5.0.0：电台改为「网易云条目」，has_data 概念消失（每条都必然可播）。
+       改判：读清单必须带 kind / netease_id / source_url —— 界面靠它们决定摆 66px 还是 430px 播放器。 */
+    T('数据层', 'R141f 读清单含 kind/netease_id/source_url（界面靠它决定播放器形态）',
+      !!RC && cols(RC.F).indexOf('kind') >= 0 && cols(RC.F).indexOf('netease_id') >= 0 &&
+      cols(RC.F).indexOf('source_url') >= 0,
       RC ? 'RADIO_FIELDS = ' + RC.F : '常量块求值失败');
 
     T('数据层', 'R141g 基表清单 = 读清单 − 视图专有列（不含 has_data，常规列还在）',
@@ -387,10 +390,10 @@ async function run() {
       })(),
       RC ? 'RADIO_WRITE_FIELDS = ' + RC.W : '常量块求值失败');
 
-    T('数据层', 'R141h 写路径的 insert 用基表清单（RETURNING 绝不带视图专有列）',
-      /from\(RADIO_WRITE_TABLE\)\s*\.insert\([^)]*\)\s*\.select\(RADIO_WRITE_FIELDS\)/.test(cloudCode) &&
-      !/from\(RADIO_WRITE_TABLE\)[\s\S]{0,200}?\.select\(RADIO_FIELDS\)/.test(cloudCode),
-      '写路径仍可能请求 RADIO_FIELDS（复用视图清单）');
+    T('数据层', 'R141h v5 的写入不再碰任何已删列（data / has_data / mime 都不该再出现）',
+      /parseNetease/.test(cloudCode) && /buildEmbedUrl/.test(cloudCode) &&
+      !/\.select\('id,data,mime'\)/.test(cloudCode),
+      '写入路径仍引用已删列');
 
     T('数据层', 'R141i 入库返回的行补 has_data（与列表行同形，调用方无需分支判断）',
       /saved\.has_data\s*=\s*true/.test(cloudCode),
@@ -581,18 +584,24 @@ async function run() {
       '未处理 has_data=false 的旧记录（会出现"点了报错"的死按钮）');
 
     /* 管理：上传 / 删除 / 排序 */
-    T('界面 · 管理', 'R147 管理区含上传表单（标题/艺术家/专辑/文件）',
+    /* v5.0.0：本地文件上传按站长决定移除，表单改为"网易云条目" */
+    T('界面 · 管理', 'R147 管理区含网易云条目表单（名称 / 备注 / 链接或 id / 类型）',
       /data-radio-field="title"/.test(views) && /data-radio-field="artist"/.test(views) &&
-      /data-radio-field="album"/.test(views) && /data-radio-field="file"/.test(views),
-      '上传表单字段不全');
+      /data-radio-field="url"/.test(views) && /data-radio-field="kind"/.test(views),
+      '条目表单字段不全');
 
     T('界面 · 管理', 'R147b 管理区含删除与上下移动',
       /data-radio-act="del"/.test(views) && /data-radio-act="up"/.test(views) &&
       /data-radio-act="down"/.test(views),
       '管理操作不全');
 
-    T('界面 · 管理', 'R147c 上传文件选择器限定音频类型',
-      /accept="audio\/\*/.test(views), '未限定 accept');
+    T('界面 · 管理', 'R147c 类型选择器提供 自动/单曲/歌单 三档，且**不再有文件输入**',
+      /<option value="auto"/.test(views) && /<option value="song"/.test(views) &&
+      /<option value="playlist"/.test(views) &&
+      /* ⚠ 别写成全站 !/type="file"/ —— 编辑器上传图片那里也有 type="file"（实测踩到）。
+         只看**电台表单块**里有没有残留。 */
+      !/data-radio-form[\s\S]{0,1600}?type="file"/.test(views),
+      '类型选择器不全或电台表单里仍残留文件输入');
 
     /* 可访问性：每个纯图标按钮都要有 aria-label */
     const bareButtons = (views.match(/<button(?![^>]*aria-label)[^>]*>\s*<span aria-hidden/g) || []).length;
@@ -836,18 +845,21 @@ async function run() {
       toggleCount >= 2, 'toggle 出现 ' + toggleCount + ' 次');
 
     /* 数据层产出的行 → 视图消费的字段必须对齐 */
-    T('交叉一致性', 'R163 视图消费的字段都在数据层白名单内',
+    T('交叉一致性', 'R163 视图消费的字段都在数据层白名单内（title / artist / kind）',
       /RADIO_FIELDS\s*=\s*'[^']*title[^']*'/.test(cloud) &&
       /RADIO_FIELDS\s*=\s*'[^']*artist[^']*'/.test(cloud) &&
-      /RADIO_FIELDS\s*=\s*'[^']*duration_sec[^']*'/.test(cloud),
+      /RADIO_FIELDS\s*=\s*'[^']*kind[^']*'/.test(cloud),
       '字段白名单缺视图需要的字段');
 
     /* v2.9.0 新增：视图判定「能不能播」用的 has_data 必须在白名单里，
        否则列表返回的行没有该字段，`has_data !== false` 恒真 ⇒
        禁用逻辑形同虚设（旧记录又变回"点了报错"的死按钮）。 */
-    T('交叉一致性', 'R163b 视图用到的 has_data 在数据层白名单内（禁用逻辑才有依据）',
-      /RADIO_FIELDS\s*=\s*'[^']*\bhas_data\b[^']*'/.test(cloud),
-      'RADIO_FIELDS 缺 has_data —— 前端无法区分旧记录');
+    /* v5.0.0：has_data 概念消失（旧记录都已迁移成网易云条目）。
+       但仍有一条跨层契约要守：**netease_id 必须在白名单里** ——
+       界面靠它把条目还原成官方播放器地址，缺了就只能显示空壳。 */
+    T('交叉一致性', 'R163b netease_id 在数据层白名单内（界面靠它还原播放器地址）',
+      /RADIO_FIELDS\s*=\s*'[^']*\bnetease_id\b[^']*'/.test(cloud),
+      'RADIO_FIELDS 缺 netease_id —— 条目无法还原成播放器');
 
     /* 取址回调的跨层契约：内核传**整行**、数据层按 id 取。
        这条钉住「地址来源从存储换成库」这类改造不必再动内核。 */

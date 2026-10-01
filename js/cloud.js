@@ -796,7 +796,12 @@
      带上 data 会让「打开面板」变成「下载整个曲库」，是致命的性能陷阱。
      v4.9.5：带上 source_url（外链音源）—— 它只是一条几十字符的 URL，
      与 data 完全不同量级；列表靠它区分"内链 / 外链"，也给 playUrl 走捷径。 */
-  var RADIO_FIELDS = 'id,title,artist,album,mime,duration_sec,size_bytes,sort_order,cover_url,has_data,source_url,created_at';
+  /* v5.0.0：电台改为「网易云条目」——只有单曲与歌单两种，不再有 base64 音频。
+     字段就这八个，列表请求因此极轻（旧版里 data 一列单行可达 36MB 字符）。 */
+  var RADIO_FIELDS = 'id,title,artist,kind,netease_id,source_url,sort_order,created_at';
+  /* v5.0.0：has_data 这个概念没了 —— 现在每条条目都必然可播（网易云官方播放器）。
+     ⚠ 这行注释保留在此仅为说明历史：老代码里的 RADIO_VIEW_ONLY / RADIO_WRITE_FIELDS
+       与音频 LRU 缓存都由「base64 存库」那套演变而来，已于 v5.0.0 一并删除。 */
   /* ⚠⚠ 视图**算出来**的列（基表没有），只在读视图时可用。
      has_data = (data IS NOT NULL OR source_url IS NOT NULL)，是为了让列表能判断
      "能不能播"而不必拉 data（v4.9.5 起把外链也算作可播）。
@@ -1045,6 +1050,69 @@
       });
     },
 
+    /* ---------- v5.0.0：电台 = 网易云条目（单曲 / 歌单） ---------- */
+
+    /* 解析用户贴的任何形式，返回 { kind: 'song'|'playlist', id } 或 null。
+       认这些写法（**不联网、不猜**，纯本地解析）：
+         · https://music.163.com/#/song?id=2003621098          → song
+         · https://music.163.com/song/2003621098               → song
+         · https://music.163.com/#/outchain/2/2003621098/m/…   → song（type=2）
+         · https://music.163.com/#/playlist?id=2867512990      → playlist
+         · https://music.163.com/playlist/2867512990           → playlist
+         · https://music.163.com/#/outchain/0/2867512990/m/…   → playlist（type=0）
+         · 2003621098（裸 id）→ 默认按**单曲**处理（界面上的"类型"可显式指定） */
+    parseNetease: function (input) {
+      var s = String(input == null ? '' : input).trim();
+      if (!s) return null;
+      if (/^\d{4,}$/.test(s)) return { kind: 'song', id: s };
+
+      /* outchain 形式里 type 直接说明类型（2=单曲 0=歌单） */
+      var oc = /outchain\/player\?[^#]*type=(\d)[^#]*id=(\d{4,})/.exec(s) ||
+               /outchain\/(\d)\/(\d{4,})/.exec(s);
+      if (oc) return { kind: (oc[1] === '0' ? 'playlist' : 'song'), id: oc[2] };
+      if (!/music\.163\.com/i.test(s)) return null;
+
+      var pl = /playlist\?id=(\d{4,})/.exec(s) || /\/playlist\/(\d{4,})/.exec(s);
+      if (pl) return { kind: 'playlist', id: pl[1] };
+      var sg = /[?&]id=(\d{4,})/.exec(s) || /\/song\/(\d{4,})/.exec(s);
+      if (sg) return { kind: 'song', id: sg[1] };
+      return null;
+    },
+
+    /* 由 kind + id 组装官方外链播放器地址。
+       ⚠ 高度随类型走：单曲 66（官方条），歌单 430（完整歌单播放器）。
+         官方文档给的正是这两个值（type=2&height=66 / type=0&height=430）。 */
+    buildEmbedUrl: function (kind, id) {
+      var t = (kind === 'playlist') ? '0' : '2';
+      var h = (kind === 'playlist') ? '430' : '66';
+      return 'https://music.163.com/outchain/player?type=' + t + '&id=' + id + '&auto=0&height=' + h;
+    },
+
+    /* v5 的写入口：一条网易云条目。kind 为空时按单曲处理。 */
+    add: async function (input, meta, uid) {
+      meta = meta || {};
+      var parsed = Radio.parseNetease(meta.id || input);
+      if (!parsed) throw new Error('认不出这条网易云链接（歌曲页 / 歌单页 / outchain 页 / 裸 id 都行）');
+      var kind = (meta.kind === 'song' || meta.kind === 'playlist') ? meta.kind : parsed.kind;
+      var title = String(meta.title || '').trim();
+      if (!title) throw new Error('请填写条目名称（单曲名或歌单名）');
+      if (title.length > 200) throw new Error('名称不能超过 200 字');
+      var row = {
+        title: title,
+        artist: meta.artist ? String(meta.artist).trim().slice(0, 200) : null,
+        kind: kind,
+        netease_id: parsed.id,
+        source_url: Radio.buildEmbedUrl(kind, parsed.id),
+        sort_order: (typeof meta.sort_order === 'number') ? Math.round(meta.sort_order) : 0,
+        owner_id: uid
+      };
+      var res = await ensure().database.from(RADIO_WRITE_TABLE).insert(row).select(RADIO_FIELDS);
+      if (res.error) throw new Error(errMsg(res.error, '条目入库失败'));
+      var saved = (res.data && res.data[0]) || null;
+      return saved;
+    },
+
+    /* 旧的 neteaseEmbedUrl 保留（v4.9.9 起的兼容入口，内部走新解析） */
     /* 从用户贴的任何形式里认出网易云歌曲 id 并换成官方外链播放器地址：
          · https://music.163.com/#/song?id=2003621098
          · https://music.163.com/song/2003621098

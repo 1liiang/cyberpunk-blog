@@ -3,7 +3,7 @@
 > **给接手的人**：这份文档假设你对这个项目**一无所知**。读完前两节你就能改代码、跑验证、发版本。
 > 想深入，看第 6 节指向的三份笔记 —— 那里面是真正的经验（尤其"踩过的坑"）。
 
-**交接日期**：2026-09-30 ｜ **版本**：v4.9.11（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
+**交接日期**：2026-09-30 ｜ **版本**：v5.0.0（**数据层已迁到 Supabase；全站零外部脚本；收藏为账号功能**） ｜ **门禁**：1155/1155 全绿 ｜ **线上**：本地预览与 GitHub Pages 均在跑
 
 > **v4.8.0 迁移要点（接手先看这段）**
 > - **后端换成 Supabase**（项目 ref `taxrgizbmgwzxnvlxudq`，区域 ap-southeast-1）。
@@ -159,6 +159,17 @@ cyberpunk-blog/
   （`paintDock → paintPanelProgress` 直接读 document），那是**测试环境产物**，不是线上缺陷。
 - ⚠ **`create or replace view` 不能改列序**：给视图加列必须追加到 SELECT 末尾，
   否则 `42P16: cannot change name of view column …`（实测踩到）。
+
+### v5.0.0：电台重做（网易云条目）
+
+- **模型**：`radio_tracks` = 网易云条目（`kind` song/playlist + `netease_id` + 规范化 outchain 地址）。
+  **已删除** `data`/`storage_path`/`duration_sec`/`size_bytes`/`mime`/`cover_url` —— base64 自建播放器时代的产物。
+- ⚠ **改视图/删列的两条硬规矩**（都实锤过）：
+  1. 要删列，**必须先 drop 掉依赖它的视图**（否则 2BP01: cannot drop column … because view depends on it）
+  2. 视图重建后**必须补回 GRANT**（`grant select on public_radio to anon, authenticated`）—— 忘了就是"匿名访客读不到、电台全空"
+- **播放**：单曲 `type=2&height=66`；歌单 `type=0&height=430`（官方给的正是这两个值）。
+- **待办（下一轮）**：独立页面 `#/radio` + 常驻官方播放器（挂在 `#app` 之外，切页面不断歌）；
+  以及删除旧 `js/radio.js`（`<audio>` 内核）与 base64 时代遗留方法。
 
 ### 网易云官方外链播放器（v4.9.9）
 

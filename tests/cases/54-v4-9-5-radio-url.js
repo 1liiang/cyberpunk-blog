@@ -315,14 +315,16 @@ async function run() {
       ok, ok ? '' : (dock ? '点了 dock 仍没渲染表单' : '没有 #radio-dock'));
 
     const form = ctx.doc.querySelector('[data-radio-form]');
-    T(CASE, 'R296b 表单里有"音源（二选一）"的分隔标题 + 原有的文件输入仍在',
-      !!ctx.doc.querySelector('.radio-src-head') && !!ctx.doc.querySelector('[data-radio-field="file"]'),
+    /* v5.0.0：文件上传整条路移除，改为"贴网易云链接 + 选类型" */
+    T(CASE, 'R296b 表单含网易云条目输入与类型选择器，且**不再有文件输入**',
+      !!ctx.doc.querySelector('.radio-src-head') && !!ctx.doc.querySelector('[data-radio-field="url"]') &&
+      !!ctx.doc.querySelector('[data-radio-field="kind"]') && !ctx.doc.querySelector('[data-radio-field="file"]'),
       form ? 'form ok' : '没有表单');
 
     const hint = ctx.doc.querySelector('.radio-hint');
-    T(CASE, 'R296c 提示里写明"外链只存地址、请自行确认来源与授权"（责任在站长，界面说清楚）',
-      !!hint && /授权/.test(hint.textContent || '') && /外链/.test(hint.textContent || ''),
-      hint ? (hint.textContent || '').slice(0, 70) : '没有提示块');
+    T(CASE, 'R296c 提示里写明"使用网易云官方外链播放器，播放与版权由网易云处理"',
+      !!hint && /官方外链播放器/.test(hint.textContent || '') && /网易云/.test(hint.textContent || ''),
+      hint ? (hint.textContent || '').slice(0, 80) : '没有提示块');
 
     /* 真点一次：填直链 → 加入频段 → 应当产生一条带 source_url 的 insert */
     const openBtn = ctx.doc.querySelector('[data-radio-act="add"]');
@@ -336,8 +338,10 @@ async function run() {
     const titleEl = ctx.doc.querySelector('[data-radio-field="title"]');
     const submit = ctx.doc.querySelector('[data-radio-act="submit-add"]');
     if (urlEl && titleEl && submit) {
-      titleEl.value = '界面外链曲';
-      urlEl.value = URL_OK;
+      titleEl.value = '界面条目';
+      /* v5.0.0：校验口径变成"能不能认成网易云条目" —— 测试输入也得是网易云链接，
+         否则会被（正确地）拦下，测不到入库分支（实测踩到）。 */
+      urlEl.value = 'https://music.163.com/#/song?id=2003621098';
       submit.dispatchEvent(new ctx.w.MouseEvent('click', { bubbles: true, cancelable: true }));
       /* ⚠ 桩把插入的行记在 `payload`（不是 row）—— 断言要按桩的形状写，
          第一版写成 q.row 于是"明明写了库却抓不到"，红得冤枉。 */
@@ -350,8 +354,10 @@ async function run() {
     const wrote = ctx.queries.filter(function (q) {
       return q.table === 'radio_tracks' && q.kind === 'insert' && q.payload && q.payload.source_url;
     });
-    T(CASE, 'R296d ★ 界面上贴直链并提交 → 真的按外链入库（走的是 addByUrl 那条分支）',
-      wrote.length >= 1 && wrote[0].payload.source_url === URL_OK && wrote[0].payload.data === null,
+    T(CASE, 'R296d ★ 界面上贴网易云链接并提交 → 入库的是官方 outchain 地址 + kind',
+      wrote.length >= 1 &&
+      wrote[0].payload.source_url === 'https://music.163.com/outchain/player?type=2&id=2003621098&auto=0&height=66' &&
+      wrote[0].payload.kind === 'song' && wrote[0].payload.netease_id === '2003621098',
       wrote.length ? JSON.stringify({ u: wrote[0].payload.source_url, d: wrote[0].payload.data }) : '没有外链写入请求');
 
     T(CASE, 'R296e 界面上贴直链时**没有**读文件（外链不必碰 base64 那条重路）',

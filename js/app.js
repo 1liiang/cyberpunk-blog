@@ -1896,31 +1896,15 @@
          ⚠ 教训实锤：站长第一次贴的是 B 站**网页地址**，它 https 合法、URL 结构也合法，
            于是顺利入库，直到播放时才报一句 "no supported sources" —— 用户根本看不出
            是自己贴错了。校验放在入库前，这类错就进不了库。 */
-      if (url) {
-        /* v4.9.9：网易云 —— 歌曲页 / outchain 页 / 裸 id 都认，统一换成官方外链播放器地址 */
-        var embed = need('Radio').neteaseEmbedUrl(url);
-        if (embed) { url = embed; if (urlEl) urlEl.value = embed; }
-        var probe = await need('Radio').probeSourceUrl(url);
-        if (probe && probe.ok === false) {
-          formMsg(probe.reason || '这个地址无法播放，请换一条音频直链', 'err');
-          RadioUI.busy = false;
-          return;
-        }
-      }
-
-      /* v4.9.5：两条路 —— 直链只存地址（秒完成、不占库容）；文件走原来的 base64 入库。
-         返回对象的形状两者一致（都有 has_data），所以下面的收尾代码共用。 */
-      var row = url
-        ? await need('Radio').addByUrl(url, {
-            title: title,
-            artist: (artistEl && artistEl.value || '').trim(),
-            album: (albumEl && albumEl.value || '').trim()
-          }, uid)
-        : await need('Radio').addTrack(file, {
-            title: title,
-            artist: (artistEl && artistEl.value || '').trim(),
-            album: (albumEl && albumEl.value || '').trim()
-          }, uid);
+      /* v5.0.0：只剩一条路 —— 网易云条目。本地文件上传已按站长决定移除。 */
+      var kindEl = form.querySelector('[data-radio-field="kind"]');
+      var wantKind = (kindEl && kindEl.value) || 'auto';
+      var row = await need('Radio').add(url, {
+        title: title,
+        artist: (artistEl && artistEl.value || '').trim(),
+        kind: wantKind === 'auto' ? null : wantKind,
+        id: url
+      }, uid);
 
       /* 成功 → 刷新列表，清空表单 */
       formDraft = { title: '', artist: '', album: '', url: '' };
