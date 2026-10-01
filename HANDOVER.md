@@ -196,7 +196,7 @@ cyberpunk-blog/
 - ⚠ `bump.js` 失败时**只在末尾回显一行"改号"帮助**，很容易被当成成功 —— 判据永远是：看
   `js/version.js` 的 BUILD、`index.html` 的 `?v=` 分布、`package.json` 三者是否同值。
 
-### v5.2.0：旧小条已拆 + 一条改测试的教训
+### v5.2.0：旧小条已拆 + 一条改测试的教训（⚠ 电台已于 v5.7.2 整体删除；本条只留经验）
 
 - 旧 `#radio-dock` 与 `js/radio.js`（`<audio>` 内核）已移除 —— 新电台用官方 iframe 播放器。
   旧入口函数（`paintDock`/`bindRadioDock`/`openRadioPanel`）**保留空实现而非删除**：
@@ -204,8 +204,9 @@ cyberpunk-blog/
 - ⚠ **改测试的正确姿势（实锤两轮）**：想"把断言里的旧容器名换成新容器名"时，
   **不要全局替换** —— 同一个词往往同时出现在与容器无关的断言里（这次 11 条 CSS 断言被误伤）。
   正解：**先从远端取回未改动的原文件，再做最小范围替换**（甚至只改那一条断言的括号块内部）。
-- 容器位置：`#radio-stage` 放在 `<main id="app">` **之前** —— 同为"#app 之外"，
-  但既有断言按"在 #app 之前"判定，放前面最省事且语义相同（fixed 定位与文档位置无关）。
+- 容器位置（**已随电台删除，此条只作历史**）：`#radio-stage` 曾放在 `<main id="app">` 之前。
+  ⚠ 留下的教训：**"位置在 #app 之外"这类结构性要求，一旦功能删除，对应断言必须一起退役**，
+  否则就会变成 R150b 那种假绿（见下条）。
 
 ### ⚠ v5.7.2：注释盲断言 = 永久假绿（R150b 实锤，第 4 次同类坑）
 
@@ -224,9 +225,9 @@ cyberpunk-blog/
 - 反向验证：基线 PASS → 插入 `js/radio.js` 假引用 → **FAIL（缺失引用: js/radio.js?v=5.7.1）**
   → 恢复 PASS 且字节一致。
 
-### v5.1.0：电台的常驻控制台（切页面不断歌的关键）
+### v5.1.0：电台的常驻控制台（⚠ 功能已于 v5.7.2 删除；本条价值在"切页不断播放"的通用技法）
 
-- 官方播放器 iframe 挂在 **#app 之外**（index.html 的 `#radio-stage`）。这是唯一要点：
+- 官方播放器 iframe 曾挂在 **#app 之外**（index.html 的 `#radio-stage`）。要点很通用：
   iframe 一旦位于会被路由重绘的区域里，切页面就重载、歌就断（参考博客专门写过这个坑）。
 - `paintStage()` **只在目标地址变化时**重建 iframe；地址不变则什么都不做（否则等于手动断歌）。
 - `data-mode` 由路由在 `mini`（右下小条）/ `full`（电台页大控制台）间切换 —— 同一台机器、两种体型，
@@ -411,7 +412,9 @@ cyberpunk-blog/
 | ~~D 导出器电台块~~ | ✅ **v5.6.2 完成（选了"按 v5 重写"）** | 它原来 select `data/mime/duration_sec/size_bytes/cover_url/has_data` —— 这些列 v5 已从库与服务端删除，真去查会 42703 **整轮导不出快照**（之前没爆只因快照 `radio` 恒为空）。现在只导 v5 条目元数据，字段与 `cloud.js` 的 `RADIO_FIELDS` **逐字一致**（51 号 R253c 钉着这条）；`FORCE_AUDIO`/`AUDIO_EXT_BY_MIME`/`localFileSize`/`data/radio` 落地与清目录逻辑一并删除，空的 `app/data/radio/` 目录也删了 |
 
 **④ 里必须记住的"别误删"清单**（下一轮再有人清 CSS 时照着对）：
-电台页在用 `.radio-page-tip` / `.radio-board` / `.radio-card*` / `.radio-compose` / `.radio-field` / `.radio-select` / `.radio-src-head` / `.radio-form*` / `.radio-op*`；
+   ⚠ v5.7.2：下面这串"电台页在用"的类名已随电台整体下线删除（`.radio-page-tip` /
+   `.radio-board` / `.radio-card*` / `.radio-compose` / `.radio-field` / `.radio-select` /
+   `.radio-src-head` / `.radio-form*` / `.radio-op*`），CSS 里已无对应规则。
 常驻控制台在用 `.radio-console` / `.rc-*`（复古收音机材质走它自己的局部变量，刻意不跟主题翻）。
 
 ⚠ **过程教训（v5.6.0 立项时实锤）**：用"括号配平"批量退役断言时，**遇到内部含分号/嵌套括号的断言会配平失败**（当时 2 条失败并连带把 54 号改出运行时错）。
