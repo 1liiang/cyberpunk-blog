@@ -5859,24 +5859,30 @@ body:not(.linenum-off) .md-body > pre::before {
      · 霓虹切角与配色 = sebyx07/cybercore-css（纯 CSS 赛博朋克框架）的霓虹美学
    颜色按站长新规自由取（紫青 + 洋红 + 琥珀），不强行挂主题变量。
    ⚠ 动效仅三处（扫掠 / 回波闪烁 / 频谱跳动），全部在 reduce 块归零。 */
+/* v5.5.1：雷达盘做大做细 —— 尺寸 108→144、三层同心圆、十字准线、15° 主刻度 */
 .holo-radar {
   position: relative;
-  width: 108px; height: 108px;
+  width: 144px; height: 144px;
   flex: 0 0 auto;
   border-radius: 50%;
-  border: 1px solid rgba(122, 92, 255, .45);
+  border: 1px solid rgba(122, 92, 255, .5);
   background:
-    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, .10), transparent 62%),
+    radial-gradient(circle at 50% 50%, rgba(0, 240, 255, .12), transparent 64%),
+    /* 三层同心圆：repeating-radial-gradient 一圈一段，比画 SVG 便宜 */
+    repeating-radial-gradient(circle at 50% 50%, rgba(122, 92, 255, .30) 0 1px, transparent 1px 22px),
+    /* 十字准线：两条 1px 细线 */
+    linear-gradient(0deg, transparent calc(50% - .5px), rgba(122, 92, 255, .28) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(90deg, transparent calc(50% - .5px), rgba(122, 92, 255, .28) calc(50% - .5px) calc(50% + .5px), transparent calc(50% + .5px)),
     #07070f;
-  box-shadow: inset 0 0 18px rgba(122, 92, 255, .25);
+  box-shadow: inset 0 0 22px rgba(122, 92, 255, .28), 0 0 18px rgba(122, 92, 255, .12);
   overflow: hidden;
 }
 /* 一圈刻度：repeating-conic-gradient 只画扇区线，比 SVG 便宜 */
 .holo-radar::before {
   content: '';
-  position: absolute; inset: 6px;
+  position: absolute; inset: 8px;
   border-radius: 50%;
-  background: repeating-conic-gradient(from 0deg, rgba(140, 120, 255, .55) 0 .6deg, transparent .6deg 30deg);
+  background: repeating-conic-gradient(from 0deg, rgba(140, 120, 255, .55) 0 .5deg, transparent .5deg 15deg);
   -webkit-mask: radial-gradient(circle, transparent 62%, #000 63%);
           mask: radial-gradient(circle, transparent 62%, #000 63%);
 }
