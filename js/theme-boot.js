@@ -33,11 +33,11 @@
 
   var KEY = 'neon_theme';
 
-  /* 允许的档位：dark（默认）/ light / warm（C12 暖色档）。
+  /* 允许的档位：dark（默认）/ light。
      白名单写法而非"判断某个特定值" —— 这样将来再加档位只需改这一处，
      且脏数据天然落到 dark，不会把未知值透传到 data-theme 上，
      导致 CSS 里没有匹配规则、整站回落到无主题的裸样式。 */
-  var ALLOWED = ['dark', 'light', 'warm'];
+  var ALLOWED = ['dark', 'light'];
 
   /* v3.4.0：色相已由「九档预设」放开为**自由滑杆**（0~359 任意整数）
      ⇒ 这里的校验从"白名单"升级为**范围校验**。

@@ -132,7 +132,7 @@
     help: { desc: 'goto <页>     跳转：home / archive / tags / marks / about / search / login' },
     search: { desc: 'search <词>    扫描全部广播（写进路由，可分享可回退）' },
     hue: { desc: 'hue <0-359>    换色相（例：hue 280）' },
-    theme: { desc: 'theme <档>     dark / light / warm' },
+    theme: { desc: 'theme <档>     dark / light' },
     atmo: { desc: 'atmo <模式>    pollution / standard / silent' },
     whoami: { desc: 'whoami         当前身份' },
     clear: { desc: 'clear          清屏' }
@@ -174,7 +174,7 @@
 
   function cmdTheme(arg) {
     var m = String(arg || '').trim().toLowerCase();
-    if (['dark', 'light', 'warm'].indexOf(m) === -1) { print('档位：dark / light / warm', 'err'); return; }
+    if (['dark', 'light'].indexOf(m) === -1) { print('档位：dark / light', 'err'); return; }
     var c = ctl();
     if (!c || typeof c.setTheme !== 'function') { print('主题控制暂不可用（app 未就绪）', 'err'); return; }
     c.setTheme(m);

@@ -51,7 +51,7 @@
     "file": "39-v3-0-0-b1-tokens.js",
     "name": "v3.0.0 B1 地基",
     "blocks": 1,
-    "expect": 22
+    "expect": 21
   },
   {
     "file": "45-v4-0-0-scene-atmo.js",

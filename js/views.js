@@ -1336,6 +1336,7 @@
     var bootDate = state.bootDate || '----------';
     var nickname = state.nickname || '漓光';
     var tags = state.tags || ['站长', '作者'];
+    var stations = state.stations || [];
     function pad(n) { return (n < 10 ? '0' : '') + n; }
     function cell(id, label, value, unit) {
       return '<div class="uptime-cell"><span class="uptime-label">' + label + '</span>' +
@@ -1367,6 +1368,33 @@
               '遥测 <b>NOMINAL</b>' +
             '</div>' +
           '</div>' +
+          /* ⚠ v5.7.3：主页电台 = **网易云官方外链播放器**（outchain iframe）。
+             为什么用 iframe：版权与播放都由平台负责，本站不托管音频。
+             代价（如实写在视图里，别让接手的人以为是 bug）：
+               · iframe 内部是官方 UI，**样式改不了**（浅色底，与本站暗紫会有跳色）
+               · 它挂在 #app 内的左半侧面板里 ⇒ 首页重渲染（拉列表完成时也会）会重建 iframe，
+                 播放**可能中断**。彻底解法是像 v5.1.0 那样把它挪到 #app 之外；
+                 当前保留在面板内是站长的选择。
+             台账 RADIO_STATIONS 在 app.js —— 改榜单只动那一处。 */
+          '<section class="holo-radio" data-holo-radio aria-label="电台">' +
+            '<div class="holo-radio-head">' +
+              '<span class="holo-radio-tag">RADIO LINK</span>' +
+              '<span class="holo-radio-live"><i aria-hidden="true"></i>NETEASE</span>' +
+            '</div>' +
+            '<div class="holo-radio-list" data-radio-list>' +
+              stations.map(function (st) {
+                return '<button type="button" class="holo-radio-item" data-radio-id="' + esc(String(st.id)) +
+                  '" data-radio-type="' + esc(String(st.type)) + '">' +
+                  '<span class="holo-radio-name">' + esc(st.name) + '</span>' +
+                  '<span class="holo-radio-kind">' + (String(st.type) === '0' ? '歌单' : '单曲') + '</span>' +
+                '</button>';
+              }).join('') +
+            '</div>' +
+            '<div class="holo-radio-shell" data-radio-shell>' +
+              '<div class="holo-radio-ph" data-radio-ph>未挂载 · <b>点上面任意一条</b></div>' +
+            '</div>' +
+            '<p class="holo-radio-foot">官方外链播放器 · 版权与播放由网易云负责</p>' +
+          '</section>' +
           '<div class="holo-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>' +
           '<p class="uptime-foot">信号自 ' + esc(bootDate) + ' 起持续广播 · 每一秒都在变长</p>' +
         '</section>' +

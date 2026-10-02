@@ -5,7 +5,7 @@
    B1 做的是"看不见但处处生效"的一层：
      ① 配色旋钮：--hue 单变量派生体系（chrome 层）
      ② 语义色固定不旋转（品红/绿/黄/红 —— "能调气质，不能调语义"）
-     ③ 三档派生参数（dark / light / warm 各自的 --hue-s / --hue-l）
+     ③ 两档派生参数（dark / light 各自的 --hue-s / --hue-l）
      ④ 间距九级刻度 + 容器三档 + Banner / 人味层圆角 / 衬线 tokens
      ⑤ 断点体系登记（1280 / 1024 / 768 / 480）
      ⑥ 首绘前引导脚本与运行时的色相白名单逐值一致
@@ -47,7 +47,6 @@ async function run() {
   const css = SRC.css;
   const rootBlk = blockOf(css, ':root {');
   const lightBlk = blockOf(css, 'html[data-theme="light"]');
-  const warmBlk = blockOf(css, 'html[data-theme="warm"]');
   const bootSrc = readFile('js/theme-boot.js');
   const appSrc = SRC.app;
 
@@ -111,7 +110,7 @@ async function run() {
       '缺项');
   }
 
-  /* ================= ③ 三档派生参数 ================= */
+  /* ================= ③ 两档派生参数 ================= */
   {
     const CN = 'B1 地基';
     T(CN, 'R175h 亮色档覆盖压暗参数（--hue-l ≤ 35%）',
@@ -119,15 +118,13 @@ async function run() {
       parseInt(/--hue-l:\s*(\d+)%/.exec(lightBlk)[1], 10) <= 35,
       lightBlk ? (/--hue-l:\s*\d+%/.exec(lightBlk) || ['无'])[0] : '未找到亮色块');
 
-    T(CN, 'R175i 暖色档覆盖降饱和参数（--hue-s < 100%）并保留暖褐结构线',
-      warmBlk.length > 0 && /--hue-s:\s*(\d+)%/.test(warmBlk) &&
-      parseInt(/--hue-s:\s*(\d+)%/.exec(warmBlk)[1], 10) < 100 &&
-      /--line:\s*rgba\(140,\s*96,\s*40/.test(warmBlk),
-      warmBlk ? (/--hue-s:\s*\d+%/.exec(warmBlk) || ['无'])[0] : '未找到暖色块');
 
-    T(CN, 'R175j 紫的派生参数三档齐备（暗/亮/暖各有一套 --vio-s/--vio-l）',
-      /--vio-s:/.test(rootBlk) && /--vio-s:/.test(lightBlk) && /--vio-s:/.test(warmBlk) &&
-      /--vio-l:/.test(lightBlk) && /--vio-l:/.test(warmBlk),
+    /* ⚠ v5.7.3 改判：原为「三档齐备（暗/亮/暖）」—— 暖色档 warm 已删除，
+       判据相应收到**两档**（dark 的 :root + light 覆盖块）。
+       守的东西没变：每个档位都必须自带一套紫派生参数，否则该档下辅助紫会失真。 */
+    T(CN, 'R175j 紫的派生参数两档齐备（暗/亮各有一套 --vio-s/--vio-l）',
+      /--vio-s:/.test(rootBlk) && /--vio-s:/.test(lightBlk) &&
+      /--vio-l:/.test(lightBlk),
       '某档缺紫参数');
   }
 

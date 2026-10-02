@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN" data-skin="anime" data-hue="285" data-petal="on">
+<head>
+<meta charset="utf-8">
+<!-- ⚠ 原型模拟真实部署：外链音频需要 media-src 放行。正式进站时 index.html 的 CSP 必须同步改。 -->
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';
+               img-src 'self' data: blob:; media-src 'self' data: blob:; frame-src https://music.163.com;
+               connect-src 'self'; object-src 'none'; base-uri 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEON RADIO · 外链版原型（皮肤可切：全息终端 / 赛博动漫）</title>
+<style>
+/* ============================================================
+   两套皮肤，同一套结构：
+     data-skin="anime"  → B 全息终端（青紫、克制、切角）
+     data-skin="anime" → 赛博动漫 Cyber Anime（紫+青绿+粉、HUD 角框、扫描线、六边形）
+   皮肤只改 CSS 变量与少量专属规则，DOM 完全共用 —— 便于你对比取舍。
+   ============================================================ */
+:root{
+  --hue:285; --hue-s:100%; --hue-l:50%;
+  --primary:#7c3aed;
+  --pink:#ff006e;
+  --bg-0:#0f0f1a; --bg-1:#141426; --bg-2:#1a1a2e; --bg-3:#221f3d;
+  --text:#e0e0ff; --text-bright:#ffffff; --text-dim:#8b8bb5;
+  --line:rgba(124,58,237,.35);
+  --line-strong:rgba(124,58,237,.6);
+  --glow:0 0 10px rgba(124,58,237,.35), 0 0 22px rgba(124,58,237,.18);
+  --glow-pink:0 0 10px rgba(255,0,110,.5), 0 0 26px rgba(255,0,110,.22);
+  --cut:18px; --panel-radius:0px; --accent2:#06d6a0;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,"Sarasa Mono SC",monospace;
+}
+/* ---- 赛博动漫皮肤：换配色角色 + 机甲/HUD 专属感 ---- */
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg-0); color:var(--text); overflow-x:hidden;
+  font-family:system-ui,-apple-system,"Noto Sans SC",sans-serif;
+  display:flex; align-items:center; justify-content:center; padding:24px;
+}
+/* 六边形能量网格（Cyber Anime 必需项之一，两皮肤共用） */
+body::before{
+  content:""; position:fixed; inset:-10%; z-index:0; pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='52'%3E%3Cpath d='M30 0 L60 15 L60 37 L30 52 L0 37 L0 15 Z' fill='none' stroke='%237c3aed' stroke-width='0.4' opacity='0.10'/%3E%3C/svg%3E");
+  animation:hexdrift 44s linear infinite;
+}
+@keyframes hexdrift{to{transform:translate(60px,52px)}}
+.petals{position:fixed;inset:0;z-index:1;pointer-events:none;overflow:hidden}
+.petal{position:absolute;top:-24px;width:11px;height:11px;background:var(--pink);opacity:.5;
+  border-radius:70% 0 70% 0;filter:drop-shadow(0 0 5px var(--pink));animation:fall linear infinite}
+@keyframes fall{0%{transform:translateY(-30px) rotate(0)}100%{transform:translateY(105vh) rotate(420deg)}}
+html[data-petal="off"] .petals{display:none}
+
+/* ---------- 机身 ---------- */
+.rig{
+  position:relative; z-index:2; width:min(700px,100%);
+  background:linear-gradient(180deg,var(--bg-2),var(--bg-1));
+  border:1px solid var(--line-strong); border-radius:var(--panel-radius);
+  clip-path:polygon(0 0,calc(100% - var(--cut)) 0,100% var(--cut),100% 100%,var(--cut) 100%,0 calc(100% - var(--cut)));
+  box-shadow:var(--glow);
+}
+/* HUD 四角括号（Cyber Anime 必需项） */
+.rig::before,.rig::after{content:"";position:absolute;width:20px;height:20px;border:0 solid var(--pink);z-index:3}
+.rig::before{top:0;left:0;border-left-width:2px;border-top-width:2px}
+.rig::after{bottom:0;right:0;border-right-width:2px;border-bottom-width:2px}
+/* 全息扫描线（Cyber Anime 必需项：纵向） */
+.scan{position:relative;overflow:hidden}
+.scan::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:4;
+  background:repeating-linear-gradient(90deg,transparent 0 2px,hsl(var(--hue) 100% 82% / .05) 2px 3px)}
+
+.top{display:flex;align-items:center;gap:9px;padding:9px 14px;border-bottom:1px solid var(--line);
+  font-family:var(--mono);font-size:10.5px;letter-spacing:2px;text-transform:uppercase}
+.top b{color:var(--primary);font-weight:400;text-shadow:var(--glow)}
+.top .id{margin-left:auto;color:var(--text-dim)}
+.top .id i{color:var(--pink);font-style:normal}
+
+.body{display:grid;grid-template-columns:172px 1fr;gap:16px;padding:16px}
+@media(max-width:600px){.body{grid-template-columns:1fr}}
+
+.deck{position:relative;aspect-ratio:1;display:grid;place-items:center}
+.disc{width:100%;aspect-ratio:1;border-radius:50%;
+  background:repeating-radial-gradient(circle at 50% 50%,hsl(var(--hue) 100% 60% / .10) 0 1px,transparent 1px 4px),
+             radial-gradient(circle at 50% 50%,var(--bg-3) 0 34%,var(--bg-1) 34% 100%);
+  border:1px solid var(--line-strong);
+  box-shadow:inset 0 0 26px hsl(var(--hue) 100% 55% / .22),0 0 22px hsl(var(--hue) 100% 55% / .16);
+  animation:spin 6s linear infinite;animation-play-state:paused}
+html[data-playing="on"] .disc{animation-play-state:running}
+@keyframes spin{to{transform:rotate(360deg)}}
+.disc::after{content:"◈";position:absolute;inset:0;display:grid;place-items:center;font-size:24px;
+  color:var(--pink);text-shadow:var(--glow-pink)}
+.arm{position:absolute;top:2px;right:6px;width:3px;height:52%;
+  background:linear-gradient(180deg,var(--accent2),transparent);transform-origin:top center;
+  transform:rotate(-24deg);transition:transform .26s ease-out}
+html[data-playing="on"] .arm{transform:rotate(-8deg)}
+
+.panel{display:flex;flex-direction:column;gap:11px;min-width:0}
+.track{font-family:var(--mono);font-size:10.5px;color:var(--text-dim);letter-spacing:1px}
+.track b{display:block;color:var(--text-bright);font-size:15px;letter-spacing:.5px;margin-top:3px;font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.track em{color:var(--pink);font-style:normal}
+
+.vu{display:flex;align-items:flex-end;gap:2.5px;height:24px}
+.vu i{flex:1;background:linear-gradient(180deg,var(--pink),var(--accent2));height:14%}
+html[data-playing="on"] .vu i{animation:vu .6s ease-in-out infinite alternate}
+.vu i:nth-child(2n){animation-delay:.08s}.vu i:nth-child(3n){animation-delay:.17s}.vu i:nth-child(4n){animation-delay:.25s}
+@keyframes vu{from{height:12%}to{height:96%}}
+
+.read{font-family:var(--mono);font-size:10.5px;letter-spacing:1.3px;color:var(--text-dim);display:flex;gap:13px;flex-wrap:wrap}
+.read s{text-decoration:none;color:var(--accent2)}
+.read u{text-decoration:none;color:var(--pink)}
+
+.bar{position:relative;height:6px;background:var(--bg-0);border:1px solid var(--line);cursor:pointer}
+.bar span{position:absolute;inset:0 auto 0 0;width:0;background:linear-gradient(90deg,var(--accent2),var(--pink));
+  box-shadow:0 0 10px hsl(var(--hue) 100% 60% / .5)}
+.bar i{position:absolute;top:50%;left:0;width:11px;height:11px;margin:-6px 0 0 -6px;border-radius:50%;
+  background:var(--bg-1);border:2px solid var(--pink);box-shadow:var(--glow-pink)}
+
+.ops{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.btn{font-family:var(--mono);font-size:10.5px;letter-spacing:1.8px;text-transform:uppercase;
+  background:var(--bg-3);color:var(--text-bright);border:1px solid var(--line-strong);
+  padding:9px 13px;cursor:pointer;
+  clip-path:polygon(0 0,calc(100% - 8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100% - 8px));
+  transition:transform .18s ease-out,box-shadow .18s ease-out,border-color .18s ease-out}
+.btn:hover{transform:translateY(-2px);border-color:var(--pink);box-shadow:var(--glow-pink)}
+.btn:active{transform:translateY(0) scale(.98)}
+.btn.play{background:linear-gradient(180deg,hsl(var(--hue) 85% 34%),hsl(var(--hue) 85% 24%));border-color:var(--pink);box-shadow:var(--glow)}
+.knob{width:30px;height:30px;border-radius:50%;cursor:pointer;border:1px solid var(--line-strong);
+  background:radial-gradient(circle at 34% 30%,var(--bg-3),var(--bg-0))}
+.knob:hover{border-color:var(--pink)}
+
+.src .row2{display:flex;gap:6px;flex-wrap:wrap}
+.chip{font-family:var(--mono);font-size:9.5px;letter-spacing:1px;background:var(--bg-2);color:var(--text-dim);
+  border:1px solid var(--line);padding:5px 8px;cursor:pointer}
+.chip:hover{border-color:var(--accent2);color:var(--accent2)}
+
+
+/* ---------- 网易云外链（官方 outchain iframe） ---------- */
+.ne{border-top:1px dashed var(--line);padding-top:11px;display:flex;flex-direction:column;gap:8px}
+.ne label{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase}
+.ne .row{display:flex;gap:7px;flex-wrap:wrap}
+.ne input,.ne select{font-family:var(--mono);font-size:11.5px;background:var(--bg-0);color:var(--text-bright);
+  border:1px solid var(--line);padding:9px 10px}
+.ne input{flex:1 1 150px;min-width:0}
+.ne input:focus,.ne select:focus{outline:none;border-color:var(--pink);box-shadow:var(--glow-pink)}
+/* 外壳（可自绘）：切角 + HUD 角 + 扫描线；内部官方 UI 是黑盒 */
+.ne .shell{position:relative;border:1px solid var(--line-strong);background:var(--bg-0);
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px));
+  padding:8px;min-height:82px;display:grid;place-items:center}
+.ne .shell::before{content:"";position:absolute;top:0;left:0;width:14px;height:14px;
+  border-left:2px solid var(--accent2);border-top:2px solid var(--accent2)}
+.ne .shell::after{content:"";position:absolute;bottom:0;right:0;width:14px;height:14px;
+  border-right:2px solid var(--pink);border-bottom:2px solid var(--pink)}
+.ne .shell iframe{display:block;border:0;background:transparent;max-width:100%}
+.ne .placeholder{font-family:var(--mono);font-size:10px;color:var(--text-dim);letter-spacing:.5px;text-align:center;line-height:1.9}
+.ne .placeholder b{color:var(--accent2);font-weight:400}
+.ne .hint{font-family:var(--mono);font-size:9.5px;color:var(--text-dim);line-height:1.7;letter-spacing:.4px}
+.ne .hint b{color:var(--accent2);font-weight:400}
+.ne .hint em{color:var(--pink);font-style:normal}
+.ne .chips{display:flex;gap:6px;flex-wrap:wrap}
+.ne .chip{font-family:var(--mono);font-size:9.5px;letter-spacing:1px;background:var(--bg-2);color:var(--text-dim);
+  border:1px solid var(--line);padding:5px 8px;cursor:pointer}
+.ne .chip:hover{border-color:var(--accent2);color:var(--accent2)}
+
+.say{font-family:var(--mono);font-size:10.5px;letter-spacing:.8px;border-top:1px dashed var(--line);
+  padding-top:9px;color:var(--text-dim)}
+.say b{color:var(--pink);font-weight:400}
+.say s{text-decoration:none;color:var(--accent2)}
+
+/* 底部控制条 */
+.dock{position:fixed;z-index:5;bottom:12px;left:50%;transform:translateX(-50%);
+  display:flex;gap:6px;flex-wrap:wrap;justify-content:center;max-width:calc(100% - 24px);
+  font-family:var(--mono);font-size:10px;letter-spacing:1px}
+.dock button{background:var(--bg-2);color:var(--text);border:1px solid var(--line);padding:6px 10px;cursor:pointer}
+.dock button.on{border-color:var(--pink);color:var(--pink)}
+@media (prefers-reduced-motion: reduce){
+  .disc,.vu i,.petal,body::before{animation:none !important}
+}
+</style>
+</head>
+<body>
+<div class="petals" aria-hidden="true"></div>
+
+<div class="rig scan">
+  <div class="top">
+    <b>NEON://DIARY</b> · RADIO UNIT
+    <span style="color:var(--text-dim)">MK-Ⅶ</span>
+    <span class="id">SRC <i id="srcTag">LOCAL</i></span>
+  </div>
+
+  <div class="body">
+    <div class="deck"><div class="disc"></div><div class="arm"></div></div>
+
+    <div class="panel">
+      <div class="track">
+        <span id="kindLine">SIGNAL / 内蔵音源</span>
+        <b id="titleLine">ホログラム・ドリフト <em>◈</em></b>
+        <span id="subLine">SYNTH LOOP · 8.0s · 自主制作(无版权)</span>
+      </div>
+
+      <div class="vu" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+
+      <div class="read">
+        <span>T <s id="t">00:00</s></span>
+        <span>DUR <s id="d">00:00</s></span>
+        <span>VOL <s id="v">70</s></span>
+      </div>
+
+      <div class="bar" id="bar"><span id="fill"></span><i id="dot"></i></div>
+
+      <div class="ops">
+        <button class="btn play" id="play">▶ 起動</button>
+        <button class="btn" id="reset">⟲ 回到内蔵</button>
+        <button class="knob" id="vol" title="音量" aria-label="音量"></button>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text-dim)">KNOB</span>
+      </div>
+
+
+      <!-- ===== 网易云外链（官方 outchain iframe） ===== -->
+      <div class="ne">
+        <label for="neId">网易云外链 / netease outchain</label>
+        <div class="row">
+          <select id="neType" aria-label="类型">
+            <option value="2">单曲 66px</option>
+            <option value="0">歌单 430px</option>
+          </select>
+          <input id="neId" type="text" inputmode="numeric" spellcheck="false" placeholder="歌曲 / 歌单 id，例如 2003621098">
+          <button class="btn" id="neLoad">掛載</button>
+        </div>
+        <div class="chips">
+          <button class="chip" data-ne="2|2003621098">示例单曲 id 2003621098</button>
+          <button class="chip" data-ne="0|2597489971">示例歌单 id 2597489971</button>
+        </div>
+        <div class="shell" id="neShell">
+          <div class="placeholder" id="nePh">
+            尚未掛載外链<br>
+            <b>填 id 后点「掛載」</b> —— 播放器由网易云官方提供<br>
+            <em>⚠ 外壳可自绘，内部官方 UI 改不了</em>
+          </div>
+        </div>
+        <div class="hint">
+          地址形态：<b>music.163.com/outchain/player?type=&amp;id=&amp;height=</b>（已实测 200、无 X-Frame-Options）<br>
+          ⚠ 旧式路径 <em>/outchain/2/&lt;id&gt;/m/use/html</em> 实测 <em>302</em>，不能直接当 src。<br>
+          ⚠ 需 <em>CSP frame-src https://music.163.com</em>（本原型已加）——否则 iframe 被 default-src 'self' 拦掉。
+        </div>
+      </div>
+
+      <div class="say" id="say">系统待命 · <b>点「起動」</b> 听内蔵音源，或贴上外链再点「載入」</div>
+    </div>
+  </div>
+</div>
+
+<div class="dock">
+  <button data-h="285" class="on">青紫 285</button>
+  <button data-h="330">樱花粉 330</button>
+  <button data-h="200">深海蓝 200</button>
+  <button id="petalBtn">花瓣 开</button>
+</div>
+
+<audio id="a" src="loop.wav" loop preload="auto"></audio>
+<script>
+(function () {
+  var box = document.querySelector('.petals');
+  for (var i = 0; i < 14; i++) {
+    var p = document.createElement('span');
+    p.className = 'petal';
+    p.style.left = (i * 7.3 + (i % 3) * 2.1) + '%';
+    p.style.animationDuration = (9 + (i % 5) * 1.7) + 's';
+    p.style.animationDelay = (-i * 1.1) + 's';
+    p.style.opacity = (0.28 + (i % 4) * 0.09).toFixed(2);
+    box.appendChild(p);
+  }
+})();
+
+var a = document.getElementById('a');
+var play = document.getElementById('play');
+var fill = document.getElementById('fill');
+var dot = document.getElementById('dot');
+var tEl = document.getElementById('t'), dEl = document.getElementById('d');
+var say = document.getElementById('say');
+var srcTag = document.getElementById('srcTag');
+var titleLine = document.getElementById('titleLine');
+var subLine = document.getElementById('subLine');
+var kindLine = document.getElementById('kindLine');
+var LOCAL = { src: 'loop.wav', title: 'ホログラム・ドリフト', sub: 'SYNTH LOOP · 8.0s · 自主制作(无版权)', kind: 'SIGNAL / 内蔵音源', tag: 'LOCAL' };
+
+function fmt(s) {
+  if (!isFinite(s)) return '--:--';
+  s = Math.max(0, Math.floor(s));
+  return String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+}
+function paint() {
+  var d = a.duration || 0;
+  var pct = d ? (a.currentTime / d) * 100 : 0;
+  fill.style.width = pct + '%';
+  dot.style.left = pct + '%';
+  tEl.textContent = fmt(a.currentTime);
+  dEl.textContent = fmt(d);
+  requestAnimationFrame(paint);
+}
+requestAnimationFrame(paint);
+
+function stopUI() {
+  document.documentElement.dataset.playing = 'off';
+  play.textContent = '▶ 起動';
+}
+function startUI() {
+  document.documentElement.dataset.playing = 'on';
+  play.textContent = '❚❚ 停止';
+}
+
+play.addEventListener('click', function () {
+  if (a.paused) {
+    a.play().then(function () {
+      startUI();
+      say.innerHTML = '信号良好 · <b>正在播放</b> · 源 <s>' + srcTag.textContent + '</s>';
+    }).catch(function (e) {
+      say.innerHTML = '播放失败 · <b>' + (e.name || e.message) + '</b>' +
+        (/NotSupported/i.test(e.name) ? '（该地址不是可直接播放的音频）' : '（可能是 CSP 拦截或链接失效）');
+    });
+  } else { a.pause(); stopUI(); say.innerHTML = '已暂停 · <b>随时可以再起動</b>'; }
+});
+
+
+
+document.getElementById('reset').addEventListener('click', function () {
+  a.pause(); stopUI();
+  a.src = LOCAL.src; a.load();
+  srcTag.textContent = LOCAL.tag;
+  kindLine.textContent = LOCAL.kind;
+  titleLine.innerHTML = LOCAL.title + ' <em>◈</em>';
+  subLine.textContent = LOCAL.sub;
+  say.innerHTML = '已回到 <b>内蔵音源</b>';
+});
+
+document.getElementById('vol').addEventListener('click', function () {
+  var v = a.volume >= 0.95 ? 0.3 : Math.min(1, a.volume + 0.25);
+  a.volume = v;
+  document.getElementById('v').textContent = Math.round(v * 100);
+  say.innerHTML = '音量 <b>' + Math.round(v * 100) + '</b>';
+});
+
+document.getElementById('bar').addEventListener('click', function (ev) {
+  if (!a.duration) return;
+  var r = this.getBoundingClientRect();
+  a.currentTime = ((ev.clientX - r.left) / r.width) * a.duration;
+});
+
+
+document.querySelectorAll('.dock [data-h]').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.documentElement.style.setProperty('--hue', b.dataset.h);
+    document.querySelectorAll('.dock [data-h]').forEach(function (x) { x.classList.remove('on'); });
+    b.classList.add('on');
+  });
+});
+document.getElementById('petalBtn').addEventListener('click', function () {
+  var on = document.documentElement.dataset.petal !== 'off';
+  document.documentElement.dataset.petal = on ? 'off' : 'on';
+  this.textContent = on ? '花瓣 关' : '花瓣 开';
+});
+
+a.addEventListener('error', function () {
+  stopUI();
+  say.innerHTML = '音源加载失败 · <b>' + (urlIn.value ? '该外链不可用' : '内蔵音源缺失') + '</b>';
+});
+
+/* ---------- 网易云外链：挂载官方 outchain iframe ---------- */
+var neShell = document.getElementById('neShell');
+var nePh = document.getElementById('nePh');
+var neId = document.getElementById('neId');
+var neType = document.getElementById('neType');
+function mountNetease(type, id) {
+  if (!/^\d{3,}$/.test(id)) {
+    say.innerHTML = 'id 看起来不对 · <b>应是纯数字</b>（歌曲或歌单 id）';
+    return;
+  }
+  var h = type === '0' ? 430 : 66;
+  neShell.innerHTML = '<iframe src="https://music.163.com/outchain/player?type=' + type +
+    '&id=' + id + '&auto=0&height=' + h + '" width="' + (type === '0' ? 330 : 330) +
+    '" height="' + h + '" frameborder="0" sandbox="allow-scripts allow-same-origin allow-popups allow-forms"' +
+    ' title="网易云音乐外链播放器" loading="lazy"></iframe>';
+  neShell.style.minHeight = (h + 20) + 'px';
+  srcTag.textContent = 'NETEASE';
+  kindLine.textContent = type === '0' ? 'SIGNAL / 网易云歌单' : 'SIGNAL / 网易云单曲';
+  titleLine.textContent = 'OUTCHAIN · ' + id;
+  subLine.textContent = '官方 iframe · 版权由平台承担';
+  say.innerHTML = '已掛載网易云外链 · <b>播放在官方播放器内进行</b>（本站不接管音频）';
+}
+document.getElementById('neLoad').addEventListener('click', function () {
+  mountNetease(neType.value, neId.value.trim());
+});
+document.querySelectorAll('.ne .chip').forEach(function (c) {
+  c.addEventListener('click', function () {
+    var p = c.dataset.ne.split('|');
+    neType.value = p[0]; neId.value = p[1];
+    mountNetease(p[0], p[1]);
+  });
+});
+
+a.volume = 0.7;
+</script>
+</body>
+</html>

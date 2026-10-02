@@ -26,24 +26,21 @@
                                           会把 index.html 里出现的每个 https 域都当成"被引用"，
                                           写死项目域名反而要求 CSP 逐字包含它。
          · font-src 'self' data:       —— 字体（当前无外链字体，预留）
-         · media-src 'self' data: blob: https:
-                                       —— 音频/视频来源。data: 是「内链播放」
-                                          （base64 存库）；**https: 是 v4.9.5 新加的
-                                          「外链音源」**（库里只存一条直链，媒体直接从
-                                          该地址加载）。
-                                          ⚠ 这是一次**有意的放宽**：为了"贴一个 URL 就能播"，
-                                          必须让浏览器肯去取外部媒体。代价可控 ——
-                                          它只管 <audio>/<video>，不涉及脚本与样式；
-                                          且库层 CHECK 已限制为 https。
-                                          ⚠ 想收紧时：把这里的 https: 换成你固定的那几个域
-                                          （例如自有对象存储/CDN 的域名），功能不变、面更小。
-                                           ⚠ 想收紧时：把域换成你实际用到的那一个即可。
-         · object-src 'none'           —— 禁用 <object>/<embed>，无业务需要
+         · media-src 'self' data: blob:
+                                        —— 音频/视频来源。data: 是「内链播放」（base64 存库）。
+                                           ⚠ 这里**刻意不再放行 https:** —— v4.9.5 曾为「贴一条
+                                           音频直链就能播」放宽过，v5.7.2 起取消该方案（直链已删、
+                                           改走网易云官方 iframe），外部媒体源已无需要，故收回。
+          · frame-src https://music.163.com
+                                        —— 主页电台用「网易云官方外链播放器」（outchain iframe）。
+                                           版权与播放由平台负责；本站只画外壳（切角 / HUD 角框 /
+                                           霓虹），内部官方 UI 改不了。⚠ 只放行这一个域，不写 https:。
+          · object-src 'none'           —— 禁用 <object>/<embed>，无业务需要
          · base-uri 'self'             —— 防 <base> 标签劫持相对路径
          · form-action 'self'          —— 表单只能提交到本站
        注意：脚本无 'unsafe-inline'，故任何内联 <script> 与 onclick= 都会被拦——
        本项目已零内联脚本/零内联事件属性，符合要求。 -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; connect-src 'self' https://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data: blob:; frame-src https://music.163.com; connect-src 'self' https://*.supabase.co; font-src 'self' data:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="description" content="NEON://DIARY — 一座赛博朋克风格的个人博客，霓虹之下，记录一切信号。">
   <title>NEON://DIARY — 赛博朋克博客</title>
   <!-- v5.3.0：提前把 DNS+TLS 握到 Supabase —— 首屏要打它，省下的就是首屏时间。
@@ -76,9 +73,9 @@
        必须【同步】加载且排在样式表【之前】—— 否则会先暗后亮闪一帧。
        为什么是外部脚本而非内联：CSP 的 script-src 不含 'unsafe-inline'。
        它零依赖、全程 try/catch，加载失败也只是退回暗色兜底，不影响后续启动。 -->
-  <script src="js/theme-boot.js?v=5.7.2"></script>
+  <script src="js/theme-boot.js?v=5.7.4"></script>
   <!-- 本地资源带版本查询串：每次发布改版本号，CDN 缓存键随之失效，避免旧文件滞留 -->
-  <link rel="stylesheet" href="css/style.css?v=5.7.2">
+  <link rel="stylesheet" href="css/style.css?v=5.7.4">
   <!-- 第三方库：**全部本地托管**（来源 / 版本 / sha256 / sha384 见 js/vendor/README.md）。
        v4.8.1 起不再走 cdn.jsdelivr.net —— 该 CDN 在本机网络下时通时不通，
        失败时 Markdown 不渲染、代码不高亮；改本地后 CSP 的 script-src 只需 'self'。
@@ -91,32 +88,32 @@
        ⚠ 下面三条是 rel="prefetch"（空闲时低优先级预取）：
          它**不阻塞** DOMContentLoaded（这正是 defer 的老毛病），
          同时让"仓库里能见到带版本号的本地引用"这条供应链断言继续成立。 -->
-  <link rel="prefetch" as="script" href="js/vendor/marked.min.js?v=5.7.2">
-  <link rel="prefetch" as="script" href="js/vendor/dompurify.min.js?v=5.7.2">
-  <link rel="prefetch" as="script" href="js/vendor/highlight.min.js?v=5.7.2">
+  <link rel="prefetch" as="script" href="js/vendor/marked.min.js?v=5.7.4">
+  <link rel="prefetch" as="script" href="js/vendor/dompurify.min.js?v=5.7.4">
+  <link rel="prefetch" as="script" href="js/vendor/highlight.min.js?v=5.7.4">
   <!-- 数据层 SDK：本地托管（来源与哈希见 js/vendor/README.md），
        摆脱 CDN 漂移标签。迁移到 Supabase 后由 supabase-js 承担这一层；
        原 WorkBuddy SDK 仍留在 js/vendor/ 作对照参考，但不再加载。 -->
-  <script defer src="js/vendor/supabase-js.js?v=5.7.2"></script>
-  <script defer src="js/version.js?v=5.7.2"></script>
-  <script defer src="js/cloud.js?v=5.7.2"></script>
+  <script defer src="js/vendor/supabase-js.js?v=5.7.4"></script>
+  <script defer src="js/version.js?v=5.7.4"></script>
+  <script defer src="js/cloud.js?v=5.7.4"></script>
   <!-- v4.1 B2：霓虹字标的字形路径数据（字体转曲生成物；必须在 views.js 之前，
        views 渲染 Hero 时惰性读取 window.NEONWordmark） -->
-  <script defer src="js/wordmark-paths.js?v=5.7.2"></script>
-  <script defer src="js/views.js?v=5.7.2"></script>
-  <script defer src="js/keys.js?v=5.7.2"></script>
+  <script defer src="js/wordmark-paths.js?v=5.7.4"></script>
+  <script defer src="js/views.js?v=5.7.4"></script>
+  <script defer src="js/keys.js?v=5.7.4"></script>
   <!-- v4.0 B1：场景框架 + 氛围运行时。必须在 app.js 之前 ——
        app.js 的路由会调 NEONScene.apply()；atmo.js 负责数字雨与帧率保底。 -->
-  <script defer src="js/scene.js?v=5.7.2"></script>
-  <script defer src="js/atmo.js?v=5.7.2"></script>
+  <script defer src="js/scene.js?v=5.7.4"></script>
+  <script defer src="js/atmo.js?v=5.7.4"></script>
   <!-- v4.1 B2：开场序列（首访首页播放；依赖 theme-boot 的 .boot-first，
        不依赖 app.js，故放在它之前） -->
-  <script defer src="js/boot.js?v=5.7.2"></script>
-  <script defer src="js/app.js?v=5.7.2"></script>
+  <script defer src="js/boot.js?v=5.7.4"></script>
+  <script defer src="js/app.js?v=5.7.4"></script>
   <!-- v4.3 B4：装置 —— 点击反馈（tap.js）+ 命令终端（console.js，惰性读
        NEONControls / NEONScene；终端 DOM 首次唤起才建） -->
-  <script defer src="js/tap.js?v=5.7.2"></script>
-  <script defer src="js/console.js?v=5.7.2"></script>
+  <script defer src="js/tap.js?v=5.7.4"></script>
+  <script defer src="js/console.js?v=5.7.4"></script>
 </head>
 <body>
   <!-- C10：跳转到主内容。键盘/读屏用户按 Tab 第一下即可跳过顶栏导航，

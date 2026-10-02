@@ -844,11 +844,11 @@
   var THEME_KEY = 'neon_theme';
   var THEME_DEFAULT = 'dark';
   /* C12：三档配色。图标兼作"当前所处档位"的读数 —— 按钮上直接显示，不用点开才知道。 */
-  var THEME_ICON = { light: '☀ LIGHT', dark: '☾ DARK', warm: '◐ WARM' };
-  var THEME_ORDER = ['dark', 'light', 'warm'];
+  var THEME_ICON = { light: '☀ LIGHT', dark: '☾ DARK' };
+  var THEME_ORDER = ['dark', 'light'];
   /* v2.9.4：罗盘面板里的档位名（不带图标 —— 图标由 CSS 的虚线环承担）。
      与 THEME_ICON 分开存，避免为了拿纯名字去正则切字符串。 */
-  var THEME_NAME = { dark: 'DARK', light: 'LIGHT', warm: 'WARM' };
+  var THEME_NAME = { dark: 'DARK', light: 'LIGHT' };
 
   /* ---------- v3.0 B1：配色的第二个维度 —— 色相旋钮 ----------
      --hue 写进 <html> 的行内 style 后，CSS 里所有由 hsl(var(--hue) …) 派生的
@@ -914,7 +914,7 @@
 
   function applyTheme(mode) {
     var root = document.documentElement;
-    /* 三态：显式写 data-theme（dark/light/warm 都会落到属性上）。
+    /* 两态：显式写 data-theme（dark/light 都会落到属性上）。
        不再有 removeAttribute 分支 —— 那正是 auto 时代的残留，
        它会让 <html> 处于"无属性"态，虽然 :root 兜底也是暗色，
        但显式设 dark 更利于调试（一眼看出是应用决定的，不是漏设）。 */
@@ -976,9 +976,11 @@
     if (readout) readout.textContent = hue + '°';
   }
 
-  /* v2.9.4：三档直选（取代 cycleTheme 的"点一下转到下一档"）。
-     盲转的问题是用户不知道下一档是什么，也不知道一共几档 —— 三档之后尤其明显，
-     想从 warm 回 dark 要连点两次。改成可见的三选一，一次点到。
+  /* v2.9.4：直选（取代 cycleTheme 的"点一下转到下一档"）。
+     盲转的问题是用户不知道下一档是什么，也不知道一共几档。
+     ⚠ v5.7.3：档位从三档收到**两档**（dark / light）—— 暖色档 warm 已删除，
+       老用户 localStorage 里若存着 warm，会被 theme-boot 的白名单挡下、落到 dark。
+     改完反而与下面"两态"那句注释对上了（原先注释写两态、代码却是三态，是久违的不一致）。
      THEME_ORDER 仍是唯一白名单来源：新增档位只改那一处，此处与校验共用。 */
   function setTheme(mode) {
     if (THEME_ORDER.indexOf(mode) === -1) mode = THEME_DEFAULT;
@@ -1380,6 +1382,16 @@
   }
   function holoPad(n) { return (n < 10 ? '0' : '') + n; }
   function holoText(p) { return p.days + 'D ' + holoPad(p.hours) + ':' + holoPad(p.mins) + ':' + holoPad(p.secs); }
+  /* ---------- v5.7.3：主页电台台账（网易云官方外链） ----------
+     ⚠ 改榜单**只动这一处**。type：'2' = 单曲（官方条 66px）/ '0' = 歌单（430px，外壳内缩放显示）。
+     ⚠ id 是网易云歌曲/歌单 id（纯数字），不是网页地址。
+     将来若要后台管理：把这里换成读 Supabase 的一张表或后端接口即可，视图侧无需改动。 */
+  var RADIO_STATIONS = [
+    { id: '2003621098', type: '2', name: '示例单曲 · 2003621098' },
+    { id: '2597489971', type: '0', name: '示例歌单 · 2597489971' }
+  ];
+  var RADIO_KEY = 'neon_radio_pick';   /* 记住上次选的（本机） */
+
   function holoPaint() {
     var p = holoParts();
     var set = function (id, v) { var el = document.getElementById(id); if (el) el.textContent = v; };
@@ -1392,14 +1404,23 @@
     if (typeof document === 'undefined') return;
     var app = document.getElementById('app');
     if (!app || !V().holoHero) return;
-    if (app.querySelector('.holo-hero')) { holoPaint(); return; }
+    if (app.querySelector('.holo-hero')) {
+      holoPaint();
+      /* v5.7.3：面板已存在（重渲染路径）—— DOM 可能是新换的，必须重新绑定电台点击 */
+      bindRadioStations();
+      restoreRadioPick();
+      return;
+    }
     var p = holoParts();
     app.insertAdjacentHTML('afterbegin', V().holoHero({
+      stations: RADIO_STATIONS,
       days: p.days, hours: p.hours, mins: p.mins, secs: p.secs, bootDate: p.date,
       uptimeText: holoText(p), nickname: State.nickname || '漓光', tags: ['站长', '作者']
     }));
     holoPaint();
     bindHoloTilt();   /* v5.4.2：卡片挂上全息倾斜 */
+    bindRadioStations();   /* v5.7.3：电台榜单点击（幂等，靠 data-bound 守） */
+    restoreRadioPick();    /* v5.7.3：恢复上次选中的外链（只挂载，不自动播放） */
     if (holoTickTimer) clearInterval(holoTickTimer);
     holoTickTimer = setInterval(function () {
       if (!document.querySelector('.holo-hero')) { clearInterval(holoTickTimer); holoTickTimer = null; return; }
@@ -1518,6 +1539,66 @@ function route() {
     if (uptimeTimer) { clearInterval(uptimeTimer); uptimeTimer = null; }
   }
 
+
+  /* ---------- v5.7.3：挂载网易云官方外链播放器 ----------
+     ⚠ 幂等：同一个 (type,id) 重复调用不重建 iframe —— 重建 = 重新加载 = 播放中断。
+     ⚠ 官方地址形态（已实测 200 且无 X-Frame-Options）：
+        https://music.163.com/outchain/player?type=<2|0>&id=<id>&auto=0&height=<66|430>
+        ⚠ 旧式路径 /outchain/<type>/<id>/m/use/html 实测 302，不可用。
+     ⚠ 需要 CSP frame-src https://music.163.com，否则 iframe 被 default-src 'self' 拦掉。
+     ⚠ 已知限制：本区块位于 #app 内，首页重渲染会重建它（播放可能中断）。
+        彻底解法是把电台挪到 #app 之外（v5.1.0 对旧电台就是这么做的）。 */
+  function radioEsc(s) {
+    return String(s).replace(/[&<>"']/g, function (ch) {
+      return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
+    });
+  }
+  function mountNetease(type, id, opts) {
+    if (typeof document === 'undefined') return;
+    var shell = document.querySelector('[data-radio-shell]');
+    if (!shell) return;
+    type = String(type) === '0' ? '0' : '2';
+    id = String(id || '').replace(/\D/g, '');
+    if (!id) return;
+    var key = type + ':' + id;
+    if (shell.getAttribute('data-mounted') === key) return;   /* 幂等 */
+    var h = type === '0' ? 430 : 66;
+    var src = 'https://music.163.com/outchain/player?type=' + type + '&id=' + id + '&auto=0&height=' + h;
+    shell.className = 'holo-radio-shell' + (type === '0' ? ' is-tall' : '');
+    shell.setAttribute('data-mounted', key);
+    shell.innerHTML = '<iframe src="' + src + '" width="330" height="' + h + '" frameborder="0" ' +
+      'loading="lazy" title="网易云音乐外链播放器" ' +
+      'sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>';
+    document.querySelectorAll('[data-radio-id]').forEach(function (b) {
+      b.classList.toggle('is-on', b.getAttribute('data-radio-id') === id &&
+        b.getAttribute('data-radio-type') === type);
+    });
+    try { localStorage.setItem(RADIO_KEY, key); } catch (e) { /* 忽略 */ }
+    if (!opts || !opts.silent) {
+      if (typeof toast === 'function') toast('已挂载网易云外链：' + id, 'ok');
+    }
+  }
+  function bindRadioStations() {
+    if (typeof document === 'undefined') return;
+    var host = document.querySelector('[data-holo-radio]');
+    if (!host || host.getAttribute('data-bound') === '1') return;
+    host.setAttribute('data-bound', '1');
+    host.addEventListener('click', function (ev) {
+      var el = ev.target.closest ? ev.target.closest('[data-radio-id]') : null;
+      if (!el) return;
+      mountNetease(el.getAttribute('data-radio-type'), el.getAttribute('data-radio-id'));
+    });
+  }
+  /* 首屏恢复上次选择（只挂载，不自动播放 —— auto=0 且浏览器策略也不允许） */
+  function restoreRadioPick() {
+    if (typeof document === 'undefined') return;
+    if (!document.querySelector('[data-radio-shell]')) return;
+    var v = '';
+    try { v = localStorage.getItem(RADIO_KEY) || ''; } catch (e) { v = ''; }
+    if (!v) return;
+    var parts = v.split(':');
+    if (parts.length === 2) mountNetease(parts[0], parts[1], { silent: true });
+  }
 
   function renderHome(tag) {
     State.home = { page: 1, pageSize: 8, posts: [], total: 0, loading: true, error: null, tagName: tag, hasMore: false };
