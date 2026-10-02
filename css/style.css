@@ -401,6 +401,13 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  /* v5.7.5（风格重构 F）：页面级标题挂**粉青双色重影**（--glow-dual）。
+     站点所有页面标题都是 .page-head > h1 结构（views.js 里 12 处模板），
+     所以这一条就全覆盖了 —— 不必逐个模板加 class，也不会漏掉将来的新页面。
+     ⚠ 只挂这一处（与身份卡名字）：标题是全页最强调的元素，承载 --magenta 的
+       强调语义正当；正文、卡片、列表一律不动，避免稀释警示色语义。
+     回退：删掉下面这一行 text-shadow 即可完全退回"可选类"状态。 */
+  text-shadow: var(--glow-dual);
 }
 .page-head h1::before {
   content: "◢";
@@ -5312,7 +5319,7 @@ body:not(.linenum-off) .md-body > pre::before {
   font-family: var(--mono); font-size: 20px; color: #eafcff;
   box-shadow: 0 0 18px rgba(0, 240, 255, .28) inset;
 }
-.holo-name { font-size: 19px; color: #f2f7ff; letter-spacing: 1px; }
+.holo-name { font-size: 19px; color: #f2f7ff; letter-spacing: 1px; text-shadow: var(--glow-dual); }
 .holo-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
 .holo-tag {
   font: 10px/1 var(--mono); letter-spacing: 1px;
