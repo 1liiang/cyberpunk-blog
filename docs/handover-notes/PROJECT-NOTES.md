@@ -111,7 +111,8 @@ CHECK：`data ≤ 36000000`、`mime ≤ 120`、`title/artist/album ≤ 200`、`c
   `node tools/bump.js x.y.z --title="..." --item="..." --yes` 改四处：BUILD + LOG unshift + index.html 全部 `?v=` + package.json；
   `tools/check-version.js` 校验一致性（**在 tools/ 不在 tests/**）。`--refresh-id` 只刷 BUILD_ID；`--renumber --published=x.y.z` 给未发布号改号。
   **bump.js 安全设计别削弱**：版本必须递增；非交互未传 `--yes` 拒绝写盘；非 `x.y.z` 拒绝。
-  ⚠ **`--item` 里写直双引号会被 shell 吃掉** → 用「」。
+  ⚠ **`--item` 值里写 ASCII 双引号会被 shell 吃掉**（嵌套引号）→
+     改用**外层单引号**：`--item='他说"你好"'`。不要用「」代替引号（括号会变成内容）。
 - **主题「暗色优先」，v2.7 起三档**：默认暗色不依赖系统设置；`html[data-theme="light"]` / `"warm"`。**已彻底移除 `@media (prefers-color-scheme: light)`，别加回来**。
   零闪烁靠 `js/theme-boot.js`：同源、同步、放 `<head>` 样式表**之前**（三禁：改内联 / 加 defer,async / 挪位）。`ALLOWED = ['dark','light','warm']` 白名单。
   **⚠ 新档变量表必须与既有档「结构 100% 对齐」** —— CSS 变量不继承另一档的值，漏写会**回落 `:root` 暗色值**（一片黑）。
