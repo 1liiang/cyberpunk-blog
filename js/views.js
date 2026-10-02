@@ -641,7 +641,7 @@
              : '输入关键词，扫描全部广播') +
         '</div>' +
       '</div>' +
-      '<div class="search-bar">' +
+      '<div class="search-bar hud-frame">' +
         /* v2.9.5：加一层 .search-field 包住输入框 —— 旋转光晕需要一个
            position:relative 的宿主来挂 ::before（<input> 不支持伪元素）。
            输入框的 id/class 都没动，JS 取用与既有测试不受影响。 */

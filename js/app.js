@@ -485,7 +485,7 @@
     var btns = (actions || []).map(function (a, i) {
       return '<button class="btn ' + (a.cls || '') + '" data-mact="' + i + '">' + V().esc(a.label) + '</button>';
     }).join('');
-    mask.innerHTML = '<div class="modal' + (extraCls ? ' ' + extraCls : '') + '"><h3>' + V().esc(title) + '</h3><div class="modal-body">' + bodyHtml + '</div><div class="modal-actions">' + btns + '</div></div>';
+    mask.innerHTML = '<div class="modal hud-frame' + (extraCls ? ' ' + extraCls : '') + '"><h3>' + V().esc(title) + '</h3><div class="modal-body">' + bodyHtml + '</div><div class="modal-actions">' + btns + '</div></div>';
     document.body.appendChild(mask);
     mask.addEventListener('click', function (e) {
       if (e.target === mask) closeModal();

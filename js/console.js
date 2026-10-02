@@ -36,7 +36,7 @@
     panel.hidden = true;
     panel.innerHTML =
       '<div class="console-mask" data-console-close="1"></div>' +
-      '<section class="console-panel" role="dialog" aria-label="命令终端" aria-modal="true">' +
+      '<section class="console-panel hud-frame" role="dialog" aria-label="命令终端" aria-modal="true">' +
         '<header class="console-head">' +
           '<span class="console-title">▤ NEON://CONSOLE</span>' +
           '<button type="button" class="console-btn" data-console-clear="1">清屏</button>' +
