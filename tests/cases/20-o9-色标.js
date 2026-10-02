@@ -397,11 +397,12 @@ async function run() {
     /* v3.4.0 护栏：色相放开为**自由滑杆**后，"任意色相都可用"必须被证明 ——
        只验九个预设档不够了（用户现在能拖到任何一度）。
        这里对 0~359 每 15° 采样，逐点算亮色档与暖色档的频段墨色对比度。
-       它成立的前提是「明度锁死」（light 24% / warm 25%）——
+       它成立的前提是「明度锁死」（light 24%）——
        所以这条断言同时守着"别把 --hue-l 放开"这条设计纪律。 */
+    /* ⚠ v5.7.3：暖色档 warm 已删除 —— 这里原为 light + warm 两块，现只剩 light 一块。
+       守的东西没变：**非暗色档**（浅底）下任意色相的频段墨色仍须过 AA。 */
     const scanBlocks = [
-      (/html\[data-theme="light"\]\s*\{([\s\S]*?)\}/.exec(cssTxt) || [, ''])[1],
-      (/html\[data-theme="warm"\]\s*\{([\s\S]*?)\}/.exec(cssTxt) || [, ''])[1]
+      (/html\[data-theme="light"\]\s*\{([\s\S]*?)\}/.exec(cssTxt) || [, ''])[1]
     ].filter(function (b) { return b.length > 0; });
     const scanFails = [];
     let scanPoints = 0;
@@ -419,7 +420,7 @@ async function run() {
         });
       }
     });
-    T('O9 色标', 'R59e 任意色相下（每 15° 采样）亮档与暖档的频段墨色对比度仍 ≥ 4.5:1',
+    T('O9 色标', 'R59e 任意色相下（每 15° 采样）亮档的频段墨色对比度仍 ≥ 4.5:1',
       scanPoints > 0 && scanFails.length === 0,
       scanPoints + ' 个采样点 · ' +
         (scanFails.length ? '失守：' + scanFails.slice(0, 4).join(' ') : '全部达标'));
@@ -433,8 +434,7 @@ async function run() {
          会把提上去的对比度打回约 3.4 —— 已一并移除。 */
     const dimBlocks = [
       rootBlock(),
-      (/html\[data-theme="light"\]\s*\{([\s\S]*?)\}/.exec(cssTxt) || [, ''])[1],
-      (/html\[data-theme="warm"\]\s*\{([\s\S]*?)\}/.exec(cssTxt) || [, ''])[1]
+      (/html\[data-theme="light"\]\s*\{([\s\S]*?)\}/.exec(cssTxt) || [, ''])[1]
     ].filter(function (b) { return b && /--bg-0/.test(b) && /--text-dim/.test(b); });
     const dimFails = [];
     dimBlocks.forEach(function (blk) {
@@ -444,8 +444,8 @@ async function run() {
       const c = contrast(dim, bg);
       if (c < 4.5) dimFails.push(c.toFixed(2));
     });
-    T('O9 色标', 'R59f 灰字 --text-dim 三档对比度 ≥ 4.5:1（AA；此前只测色标、漏了最常用的灰字）',
-      dimBlocks.length >= 3 && dimFails.length === 0,
+    T('O9 色标', 'R59f 灰字 --text-dim 各档对比度 ≥ 4.5:1（AA；此前只测色标、漏了最常用的灰字）',
+      dimBlocks.length >= 2 && dimFails.length === 0,
       dimBlocks.length + ' 档 · ' + (dimFails.length ? '不达标：' + dimFails.join(' ') : '全部达标'));
 
     /* v3.5.1（外部评审）：中文排版的"两条正路"必须走其中一条 ——

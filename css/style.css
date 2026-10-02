@@ -34,7 +34,7 @@
      ⚠ v4.5.0：默认值由 184（青 = 原 #00f0ff 的色相）改为 **285（紫）** ——
        站长在配色面板里挑中了这一档，拍板定为全站出厂色相。
        184 仍是九档快捷之一（面板第一格），随时可切回，能力没有减少。
-       派生公式只写在这里；三个主题档（dark/light/warm）只覆盖"饱和/明度参数"，
+       派生公式只写在这里；两个主题档（dark/light）只覆盖"饱和/明度参数"，
        于是「换色相」对所有档位一致生效，「换明度档」依旧压暗/暖化。 */
   --hue: 285;
   --hue-s: 100%;
@@ -168,7 +168,7 @@
      由主色相做**色相偏移**派生，不手写六组颜色 ——
      所以换色相时六个模块的墨色会一起沿色环平移，整体仍然成套。
      浓度极低（12~13% 明度）：只染底与边，不计入"霓虹表面积"。
-     ⚠ 浅底档必须另行覆盖（见 light / warm 块）—— 暗墨色在浅底上等于一块污渍。 */
+     ⚠ 浅底档必须另行覆盖（见 light 块）—— 暗墨色在浅底上等于一块污渍。 */
   --ink-1: hsl(var(--hue) 26% 12%);
   --ink-2: hsl(calc(var(--hue) + 40) 26% 12%);
   --ink-3: hsl(calc(var(--hue) + 80) 24% 13%);
@@ -2955,61 +2955,7 @@ html[data-theme="light"] {
   --shadow-strong: rgba(0, 0, 0, 0.08);
 }
 
-/* --- C12：暖色档（warm） ---
-   亮色档是纯白底（--bg-0 #eef2f8），夜间/暗环境里偏刺眼。
-   暖色档把底色推向米黄/杏色，同时把文字压成暖褐，整屏色温降下来。
 
-   与亮色档的关系：**共用同一套结构**（都属"浅底"），只是把中性冷灰换成暖灰。
-   所以这里不是复制整份亮色表再改色，而是显式覆盖差异项 ——
-   结构项（--panel / --line / --code-* / --shadow-strong）沿用亮色档的值。
-   ⚠ 但 CSS 变量不会自动继承"另一个属性的值"，所以仍须把亮色表里
-   非默认的那几项在这里再写一遍，否则会回落到 :root 的暗色值（一片黑）。
-
-   验收口径：三档（dark / light / warm）的切换由 cycleTheme 循环，
-   主题名写在 html[data-theme] 上，是唯一权威。 */
-html[data-theme="warm"] {
-  color-scheme: light;
-  --bg-0: #f6efe4;
-  --bg-1: #efe6d8;
-  --bg-2: #e6dac7;
-  --bg-3: #d9c9b0;
-  --panel: rgba(255, 251, 244, 0.95);
-  /* 3.0 B1：暖档 = 浅底 + 再降饱和 + 保留暖褐色的结构线。
-     即「明度档」决定线的冷暖与整体明暗，「色相档」决定强调件的色相 ——
-     两者各管一段，互不干扰。派生参数由原值反推，故观感与 v2.9.10 一致。 */
-  --hue-s: 80%; --hue-l: 25%;
-  /* v3.4.0：同亮档的理由，辅助紫收到 32%（原 42%）—— 全色相扫描下最差 5.25 ✓ */
-  --vio-s: 46%; --vio-l: 32%;
-  --line: rgba(140, 96, 40, 0.28);
-  --line-strong: rgba(140, 96, 40, 0.6);
-  /* 语义色在暖底上换暖一档的深色系（不随 hue 旋转） */
-  --magenta: #b03050;
-  --yellow: #7d5a00;
-  --green: #4a6b1f;
-  --red: #b8322f;
-  --text: #4a3a2a;
-  /* v3.5.1：原 #7d6a55 是 4.52:1 —— 只在线上 0.02，稍有改动就会掉下去，一并提到 4.61:1。 */
-  --text-dim: #7b6954;
-  --text-bright: #2a1f14;
-  --md-h4: #0d6b74;
-  --md-em: #9c5a3c;
-  --md-quote: #8a5a3a;
-  --glow-cyan: 0 0 2px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35);
-  --glow-magenta: 0 0 2px rgba(176, 48, 80, 0.35);
-  --glow-yellow: 0 0 2px rgba(125, 90, 0, 0.35);
-  --code-bg: #2a2118;
-  --code-text: #f0e2cc;
-  --head-glow: rgba(140, 96, 40, 0.05);
-  /* 3.0 B2：暖档墨色 —— 与浅底同构，只把饱和度再压低一档（暖底上高饱和会发脏） */
-  --ink-1: hsl(var(--hue) 26% 92%);
-  --ink-2: hsl(calc(var(--hue) + 40) 26% 92%);
-  --ink-3: hsl(calc(var(--hue) + 80) 24% 93%);
-  --ink-4: hsl(calc(var(--hue) + 140) 22% 93%);
-  --ink-5: hsl(calc(var(--hue) + 200) 20% 93%);
-  --ink-6: hsl(calc(var(--hue) + 260) 22% 93%);
-  --topbar-bg: rgba(255, 251, 244, 0.92);
-  --shadow-strong: rgba(74, 58, 42, 0.1);
-}
 
 /* --- O11：原先这里的「跟随系统」media 块已移除 ---
    @media (prefers-color-scheme: light) { html:not([data-theme="dark"]) { ... } }
@@ -3120,7 +3066,6 @@ html[data-theme="warm"] {
 /* 每档自带颜色 —— 写在自定义属性上，供选中态与辉光复用一次定义。 */
 .theme-swap[data-theme-val="dark"]  { --swap: var(--cyan); }
 .theme-swap[data-theme-val="light"] { --swap: var(--yellow); }
-.theme-swap[data-theme-val="warm"]  { --swap: var(--magenta); }
 
 /* 罗盘环：三层同心虚线环，选中时按不同周期反向自转 */
 .theme-swap-ring {
@@ -4332,13 +4277,6 @@ html[data-atmo~="rain"]     .atmo-layer[data-layer="rain"] { display: block; }
 }
 /* 浅底档减半：暗线在浅色上观感更重（v3.5.0 已有同一思路的教训） */
 html[data-theme="light"] .atmo-layer[data-layer="scanline"],
-html[data-theme="warm"]  .atmo-layer[data-layer="scanline"] {
-  background-image: repeating-linear-gradient(
-    0deg,
-    transparent 0 2px,
-    rgba(0, 0, 0, 0.07) 2px 3px
-  );
-}
 
 /* 透视网格：双向线性渐变，42px 格；顶部浓、向下渐隐（"地平线"感）。 */
 .atmo-layer[data-layer="grid"] {
@@ -4509,9 +4447,6 @@ html[data-theme="warm"]  .atmo-layer[data-layer="scanline"] {
 }
 /* 浅底档提高实度（浅色上低透明度不够醒目） */
 html[data-theme="light"] ::-webkit-scrollbar-thumb,
-html[data-theme="warm"]  ::-webkit-scrollbar-thumb {
-  background-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.45);
-}
 
 /* ============================================================
    v4.2 B3「阅读舱」：终端阅读框 + 行号 + 迷你地图 + 时间线档案
@@ -5151,6 +5086,76 @@ body:not(.linenum-off) .md-body > pre::before {
      颜色按站长新规**自由取色**（全息紫青 + 洋红），只有"该跟换肤联动"的部分才挂主题变量。
    ⚠ 动效一律在文件末尾的 reduce 块里显式归零。
    ============================================================ */
+/* ============================================================
+   v5.7.3：主页左半侧全息面板内的「网易云外链电台」
+
+   ⚠ 这里能自绘的只有**外壳**：切角机箱、HUD 角框、霓虹描边、列表与文字。
+     内部官方 iframe 是黑盒 —— 浅色底、官方字体与控件，改不了。
+     所以视觉上刻意做「外壳很亮、内嵌很跳」的对比：把它当成一块**嵌进机箱的官方模块**，
+     而不是假装它和整站同源。
+   ⚠ 尺寸按侧栏宽度真实可用空间推定（左栏约 46~52ch 宽，最小 300px）：
+     单曲条官方 330×66；歌单 330×430 放不下 → 用 transform 缩放，并给容器固定高度。
+   ============================================================ */
+.holo-radio {
+  margin-top: 14px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg-1) 78%, transparent);
+  padding: 10px 11px 9px;
+}
+.holo-radio-head {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  color: var(--text-dim); text-transform: uppercase;
+  padding-bottom: 8px; border-bottom: 1px solid var(--line);
+}
+.holo-radio-tag { color: var(--cyan); }
+.holo-radio-live { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; color: var(--magenta); }
+.holo-radio-live i {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--magenta);
+  box-shadow: 0 0 6px var(--magenta); animation: holo-radio-blink 1.8s ease-in-out infinite;
+}
+@keyframes holo-radio-blink { 0%, 100% { opacity: 1 } 50% { opacity: .25 } }
+
+/* 榜单：等宽小字 + 紧凑行距，符合本站 HUD 读物感 */
+.holo-radio-list { display: grid; gap: 4px; margin: 8px 0; }
+.holo-radio-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; cursor: pointer;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .5px;
+  background: transparent; color: var(--text); border: 1px solid transparent;
+  padding: 6px 7px; transition: var(--t-fast);
+}
+.holo-radio-item:hover { border-color: var(--line-strong); color: var(--text-bright); background: color-mix(in srgb, var(--cyan) 7%, transparent); }
+.holo-radio-item.is-on { border-color: var(--cyan); color: var(--text-bright); box-shadow: 0 0 0 1px color-mix(in srgb, var(--cyan) 25%, transparent); }
+.holo-radio-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.holo-radio-kind { flex: 0 0 auto; font-size: 10px; color: var(--text-dim); }
+
+/* 外壳：切角 + HUD 角框（赛博动漫语汇），内部 iframe 原样嵌进来 */
+.holo-radio-shell {
+  position: relative; min-height: 84px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line-strong);
+  background: var(--bg-0);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  overflow: hidden;
+}
+/* 四角 HUD 括号：青左上一道、品红右下一道（本站既有语汇） */
+.holo-radio-shell::before,
+.holo-radio-shell::after { content: ''; position: absolute; width: 13px; height: 13px; pointer-events: none; }
+.holo-radio-shell::before { top: 0; left: 0; border-left: 2px solid var(--cyan); border-top: 2px solid var(--cyan); }
+.holo-radio-shell::after { bottom: 0; right: 0; border-right: 2px solid var(--magenta); border-bottom: 2px solid var(--magenta); }
+.holo-radio-shell iframe { display: block; border: 0; background: transparent; max-width: 100%; }
+.holo-radio-ph { font-family: var(--mono); font-size: 11px; color: var(--text-dim); letter-spacing: 1px; text-align: center; padding: 10px; }
+.holo-radio-ph b { color: var(--cyan); font-weight: 400; }
+/* 歌单（430 高）放不下时缩放：给容器固定高度，iframe 等比缩小居中 */
+.holo-radio-shell.is-tall { height: 320px; }
+.holo-radio-shell.is-tall iframe { transform: scale(.72); transform-origin: center center; }
+.holo-radio-foot { margin: 7px 0 0; font-family: var(--mono); font-size: 10px; letter-spacing: .5px; color: var(--text-dim); }
+
+@media (max-width: 768px) {
+  .holo-radio-shell.is-tall { height: 280px; }
+  .holo-radio-shell.is-tall iframe { transform: scale(.62); }
+}
+
 .holo-hero {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
