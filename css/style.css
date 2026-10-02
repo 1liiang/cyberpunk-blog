@@ -69,9 +69,33 @@
   --md-h4: #7ee7f5;
   --md-em: #ffb8d0;
   --md-quote: #d9a0b8;
+  /* v5.7.5（风格重构 E）：霓虹辉光扩到**三层** ——
+     StyleKit Cyber Anime 的 "multi-layer neon glow (2-3 shadow layers with
+     decreasing opacity)"。原两层（6px/0.75 + 18px/0.35），按同一递减规律补
+     第三层 36px/0.15：外圈更散更淡，观感是"再多一层光晕"而不是"更亮"。
+
+     ⚠ 只在**暗色档**加。亮色档的 --glow-cyan 已刻意收敛为单层 2px 描边
+       （见文件末尾 light 块原注释："浅底上靠描边而不是光晕"）—— 可读性决定，不动。
+     ⚠ 开销交代：36px 半径的模糊不便宜；而低端档 (html[data-tier="low"]) 只关了
+       box-shadow 与毛玻璃、**没关 text-shadow**，所以这层在低端机上也会绘制。
+       视觉很淡但仍有成本。若某台设备吃紧，回退只需删掉下面第三行。 */
   --glow-cyan: 0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.75),
-               0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35);
+               0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35),
+               0 0 36px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.15);
   --glow-magenta: 0 0 6px rgba(255, 42, 109, 0.75), 0 0 18px rgba(255, 42, 109, 0.35);
+  /* v5.7.5（风格重构 D）：粉青双色重影 —— VHS 色差感。
+     借自 StyleKit Vaporwave 的"必须粉青双色 glow（禁单色）"，
+     但色值全部用**站内既有语义色**，不引入新色值：
+       粉 = --magenta（语义：警示/流逝）  青 = --cyan（= --primary，随 --hue）
+     左上一道粉、右下一道青，再加一层大半径外发光 ⇒ 读起来像"扫描错位"。
+     ⚠ 仅用于**强调性标题**（见 .title-dual），不要全站铺开 ——
+       否则会稀释 --magenta 的警示语义（Vaporwave 翻译件原话）。
+     ⚠ 浅色档下辉光观感变弱：深底换浅底是物理必然，不是 bug。 */
+  --glow-dual:
+    -2px -2px 12px rgba(255, 42, 109, 0.50),
+     2px  2px 12px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.50),
+     0    0   20px rgba(255, 42, 109, 0.20);
+
   --glow-yellow: 0 0 6px rgba(249, 240, 2, 0.7), 0 0 16px rgba(249, 240, 2, 0.3);
   /* v4.0 B1：字体栈在 Courier New 之后插入自托管 Sarasa Mono SC ——
      前面的拉丁等宽字体都没有中文字形，中文此前直接掉到通用 monospace；
@@ -1398,6 +1422,56 @@ body {
   clip-path: var(--clip-corner);
   overflow: hidden;
 }
+/* ============================================================
+   v5.7.5（风格重构 B）：HUD 角框 `.hud-frame`
+
+   StyleKit 的 Cyber Anime 规格要求 "Use HUD corner frame decorations on major
+   containers (angled bracket corners)"。
+
+   ⚠ 先说清一件事，免得后人以为漏了：**站内早有同款视觉**——
+     · `.uptime-hud::before/::after`（左上 / 右下 L 形括号，用 --cyan）
+     · `.post-card::before/::after`（用 --cyan / --magenta）
+   两处都是「对角 L 形角括号」，与规格要求是同一套语言。所以本类**刻意不重复加到
+   卡片与状态面板上**，只补到视觉上确实缺的那批：**浮层**
+   （装置面板 .console-panel / 搜索条 .search-bar / 模态框 .modal / 快捷键 .kbd-help）。
+
+   为什么用「单伪元素 + 整圈边框 + clip-path 切出两条直角边」，而不是像 .uptime-hud
+   那样用两个伪元素各画一个角：
+     **伪元素是稀缺资源** —— `.post-card` 与 `.uptime-hud` 的 ::before/::after 都已用满，
+      再想给它们叠东西就没位了（站内已经撞过这堵墙）。这里只占一个 ⇒ 给将来留口子。
+
+   ⚠ 只对**非 static 定位**的容器生效：绝对定位伪元素需要最近的定位祖先。
+     所以本类只挂到 .console-panel / .search-bar / .modal / .kbd-help（都是
+     absolute / sticky / fixed）。若要挂到普通文档流容器，必须先给它 position: relative。
+   ⚠ 纯静态装饰，非动效 ⇒ **reduce 块无需处理**（与 .uptime-hud 的角括号同理）。
+   ============================================================ */
+.hud-frame { position: relative; }
+.hud-frame::before {
+  content: "";
+  position: absolute;
+  inset: 3px;
+  border: 1px solid var(--line-strong);
+  /* 只留「左上 L」与「右下 L」两个直角括号：
+     整圈 1px 边框 + 一个多边形裁切 —— 把四条边各保留两段薄带即可。
+     多边形按顺时针列出这些薄带的矩形（每条带 = 4 个点）。 */
+  clip-path: polygon(
+    0 0, 22px 0, 22px 1px, 1px 1px, 1px 22px, 0 22px,                                    /* 左上 L */
+    100% 100%, calc(100% - 22px) 100%, calc(100% - 22px) calc(100% - 1px),              /* 右下 L */
+    calc(100% - 1px) calc(100% - 1px), calc(100% - 1px) calc(100% - 22px), 100% calc(100% - 22px)
+  );
+  pointer-events: none;   /* 绝不挡点击 */
+  opacity: 0.85;
+  transition: border-color var(--t-fast), opacity var(--t-fast);
+}
+/* hover / focus-within 时角框提亮 —— 呼应规格里"更亮的边角括号线" */
+.hud-frame:hover::before,
+.hud-frame:focus-within::before { border-color: var(--primary); opacity: 1; }
+
+/* D 阶段用法：给强调性标题挂粉青双色重影。
+   ⚠ 默认不挂任何元素 —— 这是个**可选效果**，站长决定铺多大范围。
+     想启用：给标题加 class="title-dual"（或在此处把选择器写实）。 */
+.title-dual { text-shadow: var(--glow-dual); }
+
 /* 对角 L 形角括号（左上 / 右下）—— 两个伪元素刚好够，不必塞四个角 */
 .uptime-hud::before,
 .uptime-hud::after {
@@ -4279,13 +4353,58 @@ html[data-atmo~="rain"]     .atmo-layer[data-layer="rain"] { display: block; }
 html[data-theme="light"] .atmo-layer[data-layer="scanline"],
 
 /* 透视网格：双向线性渐变，42px 格；顶部浓、向下渐隐（"地平线"感）。 */
+/* v5.7.5（风格重构 C）：六边形能量网格 —— 取代原来的**方格**。
+   StyleKit 的 Cyber Anime 规格明确要求 "Use hexagonal grid background pattern
+   instead of square grid"。
+
+   为什么是「原地替换」而不是新增一层：
+     · 层名/层数不变 ⇒ 不用改 scene.js 的层注册表，也不影响 49 号 R241
+       （那条是「路由→场景→层数」的交叉核对，动层数就会红）。
+     · 视觉职责完全相同（都只是"给暗底一层几何纹理"），并存反而互相干扰。
+
+   为什么用 mask 而不是把六边形画进 SVG：
+     SVG 数据 URI 里**无法引用 CSS 变量** —— 若把描边色写死进 SVG，就锁死了
+     `--hue` 换色能力。改成 mask 后，颜色仍由 CSS 的 background-color 决定，
+     与原方格层一样随 --hue 与主题档联动。
+
+   几何（推导见 v5.7.5 的开发记录，写下来免得后人重推）：
+     平顶六边形宽 W、高 H = W·√3/2；平铺水平步进 1.5W、垂直步进 H，相邻列错开 H/2。
+     取 W=40 ⇒ H=34.641。格子 60×34.641 内含两个中心：(15,17.32) 与 (45,0)。
+     ⚠ 平铺尺寸必须与 background-size 完全一致，差一点就会出现接缝。 */
+/* v5.7.5（风格重构 C）：六边形能量网格 —— 取代原来的**方格**。
+   StyleKit 的 Cyber Anime 规格要求 "Use hexagonal grid background pattern
+   instead of square grid"。
+
+   ① 为什么「原地替换」而不是新增一层：
+      层名/层数不变 ⇒ 不用改 scene.js 的层注册表，也不影响 49 号 R241
+      （那条是「路由→场景→层数」的交叉核对，动层数就会红）。
+      两者视觉职责相同（都只是给暗底铺一层几何纹理），并存反而互相干扰。
+
+   ② 为什么用 mask 而不是把六边形画进 SVG：
+      SVG 数据 URI 里**无法引用 CSS 变量** —— 描边色若写死进 SVG 就锁死了换色能力。
+      改用 mask 后颜色由 CSS 的 background-color 决定，与原方格层一样随
+      --hue 与主题档联动。
+
+   ③ 几何（这里踩过一次坑，推导过程留下免得重犯）：
+      平顶六边形边长 s：**内切半径（顶点到中心的水平距离）= s·√3/2**，
+      上下平边到中心距离 = s/2。故 宽 = s√3、高 = s。
+      ⚠ 第一版我误把「宽=2s」当成水平步进，导致平铺右移一个周期后不重合
+        （会错位/出现接缝）。正确值是：宽 = s√3 = 34.641（s=20）。
+      平铺：水平步进 1.5s = 30，垂直步进 s√3 = 34.641，相邻列垂直错开 s√3/2。
+      格子取 60 × 34.641（3 列 × 1 行周期，含六边形 (30,10) 与 (0,0)）。
+      ⚠ 平铺尺寸必须与 background-size 完全一致，差一点就出现接缝。 */
 .atmo-layer[data-layer="grid"] {
-  background-image:
-    linear-gradient(to right, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.10) 1px, transparent 1px),
-    linear-gradient(to bottom, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.10) 1px, transparent 1px);
-  background-size: 42px 42px;
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%);
-  mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%);
+  background-image: none;
+  background-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.13);
+  background-size: 60px 34.641px;
+  -webkit-mask-image:
+    linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='34.641' viewBox='0 0 60 34.641'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M50.000%2017.321%20L40.000%2034.641%20L20.000%2034.641%20L10.000%2017.321%20L20.000%200.000%20L40.000%200.000%20Z'/%3E%3Cpath d='M20.000%200.000%20L10.000%2017.321%20L-10.000%2017.321%20L-20.000%200.000%20L-10.000%20-17.321%20L10.000%20-17.321%20Z'/%3E%3C/g%3E%3C/svg%3E");
+  -webkit-mask-composite: source-in;
+  mask-image:
+    linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='34.641' viewBox='0 0 60 34.641'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M50.000%2017.321%20L40.000%2034.641%20L20.000%2034.641%20L10.000%2017.321%20L20.000%200.000%20L40.000%200.000%20Z'/%3E%3Cpath d='M20.000%200.000%20L10.000%2017.321%20L-10.000%2017.321%20L-20.000%200.000%20L-10.000%20-17.321%20L10.000%20-17.321%20Z'/%3E%3C/g%3E%3C/svg%3E");
+  mask-composite: intersect;
 }
 
 /* ---------- ② 光层（拉满 —— 光污染的"光"在这里）---------- */
