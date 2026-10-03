@@ -184,7 +184,7 @@
   function cmdAtmo(arg) {
     var m = String(arg || '').trim().toLowerCase();
     if (['pollution', 'standard', 'silent'].indexOf(m) === -1) {
-      print('模式：pollution（光污染）/ standard（标准）/ silent（静音）', 'err');
+      print('模式：pollution（梦游）/ standard（标准）/ silent（静谧）', 'err');
       return;
     }
     var c = ctl();

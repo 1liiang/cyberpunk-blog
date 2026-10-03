@@ -101,17 +101,16 @@ async function run() {
   {
     const CN = 'v4.3 控制台';
 
-    T(CN, 'R232 面板四组：氛围三档 + 九层开关 + 恢复自动 / 装置区三件',
-      /function atmoModesHtml/.test(app) && /function atmoLayersHtml/.test(app) &&
+    T(CN, 'R232 面板四组：氛围三档 + 旧偏好恢复入口 / 装置区三件',
+      /function atmoModesHtml/.test(app) && !/function atmoLayersHtml/.test(app) &&
       /function deviceZoneHtml/.test(app) &&
-      /data-atmo-val/.test(app) && /data-atmo-layer/.test(app) && /data-tap-val/.test(app) &&
+      /data-atmo-val/.test(app) && /data-tap-val/.test(app) &&
       /id="atmo-reset"/.test(app) && /id="atmo-lock"/.test(app) && /id="replay-boot"/.test(app),
       '面板结构缺项');
 
-    T(CN, 'R232b 九层开关名字走 ATMO_LABEL（单一来源，atmo.js 导出）',
-      /window\.NEONAtmo && window\.NEONAtmo\.ATMO_LABEL/.test(app) &&
-      /ATMO_LABEL: ATMO_LABEL/.test(SRC.atmo),
-      '层名单一来源被破坏');
+    T(CN, 'R232b 三档使用直观文案并兼容原存储值',
+      /n:\s*'静谧'/.test(app) && /n:\s*'标准'/.test(app) && /n:\s*'梦游'/.test(app) &&
+      /v:\s*'pollution'/.test(app), '静谧 / 标准 / 梦游');
 
     /* 控制面：模式切换清手动 / 层开关从当前层集复制 / 恢复自动清键 */
     T(CN, 'R232c 控制面三则：切模式清手动 / 首扳从现状复制 / 恢复清键回落场景',
@@ -120,11 +119,11 @@ async function run() {
       /function resetAtmoManual/.test(app) && /function reapplyAtmo/.test(app),
       '控制面缺项');
 
-    T(CN, 'R232d 手动优先链：scene.effectiveLayers 手动 > 模式×场景；reapply 不换路由',
+    T(CN, 'R232d 旧手动偏好先迁移再过滤场景，reapply 不换路由',
       /function effectiveLayers/.test(sceneSrc) &&
       /function readManual/.test(sceneSrc) &&
       /function reapply/.test(sceneSrc) &&
-      /if \(manual\) return manual/.test(sceneSrc),
+      /manual !== null/.test(sceneSrc) && /allowed\.indexOf\(id\)/.test(sceneSrc),
       '优先链缺项');
 
     T(CN, 'R232e 首绘前同样尊重手动列表（theme-boot 的 data-atmo 写入）',
@@ -132,9 +131,9 @@ async function run() {
       /JSON\.parse\(window\.localStorage\.getItem\('neon_atmo_manual'\)\)/.test(SRC.themeBoot),
       '首绘未读手动列表');
 
-    T(CN, 'R232f 面板控件样式齐：模式/层开关/装置按钮 + 面板限高滚动',
+    T(CN, 'R232f 面板控件样式齐：模式/恢复/装置按钮 + 面板限高滚动',
       /\.atmo-mode, \.tap-mode/.test(css) &&
-      /\.atmo-layer-btn\[aria-pressed="true"\]/.test(css) &&
+      /\.atmo-reset/.test(css) &&
       /\.device-toggle\[aria-checked="true"\]/.test(css) &&
       /\.theme-menu\s*\{[^}]*max-height:/.test(css),
       '样式缺项');
@@ -206,20 +205,19 @@ async function run() {
       atmoNow === '',
       'atmo=[' + atmoNow + ']');
 
-    const layerBtn = menu && menu.querySelector('[data-atmo-layer="rain"]');
-    if (layerBtn) layerBtn.click();
+    ctx.w.localStorage.setItem('neon_atmo_manual', JSON.stringify(['bloom', 'noise', 'rain']));
+    const standardBtn = menu.querySelector('[data-atmo-val="standard"]');
+    if (standardBtn) standardBtn.click();
     const manualRaw = ctx.w.localStorage.getItem('neon_atmo_manual');
     const atmoAfter = ctx.doc.documentElement.getAttribute('data-atmo');
-    T(CN, 'R233i 手动扳「雨」开 → 写入手动列表且层集含 rain',
-      !!manualRaw && manualRaw.indexOf('rain') !== -1 &&
-      (atmoAfter || '').indexOf('rain') !== -1,
+    T(CN, 'R233i 选择标准档清除旧手动设置并应用静态背景',
+      manualRaw === null && atmoAfter === 'glow grid' && standardBtn.getAttribute('aria-checked') === 'true',
       'manual=' + manualRaw + ' / atmo=[' + atmoAfter + ']');
-
-    T(CN, 'R233j 九层开关渲染 9 枚、氛围档 3 枚、装置档 3 枚',
-      menu.querySelectorAll('[data-atmo-layer]').length === 9 &&
+    T(CN, 'R233j 面板只显示三档氛围入口，不再铺九层开关',
+      menu.querySelectorAll('[data-atmo-layer]').length === 0 &&
       menu.querySelectorAll('[data-atmo-val]').length === 3 &&
       menu.querySelectorAll('[data-tap-val]').length === 3,
-      menu.querySelectorAll('[data-atmo-layer]').length + ' 层开关');
+      menu.querySelectorAll('[data-atmo-layer]').length + ' 独立开关');
 
     ctx.dom.window.close();
   }

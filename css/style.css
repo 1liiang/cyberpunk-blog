@@ -76,9 +76,8 @@
 
      ⚠ 只在**暗色档**加。亮色档的 --glow-cyan 已刻意收敛为单层 2px 描边
        （见文件末尾 light 块原注释："浅底上靠描边而不是光晕"）—— 可读性决定，不动。
-     ⚠ 开销交代：36px 半径的模糊不便宜；而低端档 (html[data-tier="low"]) 只关了
-       box-shadow 与毛玻璃、**没关 text-shadow**，所以这层在低端机上也会绘制。
-       视觉很淡但仍有成本。若某台设备吃紧，回退只需删掉下面第三行。 */
+     ⚠ 36px 外圈只用于普通动效档；低端设备与减少动效时退回原有两层，
+       亮色档仍使用自己的 2px 描边。 */
   --glow-cyan: 0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.75),
                0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35),
                0 0 36px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.15);
@@ -260,13 +259,16 @@ body {
   max-width: 1120px;
   margin: 0 auto;
   padding: 0 20px;
-  height: 64px;
+  min-height: 64px;
+  height: auto;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 18px;
 }
 .logo {
   display: flex;
+  flex-shrink: 0;
   align-items: baseline;
   gap: 8px;
   text-decoration: none;
@@ -334,6 +336,9 @@ body {
 .nav {
   margin-left: auto;
   display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  max-width: 100%;
   align-items: center;
   gap: 6px;
   font-family: var(--mono);
@@ -344,6 +349,8 @@ body {
   position: relative;
 }
 .nav a {
+  flex: 0 0 auto;
+  white-space: nowrap;
   color: var(--text-dim);
   text-decoration: none;
   padding: 7px 12px;
@@ -2826,13 +2833,7 @@ body {
    把它并到 1280 会让 1280~1400 区间的竖排名言挤在 80px 的空白里。 */
 @media (max-width: 1400px) {
   .wrap::after { display: none; }
-  /* v4.0 B1：氛围的霓虹招牌（.atmo-layer[data-layer="signs"]）同样在窄于 1400 时
-     隐藏 —— 它占的正是 .wrap::after 那批"边缘留白位"，两种边缘装饰的存亡条件
-     天然一致。并入本块而非新开断点：宽度断点块总数有断言上限（R202d），
-     防"每修一处就加一档"。
-     带 !important 的原因：层显示的开关规则（html[data-atmo~="signs"] …）特异性
-     更高（0,3,0 vs 0,2,0），不加则本规则永远输。 */
-  .atmo-layer[data-layer="signs"] { display: none !important; }
+
 }
 /* 矮于 640px：字体已到 7px 下限，竖排总高约 589px，扣除上下留白（各 5%）后
    需要 620px 以上的净高度才放得下 → 640px 视口起就不再安全。
@@ -4261,7 +4262,7 @@ a:focus-visible { text-decoration: underline; }
    而是**按设备降一档**：低端机少付毛玻璃与重阴影，观感仍成立。
 
    判定与写入在 js/theme-boot.js 的 isLowEnd()（首绘前写 data-tier，避免先卡后救）；
-   js/scene.js 的 trimForTier() 同步把最重的三层氛围（rain/stardust/signs）也去掉。
+   js/scene.js 的 trimForTier() 同步关闭动态星点。
 
    ⚠ 这里只覆盖「常驻 + 最贵」的那几类，**不动颜色与布局** ——
      data-tier 是性能档，不是主题档；换肤、亮色档、色相都照旧生效。
@@ -4292,262 +4293,149 @@ html[data-tier="low"] .toast,
 html[data-tier="low"] .md-body pre {
   box-shadow: none !important;
 }
-/* 数字雨在低端机上已由 JS 去掉；这里再兜一层：即便被手动打开，也把它的
-   合成提示关掉（will-change 会让每列长期占一个合成层） */
-html[data-tier="low"] .atmo-layer[data-layer="rain"],
-html[data-tier="low"] .atmo-layer[data-layer="stardust"] {
+/* 低端设备不运行背景装饰动画，CSS 同步兜底。 */
+html[data-tier="low"] .atmo-layer[data-layer="stardust"] { display: none !important; }
+/* 后续全息组件也遵守低端档：静止仪表，释放卡片合成层，保留状态可见性。 */
+html[data-tier="low"]:not([data-theme="light"]) {
+  --glow-cyan: 0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.75),
+               0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35);
+}
+html[data-tier="low"] .holo-radar::after,
+html[data-tier="low"] .holo-radar i,
+html[data-tier="low"] .holo-bars i,
+html[data-tier="low"] .holo-radio-live i { animation: none !important; }
+html[data-tier="low"] .holo-radar i { opacity: .6 !important; }
+html[data-tier="low"] .holo-bars i { height: 40% !important; }
+html[data-tier="low"] .holo-card {
+  transform: none !important;
   will-change: auto !important;
 }
-/* 本档位规则到此结束（上面这段是 v5.7.0 P2 新增） */
+html[data-tier="low"] .holo-card::after { opacity: 0 !important; }
 
 /* ============================================================
-   v4.0 B1：氛围系统（Atmosphere）—— 出厂「光污染」
-
-   9 层注册：材质 3（noise/scanline/grid）+ 光 6（glow/bloom/signs/stardust/pulse/rain）。
-   开关：html[data-atmo] 是【层列表】（空格分隔）。它有三个写入者，同一份契约：
-     · theme-boot.js —— 首绘前写全局兜底集（防"先裸后亮"）
-     · scene.js     —— 路由切换时按场景温差校正
-     · atmo.js      —— 帧率不足时自动降档（性能保底）
-   载体：index.html 里两个容器 —— .atmo-under（内容之下）/ .atmo-over（内容之上），
-   每层一个 <i class="atmo-layer" data-layer="…">。
-
-   光污染的边界（方案 §4.2 红线的落地）：
-     · 「光」层拉满（glow/bloom/signs/stardust/pulse/rain）；
-     · 「材质」层保持低强度 —— 颗粒纹理加深不会得到"更多光"，只会变成花屏；
-     · 全部层不得进入正文阅读层级（z-index 分区固定，见下）；
-     · 闪烁频率全部 ≤ 3Hz（WCAG 2.3.1，见各 keyframes 注释）。
+   全息环境：环境底光 + 空间纹理 + 灵动星点。
+   三类共用一个内容下方容器；静态档无持续动画。
    ============================================================ */
-
-/* ---------- 容器与逐层开关 ---------- */
 .atmo {
   position: fixed;
   inset: 0;
-  pointer-events: none;   /* 红线：不挡任何交互 */
+  pointer-events: none;
   overflow: hidden;
 }
-.atmo-under { z-index: 0; }      /* 内容之下：后续 DOM 的内容自然盖住它 */
-.atmo-over  { z-index: 9996; }   /* 内容之上（topbar 100 / 模态 200+）、toast(10000) 之下 */
+.atmo-under { z-index: 0; }
 .atmo-layer { position: absolute; inset: 0; display: none; }
+html[data-atmo~="glow"] .atmo-layer[data-layer="glow"],
+html[data-atmo~="grid"] .atmo-layer[data-layer="grid"],
+html[data-atmo~="stardust"] .atmo-layer[data-layer="stardust"] { display: block; }
 
-html[data-atmo~="noise"]    .atmo-layer[data-layer="noise"],
-html[data-atmo~="scanline"] .atmo-layer[data-layer="scanline"],
-html[data-atmo~="grid"]     .atmo-layer[data-layer="grid"],
-html[data-atmo~="glow"]     .atmo-layer[data-layer="glow"],
-html[data-atmo~="bloom"]    .atmo-layer[data-layer="bloom"],
-html[data-atmo~="signs"]    .atmo-layer[data-layer="signs"],
-html[data-atmo~="stardust"] .atmo-layer[data-layer="stardust"],
-html[data-atmo~="pulse"]    .atmo-layer[data-layer="pulse"],
-html[data-atmo~="rain"]     .atmo-layer[data-layer="rain"] { display: block; }
-
-/* ---------- ① 材质层（低强度 —— 是"材质"，不是"光"）---------- */
-
-/* 噪点（胶片颗粒）：内联 SVG turbulence 平铺，≈5% 强度。 */
-.atmo-layer[data-layer="noise"] {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
-  opacity: 0.05;
-}
-
-/* 扫描线（CRT 条纹）：3px 周期、单像素暗线，等效明度差 ≈5%（评审数据：再深杀可读性）。 */
-.atmo-layer[data-layer="scanline"] {
-  background-image: repeating-linear-gradient(
-    0deg,
-    transparent 0 2px,
-    rgba(0, 0, 0, 0.16) 2px 3px
-  );
-}
-/* 浅底档减半：暗线在浅色上观感更重（v3.5.0 已有同一思路的教训） */
-html[data-theme="light"] .atmo-layer[data-layer="scanline"],
-
-/* 透视网格：双向线性渐变，42px 格；顶部浓、向下渐隐（"地平线"感）。 */
-/* v5.7.5（风格重构 C）：六边形能量网格 —— 取代原来的**方格**。
-   StyleKit 的 Cyber Anime 规格明确要求 "Use hexagonal grid background pattern
-   instead of square grid"。
-
-   为什么是「原地替换」而不是新增一层：
-     · 层名/层数不变 ⇒ 不用改 scene.js 的层注册表，也不影响 49 号 R241
-       （那条是「路由→场景→层数」的交叉核对，动层数就会红）。
-     · 视觉职责完全相同（都只是"给暗底一层几何纹理"），并存反而互相干扰。
-
-   为什么用 mask 而不是把六边形画进 SVG：
-     SVG 数据 URI 里**无法引用 CSS 变量** —— 若把描边色写死进 SVG，就锁死了
-     `--hue` 换色能力。改成 mask 后，颜色仍由 CSS 的 background-color 决定，
-     与原方格层一样随 --hue 与主题档联动。
-
-   几何（推导见 v5.7.5 的开发记录，写下来免得后人重推）：
-     平顶六边形宽 W、高 H = W·√3/2；平铺水平步进 1.5W、垂直步进 H，相邻列错开 H/2。
-     取 W=40 ⇒ H=34.641。格子 60×34.641 内含两个中心：(15,17.32) 与 (45,0)。
-     ⚠ 平铺尺寸必须与 background-size 完全一致，差一点就会出现接缝。 */
-/* v5.7.5（风格重构 C）：六边形能量网格 —— 取代原来的**方格**。
-   StyleKit 的 Cyber Anime 规格要求 "Use hexagonal grid background pattern
-   instead of square grid"。
-
-   ① 为什么「原地替换」而不是新增一层：
-      层名/层数不变 ⇒ 不用改 scene.js 的层注册表，也不影响 49 号 R241
-      （那条是「路由→场景→层数」的交叉核对，动层数就会红）。
-      两者视觉职责相同（都只是给暗底铺一层几何纹理），并存反而互相干扰。
-
-   ② 为什么用 mask 而不是把六边形画进 SVG：
-      SVG 数据 URI 里**无法引用 CSS 变量** —— 描边色若写死进 SVG 就锁死了换色能力。
-      改用 mask 后颜色由 CSS 的 background-color 决定，与原方格层一样随
-      --hue 与主题档联动。
-
-   ③ 几何（这里踩过一次坑，推导过程留下免得重犯）：
-      平顶六边形边长 s：**内切半径（顶点到中心的水平距离）= s·√3/2**，
-      上下平边到中心距离 = s/2。故 宽 = s√3、高 = s。
-      ⚠ 第一版我误把「宽=2s」当成水平步进，导致平铺右移一个周期后不重合
-        （会错位/出现接缝）。正确值是：宽 = s√3 = 34.641（s=20）。
-      平铺：水平步进 1.5s = 30，垂直步进 s√3 = 34.641，相邻列垂直错开 s√3/2。
-      格子取 60 × 34.641（3 列 × 1 行周期，含六边形 (30,10) 与 (0,0)）。
-      ⚠ 平铺尺寸必须与 background-size 完全一致，差一点就出现接缝。 */
-.atmo-layer[data-layer="grid"] {
-  background-image: none;
-  background-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.13);
-  background-size: 60px 34.641px;
-  -webkit-mask-image:
-    linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='34.641' viewBox='0 0 60 34.641'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M50.000%2017.321%20L40.000%2034.641%20L20.000%2034.641%20L10.000%2017.321%20L20.000%200.000%20L40.000%200.000%20Z'/%3E%3Cpath d='M20.000%200.000%20L10.000%2017.321%20L-10.000%2017.321%20L-20.000%200.000%20L-10.000%20-17.321%20L10.000%20-17.321%20Z'/%3E%3C/g%3E%3C/svg%3E");
-  -webkit-mask-composite: source-in;
-  mask-image:
-    linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.35) 55%, transparent 92%),
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='60' height='34.641' viewBox='0 0 60 34.641'%3E%3Cg fill='none' stroke='%23000' stroke-width='1'%3E%3Cpath d='M50.000%2017.321%20L40.000%2034.641%20L20.000%2034.641%20L10.000%2017.321%20L20.000%200.000%20L40.000%200.000%20Z'/%3E%3Cpath d='M20.000%200.000%20L10.000%2017.321%20L-10.000%2017.321%20L-20.000%200.000%20L-10.000%20-17.321%20L10.000%20-17.321%20Z'/%3E%3C/g%3E%3C/svg%3E");
-  mask-composite: intersect;
-}
-
-/* ---------- ② 光层（拉满 —— 光污染的"光"在这里）---------- */
-
-/* 光晕：v2.6 的 body 晕斑正式回归（当时为修"短页面空旷"；v3.6 全删后失去）。
-   三团径向渐变（主色 / 品红 / 幽紫），随 --hue 旋转。 */
+/* 合并旧光晕与光溢出，无滤镜、无混合层；跟随已有色相变量。 */
 .atmo-layer[data-layer="glow"] {
   background:
-    radial-gradient(58% 44% at 12% 6%, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.15), transparent 72%),
-    radial-gradient(46% 38% at 88% 10%, rgba(255, 42, 109, 0.09), transparent 72%),
-    radial-gradient(70% 55% at 50% 104%, hsl(calc(var(--hue) + var(--vio-off)) var(--vio-s) var(--vio-l) / 0.12), transparent 72%);
+    radial-gradient(68% 56% at 8% 3%, hsl(var(--hue) 86% 65% / .16), transparent 74%),
+    radial-gradient(42% 38% at 94% 20%, hsl(168 76% 72% / .065), transparent 76%),
+    radial-gradient(68% 40% at 65% 105%, hsl(320 82% 74% / .085), transparent 75%);
 }
-
-/* 光溢出：屏幕上下边缘的整体洇光（screen 混合提亮）—— CRT 辉光感。
-   浅底档几乎不可见属预期（屏幕本身已亮，bloom 无意义），不另设覆盖。 */
-.atmo-layer[data-layer="bloom"] {
-  background:
-    radial-gradient(120% 42% at 50% -8%, hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.16), transparent 62%),
-    radial-gradient(110% 36% at 50% 108%, hsl(calc(var(--hue) + var(--vio-off)) var(--vio-s) var(--vio-l) / 0.11), transparent 62%);
-  mix-blend-mode: screen;
+/* 几何点纹替代全屏条纹和颗粒叠加，透明度固定在低强度。 */
+.atmo-layer[data-layer="grid"] {
+  opacity: .045;
+  background-image: radial-gradient(circle, var(--cyan) .7px, transparent 1px);
+  background-size: 26px 26px;
+  -webkit-mask-image: linear-gradient(180deg, #000, transparent 88%);
+  mask-image: linear-gradient(180deg, #000, transparent 88%);
 }
-
-/* 霓虹招牌：页面左右边缘的竖排灯牌（< 1400 由 1400 断点块隐藏）。 */
-.atmo-layer[data-layer="signs"] b {
-  position: absolute;
-  writing-mode: vertical-rl;
-  font-family: var(--mono);
-  font-weight: 400;   /* 用真实字重，避免合成粗体的粗糙边缘 */
-  font-size: 13px;
-  letter-spacing: 0.5em;
-  color: hsl(var(--hue) var(--hue-s) 72%);
-  text-shadow:
-    0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.9),
-    0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
-  opacity: 0.5;
-  animation: atmo-flicker 7s infinite;
-}
-.atmo-layer[data-layer="signs"] b:first-child { left: 16px; top: 24%; }
-.atmo-layer[data-layer="signs"] b:last-child  { right: 16px; bottom: 16%; }
-
-/* 星尘：微光点阵平铺 + 缓慢漂移 + 明暗呼吸。 */
+/* 不铺满中央正文，只沿左右边缘分布少量光点。 */
 .atmo-layer[data-layer="stardust"] {
+  inset: -24px;
+  opacity: .5;
   background-image:
-    radial-gradient(1.6px 1.6px at 18% 22%, rgba(255, 255, 255, 0.85), transparent),
-    radial-gradient(1.2px 1.2px at 64% 12%, rgba(255, 255, 255, 0.6), transparent),
-    radial-gradient(1.4px 1.4px at 38% 58%, hsl(var(--hue) var(--hue-s) 80% / 0.7), transparent),
-    radial-gradient(1.1px 1.1px at 82% 44%, rgba(255, 255, 255, 0.55), transparent),
-    radial-gradient(1.5px 1.5px at 8% 76%, hsl(var(--hue) var(--hue-s) 80% / 0.6), transparent),
-    radial-gradient(1.2px 1.2px at 52% 88%, rgba(255, 255, 255, 0.5), transparent),
-    radial-gradient(1.3px 1.3px at 92% 80%, rgba(255, 255, 255, 0.6), transparent),
-    radial-gradient(1.1px 1.1px at 28% 40%, rgba(255, 255, 255, 0.5), transparent);
-  background-size: 460px 460px;
-  animation: atmo-dust-drift 28s linear infinite alternate, atmo-dust-blink 9s ease-in-out infinite;
-}
-
-/* 脉冲扫掠：低频光带自顶部渐入、扫过全屏（11s 一趟）。 */
-.atmo-layer[data-layer="pulse"]::before {
-  content: "";
-  position: absolute;
-  left: -6%;
-  right: -6%;
-  height: 36vh;
-  background: linear-gradient(180deg,
-    transparent,
-    hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.10) 45%,
-    transparent);
-  animation: atmo-sweep 11s linear infinite;
-}
-
-/* 数字雨：v4.4.1 起为「DOM 列」实现 —— 整列由 transform 下落（合成器线程），
-   拖尾长度由 JS 精确控制在 4~7 字符（TAIL_MIN/MAX），亮度梯度在这里：头亮尾暗、
-   整体压柔（尾字符 0.32 透明度）。离屏即随元素消失——不再有擦除残留。
-   旧实现（Canvas + destination-out 半透明擦除）的拖尾是"擦不干净"的副产品，
-   长度随帧率漂移且会累积残影，本版整体退役。 */
-.rain-col {
-  position: absolute;
-  top: 0;
-  display: block;
-  text-align: center;
-  font-family: var(--mono);
-  font-size: 14px;
-  line-height: 1.4;
-  color: hsl(var(--hue) var(--hue-s) 58% / 0.32);
-  pointer-events: none;
-  /* ⚠ will-change 只给**动画元素自己**，不给父层 —— 见下方注释。
-     实测（2026-09-30，v4.4.1 收尾）：把 will-change 提到父层 .atmo-layer 上
-     反而更差（滚动损耗 7.9% → 9.8%）：父层 contain:strict 后，
-     列的 translateY 动画不再能"共享父层的合成上下文"，合成器要为每列单独分配。
-     结论：**逐列 will-change: transform 是最优**（列数即合成层数，COL_W 才是主旋钮）。 */
-  will-change: transform;
-  contain: layout style paint;
-  animation: rain-fall linear infinite;
-}
-.rain-col b { display: block; font-weight: 400; }
-/* 头亮尾暗：nth-last-child(1) = 列内最下方 = 头字符。
-   ⚠ 发光（text-shadow）只给**头字符**一个、且 blur 收到 5px ——
-   实测教训：头 1+2 都带 7px 光晕时，滚动帧率被发光合成拖低约 8%；
-   收成"单头小光晕"后回落到 3% 内（发光是最贵的 CSS 效果之一）。 */
-.rain-col b:nth-last-child(1) {
-  color: hsl(var(--hue) var(--hue-s) 78% / 0.85);
-  text-shadow: 0 0 5px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.55);
-}
-.rain-col b:nth-last-child(2) {
-  color: hsl(var(--hue) var(--hue-s) 66% / 0.52);
-}
-.rain-col b:nth-last-child(3) { opacity: 0.55; }
-.rain-col b:nth-last-child(4) { opacity: 0.35; }
-/* 页面隐藏时暂停（atmo.js 的 setRainPaused 挂 .is-paused） */
-.atmo-layer.is-paused .rain-col { animation-play-state: paused; }
-@keyframes rain-fall {
-  from { transform: translateY(-170px); }
-  to   { transform: translateY(calc(100vh + 200px)); }
-}
-
-/* ---------- 氛围动画（闪烁频率全部远低于 WCAG 2.3.1 的 3Hz 上限）---------- */
-@keyframes atmo-flicker {
-  /* 7 秒周期内 3 次快速明暗（≈0.43Hz）—— 招牌"接触不良"感，不构成光敏风险 */
-  0%, 91%, 100% { opacity: 0.5; }
-  92% { opacity: 0.24; }
-  93% { opacity: 0.55; }
-  94% { opacity: 0.2; }
-  95% { opacity: 0.5; }
+    radial-gradient(2px 2px at 5% 15%, hsl(168 76% 80% / .9), transparent),
+    radial-gradient(1.5px 1.5px at 12% 48%, hsl(var(--hue) 80% 84% / .85), transparent),
+    radial-gradient(2px 2px at 7% 82%, hsl(320 82% 82% / .9), transparent),
+    radial-gradient(1.5px 1.5px at 93% 23%, hsl(var(--hue) 80% 84% / .85), transparent),
+    radial-gradient(2px 2px at 88% 66%, hsl(168 76% 80% / .85), transparent),
+    radial-gradient(1.5px 1.5px at 96% 89%, hsl(320 82% 82% / .8), transparent);
+  animation: atmo-dust-drift 32s ease-in-out infinite alternate;
 }
 @keyframes atmo-dust-drift {
-  from { background-position: 0 0; }
-  to   { background-position: 64px 46px; }
+  from { transform: translate3d(0, 8px, 0); }
+  to { transform: translate3d(0, -12px, 0); }
 }
-@keyframes atmo-dust-blink {
-  0%, 100% { opacity: 0.85; }
-  50%      { opacity: 0.45; }
+html[data-atmo-paused="true"] .atmo-layer[data-layer="stardust"] { animation-play-state: paused; }
+html[data-theme="light"] .atmo-layer[data-layer="glow"] { opacity: .7; }
+html[data-theme="light"] .atmo-layer[data-layer="grid"] { opacity: .055; }
+html[data-theme="light"] .atmo-layer[data-layer="stardust"] { opacity: .25; }
+body:not([data-scene="tower"]):not([data-scene="idcard"]) .atmo-layer[data-layer="stardust"] { display: none !important; }
+
+/* 片假名数字雨：两侧与中间错落分布，正文中央降低强度，短拖痕只做轮廓。
+   字符列由 scene.js 按需生成；每个字只改变 opacity，列本身只改变 transform。 */
+.kana-stream {
+  --kana-opacity: .56;
+  position: absolute;
+  top: 0;
+  left: var(--kana-left);
+  display: block;
+  width: 1.1em;
+  color: hsl(var(--hue) 100% 78% / .9);
+  font: 400 clamp(13px, calc(.78vw + 3px), 17px)/1.45 var(--mono);
+  letter-spacing: .04em;
+  text-align: center;
+  opacity: var(--kana-opacity);
+  text-shadow: 0 0 4px currentColor;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: kana-stream-fall var(--kana-speed) linear var(--kana-delay) infinite;
 }
-@keyframes atmo-sweep {
-  0%   { top: -42vh; opacity: 0; }
-  10%  { opacity: 1; }
-  86%  { opacity: 1; }
-  100% { top: 112vh; opacity: 0; }
+.kana-stream b {
+  display: block;
+  font: inherit;
+  font-weight: 400;
+  opacity: .44;
+  animation: kana-glint var(--kana-glint) steps(2, end) var(--kana-char-delay) infinite;
+}
+/* 拖痕在字符后方，宽度固定为 1px，并以透明渐变收尾。 */
+.kana-stream::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: .6em;
+  left: 50%;
+  width: 1px;
+  height: min(18vh, 150px);
+  background: linear-gradient(180deg, transparent, currentColor 48%, transparent);
+  opacity: .27;
+  transform: translateX(-50%);
+}
+.kana-stream-0  { --kana-left: 5%;  --kana-speed: 18s; --kana-delay: -10s; --kana-glint: 3.2s; }
+.kana-stream-1  { --kana-left: 12%; --kana-speed: 23s; --kana-delay: -4s;  --kana-glint: 3.8s; }
+.kana-stream-2  { --kana-left: 19%; --kana-speed: 20s; --kana-delay: -15s; --kana-glint: 4.1s; color: hsl(320 90% 78% / .8); }
+.kana-stream-3  { --kana-left: 26%; --kana-speed: 26s; --kana-delay: -21s; --kana-glint: 4.6s; }
+.kana-stream-4  { --kana-left: 33%; --kana-speed: 22s; --kana-delay: -8s;  --kana-glint: 3.7s; --kana-opacity: .4; }
+.kana-stream-5  { --kana-left: 40%; --kana-speed: 19s; --kana-delay: -17s; --kana-glint: 4.3s; --kana-opacity: .34; color: hsl(320 90% 78% / .8); }
+.kana-stream-6  { --kana-left: 47%; --kana-speed: 24s; --kana-delay: -2s;  --kana-glint: 3.5s; --kana-opacity: .34; }
+.kana-stream-7  { --kana-left: 54%; --kana-speed: 21s; --kana-delay: -13s; --kana-glint: 4.8s; --kana-opacity: .34; }
+.kana-stream-8  { --kana-left: 61%; --kana-speed: 25s; --kana-delay: -6s;  --kana-glint: 3.9s; --kana-opacity: .34; color: hsl(320 90% 78% / .8); }
+.kana-stream-9  { --kana-left: 68%; --kana-speed: 20s; --kana-delay: -12s; --kana-glint: 4.5s; --kana-opacity: .4; }
+.kana-stream-10 { --kana-left: 75%; --kana-speed: 23s; --kana-delay: -18s; --kana-glint: 3.4s; }
+.kana-stream-11 { --kana-left: 82%; --kana-speed: 18s; --kana-delay: -5s;  --kana-glint: 4.2s; color: hsl(320 90% 78% / .8); }
+.kana-stream-12 { --kana-left: 89%; --kana-speed: 26s; --kana-delay: -16s; --kana-glint: 3.6s; }
+.kana-stream-13 { --kana-left: 96%; --kana-speed: 22s; --kana-delay: -20s; --kana-glint: 4.7s; }
+@keyframes kana-stream-fall {
+  0% { transform: translate3d(0, -36vh, 0); opacity: 0; }
+  12% { opacity: var(--kana-opacity); }
+  78% { opacity: calc(var(--kana-opacity) * .84); }
+  100% { transform: translate3d(0, 124vh, 0); opacity: 0; }
+}
+@keyframes kana-glint {
+  0%, 100% { opacity: .38; }
+  48% { opacity: .62; }
+  53% { opacity: .24; }
+}
+html[data-atmo-paused="true"] .kana-stream,
+html[data-atmo-paused="true"] .kana-stream b { animation-play-state: paused; }
+html[data-theme="light"] .kana-stream { --kana-opacity: .32; text-shadow: none; }
+html[data-theme="light"] .kana-stream b { opacity: .28; }
+@media (max-width: 1024px) {
+  .kana-stream-2, .kana-stream-5, .kana-stream-8, .kana-stream-11 { display: none; }
 }
 
 /* ============================================================
@@ -4572,7 +4460,9 @@ html[data-theme="light"] .atmo-layer[data-layer="scanline"],
   ::-webkit-scrollbar-thumb:hover { background-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.55); }
 }
 /* 浅底档提高实度（浅色上低透明度不够醒目） */
-html[data-theme="light"] ::-webkit-scrollbar-thumb,
+html[data-theme="light"] ::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.45);
+}
 
 /* ============================================================
    v4.2 B3「阅读舱」：终端阅读框 + 行号 + 迷你地图 + 时间线档案
@@ -4919,28 +4809,6 @@ body:not(.linenum-off) .md-body > pre::before {
   text-shadow: 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
   box-shadow: inset 0 0 10px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.15);
 }
-.atmo-layers {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  margin-top: 8px;
-}
-.atmo-layer-btn {
-  padding: 3px 6px;
-  font-family: var(--mono);
-  font-size: var(--fs-2xs);
-  color: var(--text-dim);
-  background: color-mix(in srgb, var(--bg-2) 60%, transparent);
-  border: 1px solid var(--line);
-  cursor: pointer;
-  transition: color var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast);
-}
-.atmo-layer-btn[aria-pressed="true"] {
-  color: var(--text-bright);
-  border-color: hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.6);
-  box-shadow: inset 0 0 10px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.18);
-  text-shadow: 0 0 8px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.5);
-}
 .atmo-reset, .device-toggle, .device-action {
   display: block;
   width: 100%;
@@ -4991,25 +4859,26 @@ body:not(.linenum-off) .md-body > pre::before {
      ③ 过渡时长：全局归零（按钮、边框、滑轨的 transition）
    ============================================================ */
 /* ============================================================
-   v3.5.0：小屏顶栏（≤480）—— 外部审计 P1
+   小屏顶栏（≤768）：标志独占一行，导航按完整词组换行。
    ------------------------------------------------------------
    症状：≤420px 时 .nav 内各项总宽约 775px，超出的部分被 body{overflow-x:hidden}
    静默裁掉 —— STASH / ABOUT / ACCESS / 主题按钮**全部点不到**，
    而页面上看不出任何异常（这正是"被掩盖的溢出"最坏的地方：用户会以为自己点错了）。
 
-   解法：窄屏让导航**换行成两行**（信息零损失、所有项都可点），
-   并把 --topbar-h 同步调高 —— 顶栏是 sticky，变高不会压正文，
-   但 6 处 sticky 辅助栏（TOC / 控制台导航 / 归档小工具 / 搜索吸附条）都读它，
-   不调就会滑到页头底下。
+   480~768px 同样容不下标志与全部导航，不能等到480px才换行。
+   --topbar-h 是首绘兜底，运行时按顶栏实测高度同步，兼顾登录后的新增入口。
+   导航不设 overflow，绝对定位的主题面板才能完整展开。
 
    ⚠ 放在 reduce 块之前 = 位于所有其它媒体查询之后 ⇒ 同特异性下由它胜出。
    ============================================================ */
-@media (max-width: 480px) {
+@media (max-width: 768px) {
+  .atmo-layer[data-layer="stardust"] { display: none !important; }
   :root { --topbar-h: 104px; }
   .topbar-inner { height: auto; padding: 6px 12px; gap: 8px 10px; flex-wrap: wrap; }
+  .logo { flex: 0 0 100%; white-space: nowrap; }
   /* 换行后 margin-left:auto 会把 nav 推到右端再折行 ⇒ 窄屏必须取消 */
   .nav { margin-left: 0; flex-wrap: wrap; gap: 3px; width: 100%; }
-  .nav a { padding: 7px 10px; font-size: 11px; }
+  .nav a { flex: 0 0 auto; padding: 7px 10px; font-size: 11px; white-space: nowrap; }
   .logo-sub { display: none; }
   .theme-toggle { white-space: nowrap; }
 }
@@ -5021,17 +4890,9 @@ body:not(.linenum-off) .md-body > pre::before {
    保留"扫描线"的质感，但不再抢视线（不直接隐藏：那是这个站的语言之一）。 */
 
 @media (prefers-reduced-motion: reduce) {
-  /* ---- ⓪ v4.0：氛围动画层直接不渲染 ---- */
-  /* 动画层（雨/星尘/脉冲/招牌闪烁）整体关闭 —— 不是压时长，是不渲染
-     （atmo.js 侧同步：reduce 下不会启动 rain 的 Canvas，探针也不跑）。
-     静态层（噪点/扫描线/网格/光晕/光溢）保留但稍减，氛围不塌、不眩晕。
-     带 !important 的原因与其他层显示规则一致：开关规则特异性更高。 */
-  .atmo-layer[data-layer="rain"],
-  .atmo-layer[data-layer="stardust"],
-  .atmo-layer[data-layer="pulse"],
-  .atmo-layer[data-layer="signs"] { display: none !important; }
-  .atmo-layer[data-layer="glow"],
-  .atmo-layer[data-layer="bloom"] { opacity: 0.6; }
+  /* 动态星点不渲染，静态背景保留；运行时也不启动性能采样。 */
+  .atmo-layer[data-layer="stardust"] { display: none !important; }
+  .atmo-layer[data-layer="glow"] { opacity: .6; }
 
   /* ---- ① 关闭装饰性持续动画 ---- */
 
@@ -5078,6 +4939,9 @@ body:not(.linenum-off) .md-body > pre::before {
      或把新的响应式块追加到末尾），减少动效会静默失效且看不出任何变化。
      用 !important 把隐式顺序依赖改成显式优先级。 */
   :root {
+    /* 外圈模糊在 reduce 时收敛，亮色主题的高特异性单层描边继续生效。 */
+    --glow-cyan: 0 0 6px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.75),
+                 0 0 18px hsl(var(--hue) var(--hue-s) var(--hue-l) / 0.35);
     --t-fast: 0.001ms !important;
     --t-normal: 0.001ms !important;
     --t-slow: 0.001ms !important;
@@ -5188,12 +5052,14 @@ body:not(.linenum-off) .md-body > pre::before {
        不像进场动画那样跑一次就停，漏掉这条会一直闪。
      与本站既有做法一致（见 .wordmark-glyph 的同处处理）。 */
   /* v5.5.0：左半侧雷达扫掠 / 回波闪烁 / 频谱跳动一律归零 */
-  .holo-radar::after, .holo-radar i, .holo-bars i { animation: none !important; }
+  .holo-radar::after, .holo-radar i, .holo-bars i,
+  .holo-radio-live i { animation: none !important; }
   .holo-radar i { opacity: .6 !important; }
   .holo-bars i { height: 40% !important; }
   /* v5.4.0：首页全息面板的扫描线 / 故障字错位 / 呼吸灯一律归零 */
   .holo-uptime.glitch::before, .holo-uptime.glitch::after { animation: none !important; }
-  .holo-card { transform: none !important; }
+  .holo-card { transform: none !important; will-change: auto !important; }
+  .holo-card::after { opacity: 0 !important; }
   /* v5.1.0：控制台的两个无限循环装饰动画（指针扫频 / VU 电平） */
   .card-mark.is-locked:hover .lk-scan,
   .btn-mark.is-locked:hover .lk-scan { animation: none !important; opacity: 0 !important; }
@@ -5276,11 +5142,6 @@ body:not(.linenum-off) .md-body > pre::before {
 .holo-radio-shell.is-tall { height: 320px; }
 .holo-radio-shell.is-tall iframe { transform: scale(.72); transform-origin: center center; }
 .holo-radio-foot { margin: 7px 0 0; font-family: var(--mono); font-size: 10px; letter-spacing: .5px; color: var(--text-dim); }
-
-@media (max-width: 768px) {
-  .holo-radio-shell.is-tall { height: 280px; }
-  .holo-radio-shell.is-tall iframe { transform: scale(.62); }
-}
 
 .holo-hero {
   display: grid;
@@ -5400,4 +5261,11 @@ body:not(.linenum-off) .md-body > pre::before {
 .holo-gauge { display: flex; align-items: center; gap: 14px; margin-top: 14px; }
 .holo-gauge-text { font: 11px/1.7 var(--mono); color: #8d86b8; letter-spacing: 1px; min-width: 0; }
 .holo-gauge-text b { color: #cbb8ff; font-weight: 400; }
+
+@media (max-width: 768px) {
+  .holo-hero { grid-template-columns: minmax(0, 1fr); align-items: start; }
+  .holo-card { order: -1; }
+  .holo-radio-shell.is-tall { height: 280px; }
+  .holo-radio-shell.is-tall iframe { transform: scale(.62); }
+}
 

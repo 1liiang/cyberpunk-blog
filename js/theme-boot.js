@@ -50,7 +50,7 @@
   var HUE_MAX = 359;
 
   /* v4.5.0：出厂色相 184（青）→ 285（紫）。
-     ⚠ 存量迁移，判据必须与 js/app.js 的 getHue / js/views.js 的 hueReadout **三处同口径**：
+     ⚠ 存量迁移，判据必须与 js/app.js 的 getHue 同口径：
           「值 = 旧默认 184  且  无显式挑选标记」 ⇒ 视为"从未选过" → 不写 --hue，
           让 CSS :root 的新默认（285）生效。
        若这里不同口径（例如无条件写回 184），会出现"首绘紫、app 补正后跳青"的闪色。
@@ -58,14 +58,14 @@
   var HUE_PICK_KEY = 'neon_hue_pick';
   var HUE_OLD_DEFAULT = 184;
 
-  /* v4.0 B1：氛围模式（出厂 pollution = 光污染全开，2026-09-30 拍板）。
+  /* v4.0 B1：氛围模式（默认 standard；pollution 兼容旧「光污染」并对应「梦游」）。
      data-atmo 是【层列表】（空格分隔）—— 与 js/scene.js 的 ATMO_ALL / ATMO_STATIC
      必须逐值一致：不一致 = "首绘的层"与"路由校正的层"打架，表现为丢层或闪变。
      这里写的是【全局兜底集】；路由就绪后由 scene.apply 按场景温差校正。
      之所以必须在这里也写一次：否则首绘那一帧是完全无氛围的（先裸后亮）。 */
   var ATMO_KEY = 'neon_atmo_mode';
-  var ATMO_ALL = 'noise scanline grid glow bloom signs stardust pulse rain';
-  var ATMO_STATIC = 'noise scanline grid glow bloom signs';
+  var ATMO_ALL = 'glow grid stardust';
+  var ATMO_STATIC = 'glow grid';
 
   /* ===== v5.7.0（P2）：低端设备判定 =====
      为什么要在**首绘之前**判：氛围层是"开着才付代价"的。等 atmo.js 的探针发现
@@ -75,8 +75,7 @@
        · 用户开了"减少动效" ⇒ 直接算低端（首绘就不该跑装饰动效）
        · deviceMemory ≤ 4GB（Chrome/Edge 有；Safari/Firefox 没有 ⇒ 缺省不判）
        · hardwareConcurrency ≤ 4 核
-     ⚠ 只作"少开几层"的**初始值**，不锁死：用户仍可在装置面板里手动开回来
-       （下面 neon_atmo_manual 的手动列表优先级高于这里）。 */
+     旧手动偏好仍保存在存储里；低端设备仅关闭动态星点的显示，不删除偏好。 */
   function isLowEnd() {
     /* ⚠ 刻意不使用 try/catch —— 本文件里"第一处异常保护块"是主初始化块的锚点
        （39 号 R175r 按它切块），函数里再出现一个会把锚点抢走、
@@ -90,12 +89,12 @@
     return false;
   }
 
-  /* 低端机开局砍掉最重的三层 —— 顺序必须与 js/atmo.js 的 DOWNGRADE_ORDER 开头一致
-     （rain > stardust > signs）：那边是"运行时降档先摘谁"，这里是"开局就不开谁"，
+  /* 低端机开局砍掉动态星点 —— 顺序必须与 js/atmo.js 的 DOWNGRADE_ORDER 开头一致
+     （stardust）：那边是"运行时降档先摘谁"，这里是"开局就不开谁"，
      两处不同步就会出现"探针以为开着、其实没渲染"的错判。
      57 号用例钉着这条一致性。 */
   function lowEndAtmo(all) {
-    var drop = ['rain', 'stardust', 'signs'];
+    var drop = ['stardust'];
     return all.split(/\s+/).filter(function (id) {
       return id && drop.indexOf(id) === -1;
     }).join(' ');
@@ -125,22 +124,28 @@
       document.documentElement.style.setProperty('--hue', String(h));
     }
 
-    /* 氛围：手动层列表（装置面板）优先；否则 silent → 空列表 / standard → 静态层 /
-       其余（含首访）→ pollution 全开。脏数据一律回落 pollution —— 与 scene.js 同一口径。 */
+    /* 三类背景：旧手动设置在首绘前归并，移除的雨/招牌/脉冲不再运行。
+       空数组保留关闭语义；内页、手机和减少动效档始终只有静态环境。 */
     var atmo = null;
     try {
       var mArr = JSON.parse(window.localStorage.getItem('neon_atmo_manual'));
       if (Object.prototype.toString.call(mArr) === '[object Array]') {
-        var safe = mArr.filter(function (x) { return typeof x === 'string'; });
-        if (safe.length) atmo = safe.join(' ');
+        var legacy = { glow: 'glow', bloom: 'glow', grid: 'grid', noise: 'grid',
+          scanline: 'grid', stardust: 'stardust' };
+        var mapped = mArr.map(function (id) { return typeof id === 'string' && Object.prototype.hasOwnProperty.call(legacy, id) ? legacy[id] : null;
+        });
+        var safe = ATMO_ALL.split(' ').filter(function (id) { return mapped.indexOf(id) !== -1; });
+        atmo = safe.join(' ');
+        try { window.localStorage.setItem('neon_atmo_manual', JSON.stringify(safe)); } catch (e5) { /* 只读存储 */ }
       }
-    } catch (e3) { /* 无手动列表 / 脏数据 —— 回落自动 */ }
+    } catch (e3) { /* 缺失或无效设置：使用自动档 */ }
     if (atmo === null) {
       var m = window.localStorage.getItem(ATMO_KEY);
-      atmo = (m === 'silent') ? '' : (m === 'standard' ? ATMO_STATIC : ATMO_ALL);
-      /* P2：只有走"自动"这条路时才按设备降级 —— 用户手动选过就尊重用户。 */
-      if (lowEnd && atmo) atmo = lowEndAtmo(atmo);
+      atmo = (m === 'silent') ? '' : (m === 'pollution' ? ATMO_ALL : ATMO_STATIC);
     }
+    var livelyScene = !location.hash || location.hash === '#' || location.hash === '#/' || location.hash === '#/about';
+    var compact = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+    if (lowEnd || compact || !livelyScene) atmo = lowEndAtmo(atmo);
     document.documentElement.setAttribute('data-atmo', atmo);
 
     /* v4.1 B2：开场序列的首访标记（在首绘前打 class，防"先闪一帧内容再盖开机屏"）。

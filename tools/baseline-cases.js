@@ -57,21 +57,19 @@ const MANIFEST = path.join(OUT_DIR, 'manifest.json');
     const f = r.results.filter(x => !x.pass).length;
     total += n;
     if (f) red += f;
-    m.expect = n;
     const delta = (m.expect === null || m.expect === undefined) ? '' :
       (n === m.expect ? '' : '  （原基线 ' + m.expect + '）');
+    m.expect = n;
     console.log(String(n).padStart(4) + ' 条  ' + (f ? f + ' 红  ' : '      ') + m.name + delta);
   }
 
-  fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2), 'utf8');
   console.log('\n合计 ' + total + ' 条' + (red ? '，其中 ' + red + ' 条红 —— 基线未写入（先修红）' : '，全绿 ✓'));
   if (red) {
     // 红的情况下不写基线：把 bug 固化成基线比没有基线更糟
-    const backup = JSON.parse(fs.readFileSync(MANIFEST, 'utf8'));
-    void backup;
     console.log('⚠ 存在红项，已拒绝写入基线。');
     process.exit(1);
   }
+  fs.writeFileSync(MANIFEST, JSON.stringify(manifest, null, 2), 'utf8');
   console.log('✓ 基线已写入 tests/cases/manifest.json');
   process.exit(0);
 })();

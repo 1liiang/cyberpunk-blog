@@ -3,19 +3,19 @@
     "file": "01-a-正常启动.js",
     "name": "A 正常启动",
     "blocks": 1,
-    "expect": 10
+    "expect": 12
   },
   {
     "file": "02-b-文章详情.js",
     "name": "B 文章详情",
     "blocks": 1,
-    "expect": 2
+    "expect": 10
   },
   {
     "file": "03-c-首页列表.js",
     "name": "C 首页列表",
     "blocks": 1,
-    "expect": 4
+    "expect": 5
   },
   {
     "file": "05-e-供应链.js",

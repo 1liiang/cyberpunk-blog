@@ -193,7 +193,7 @@
     nickname: localStorage.getItem('neon_nickname') || '',
     loginTab: 'password',
     pendingOtp: null,          /* {email, verificationId, isExistingUser} */
-    home: { page: 1, pageSize: 8, posts: [], total: 0, loading: true, error: null, tagName: null, hasMore: false },
+    home: { page: 1, pageSize: 8, posts: [], total: 0, loading: true, error: null, tagName: null, hasMore: false, featuredId: null },
     lastHash: null
   };
 
@@ -369,6 +369,14 @@
         } else {
           await need('Bookmarks').add(id);
           markSet().add(id);
+          if (btn.isConnected) {
+            var sparks = document.createElement('span');
+            sparks.className = 'mark-sparks';
+            sparks.setAttribute('aria-hidden', 'true');
+            sparks.textContent = '✦ · ✧';
+            btn.appendChild(sparks);
+            setTimeout(function () { sparks.remove(); }, 500);
+          }
         }
         toast(wasOn ? '已取消收藏' : '已收藏（跟随账号）', wasOn ? null : 'ok');
         /* 收藏页里取消收藏 → 该条目应即时消失（否则页面与数据不一致） */
@@ -516,6 +524,43 @@
     m.remove();
   }
 
+  /* 正文图片复用既有对话框、Escape 与焦点管理，不另建图库或请求接口。 */
+  function bindPostImages() {
+    var root = document.getElementById('md-target');
+    if (!root) return;
+    Array.prototype.forEach.call(root.querySelectorAll('img'), function (img) {
+      if (img.closest('a') || img.hasAttribute('data-image-preview')) return;
+      img.setAttribute('data-image-preview', '');
+      img.setAttribute('role', 'button');
+      img.setAttribute('tabindex', '0');
+      img.setAttribute('aria-label', '放大图片' + (img.alt ? '：' + img.alt : ''));
+      function preview() {
+        var src = img.currentSrc || img.getAttribute('src') || '';
+        if (!/^(https?:|data:image\/|blob:)/i.test(src)) return;
+        var caption = img.alt || '正文图片';
+        openModal('图片预览', '<figure class="image-preview">' +
+          '<div class="image-preview-scroll"><img src="' + V().esc(src) + '" alt="' + V().esc(caption) +
+          '" tabindex="0" role="button" aria-pressed="false" aria-label="切换图片原始尺寸"></div>' +
+          '<figcaption>' + V().esc(caption) + ' · 点击图片切换原始尺寸</figcaption></figure>',
+          [{ label: '关闭', cls: 'btn-ghost' }], 'modal-image');
+        var enlarged = document.querySelector('#neon-modal .image-preview img');
+        if (!enlarged) return;
+        function zoom() {
+          var on = enlarged.classList.toggle('is-original');
+          enlarged.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        enlarged.addEventListener('click', zoom);
+        enlarged.addEventListener('keydown', function (ev) {
+          if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); zoom(); }
+        });
+      }
+      img.addEventListener('click', function () { img.focus(); preview(); });
+      img.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); preview(); }
+      });
+    });
+  }
+
   /* ============ Markdown 渲染管线 ============ */
   var URI_REGEXP = /^(?:(?:(?:ftp|https?|mailto|tel|callto|cid|xmpp|cloudimg|cloudfile):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))|data:image\/[a-z0-9.+-]+;base64,)/i;
   var CLOUDIMG_RE = /^cloudimg:\/\/(\d+)$/;
@@ -533,14 +578,14 @@
   var vendorFailed = {};   /* v5.6.5：记「真的加载失败过」的库 —— 供 ?diag=1 如实汇报 */
   function loadVendors(names) {
     var todo = names.filter(function (n) {
-      var g = (n === 'dompurify') ? window.DOMPurify : window[n];
+      var g = n === 'dompurify' ? window.DOMPurify : (n === 'highlight' ? window.hljs : window[n]);
       return !g && VENDOR_SRC[n];
     });
     return Promise.all(todo.map(function (n) {
       if (vendorLoading[n]) return vendorLoading[n];
       vendorLoading[n] = new Promise(function (resolve, reject) {
         var s = document.createElement('script');
-        s.src = VENDOR_SRC[n] + '?v=' + ((window.BUILD && window.BUILD.id) || Date.now());
+        s.src = VENDOR_SRC[n] + '?v=' + ((window.NEONVersion && window.NEONVersion.BUILD) || Date.now());
         s.onload = function () { vendorFailed[n] = false; resolve(true); };
         s.onerror = function () {
           vendorLoading[n] = null;
@@ -557,12 +602,14 @@
     if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
       /* 首次渲染：先把提示放上去，库到位后自动重渲染（用户无需再点一次） */
       container.innerHTML = '<div class="notice-banner">正在装载 Markdown 引擎…</div>';
-      loadVendors(['marked', 'dompurify', 'highlight']).then(function () {
-        renderMarkdownInto(container, mdText);
+      return Promise.all([
+        loadVendors(['marked', 'dompurify']),
+        loadVendors(['highlight']).catch(function () { /* 高亮失败不阻止正文阅读 */ })
+      ]).then(function () {
+        return renderMarkdownInto(container, mdText);
       }, function () {
         container.innerHTML = '<div class="notice-banner">Markdown 引擎加载失败，仅显示纯文本</div><pre style="white-space:pre-wrap">' + V().esc(mdText || '') + '</pre>';
       });
-      return;
     }
     var raw = marked.parse(mdText || '', { breaks: true, gfm: true });
     var clean = DOMPurify.sanitize(raw, {
@@ -1031,22 +1078,24 @@
   function atmoOrder() {
     var S = window.NEONScene;
     return (S && S.ATMO_ALL) ? S.ATMO_ALL.slice()
-      : ['noise', 'scanline', 'grid', 'glow', 'bloom', 'signs', 'stardust', 'pulse', 'rain'];
+      : ['glow', 'grid', 'stardust'];
   }
   function readAtmoManual() {
+    var scene = window.NEONScene;
+    if (scene && typeof scene.readManual === 'function') return scene.readManual();
     try {
       var arr = JSON.parse(localStorage.getItem(ATMO_MANUAL_KEY));
       if (Object.prototype.toString.call(arr) !== '[object Array]') return null;
       var order = atmoOrder();
       var list = arr.filter(function (id) { return order.indexOf(id) !== -1; });
-      return list.length ? list : null;
+      return list;
     } catch (e) { return null; }
   }
   function currentAtmoMode() {
     try {
       var m = localStorage.getItem(ATMO_MODE_KEY);
-      return (m === 'standard' || m === 'silent') ? m : 'pollution';
-    } catch (e) { return 'pollution'; }
+      return (m === 'pollution' || m === 'silent') ? m : 'standard';
+    } catch (e) { return 'standard'; }
   }
   function reapplyAtmo() {
     var S = window.NEONScene;
@@ -1157,10 +1206,40 @@
   }
 
   /* ============ 导航栏 ============ */
+  var topbarObserver = null;
+  var topbarResizeBound = false;
+  function syncTopbarHeight() {
+    var bar = document.querySelector('.topbar');
+    if (!bar) return;
+    var height = Math.ceil(bar.getBoundingClientRect().height);
+    /* 无布局的测试环境会返回 0；保留 CSS 的默认高度。 */
+    if (height > 0) {
+      var rootStyle = document.documentElement.style;
+      if (rootStyle.getPropertyValue('--topbar-h') !== height + 'px') {
+        rootStyle.setProperty('--topbar-h', height + 'px');
+      }
+    }
+  }
+  function watchTopbarHeight() {
+    syncTopbarHeight();
+    if (topbarObserver || topbarResizeBound) return;
+    var bar = document.querySelector('.topbar');
+    if (!bar) return;
+    if (typeof window.ResizeObserver === 'function') {
+      topbarObserver = new window.ResizeObserver(syncTopbarHeight);
+      topbarObserver.observe(bar);
+    } else {
+      window.addEventListener('resize', syncTopbarHeight);
+      topbarResizeBound = true;
+    }
+  }
+
   function renderNav() {
-    var links = '<a href="#/" data-nav="home">首页</a>' +
-      '<a href="#/archive" data-nav="archive">归档</a>' +
+    var links = '<a href="#/" data-nav="home" class="nav-home">首页</a>' +
       '<a href="#/search" data-nav="search">搜索</a>' +
+      '<button type="button" class="nav-menu-toggle" id="nav-menu-toggle" aria-expanded="false" aria-controls="nav-menu-links">菜单 <span aria-hidden="true">⌄</span></button>' +
+      '<div class="nav-menu-links" id="nav-menu-links">' +
+      '<a href="#/archive" data-nav="archive">归档</a>' +
       '<a href="#/tags" data-nav="tags">标签</a>' +
       '<a href="#/marks" data-nav="marks">收藏</a>' +
       '<a href="#/about" data-nav="about">关于</a>';
@@ -1173,6 +1252,7 @@
     } else {
       links += '<a href="#/login" data-nav="login" style="color:var(--yellow)">登录 ▸</a>';
     }
+    links += '</div>';
     /* C6：主题控点（无 href，非导航项，故不带 data-nav）
        真实偏好由 applyTheme 立即补正，首绘前那一瞬间由 theme-boot.js 定好，不会闪。
 
@@ -1200,6 +1280,16 @@
     syncThemeMenu(getTheme());
     /* v4.3 B4：同样按当前状态落定氛围/装置区（模式/层开关/点击反馈/锁定） */
     syncAtmoPanel();
+    watchTopbarHeight();
+  }
+
+  function closeNavMenu(restoreFocus) {
+    var toggle = document.getElementById('nav-menu-toggle');
+    var links = document.getElementById('nav-menu-links');
+    if (!toggle || !links) return;
+    toggle.setAttribute('aria-expanded', 'false');
+    links.classList.remove('is-open');
+    if (restoreFocus) toggle.focus();
   }
 
   /* 罗盘三项。aria-checked 初值一律 false，真值由 syncThemeMenu 统一写 ——
@@ -1224,23 +1314,14 @@
      语义上就是"一组独立开关"）；"恢复场景自动"在手动模式外隐藏（无意义不显示）。 */
   function atmoModesHtml() {
     var MODES = [
-      { v: 'pollution', n: '光污染', t: '九层全开（出厂）' },
-      { v: 'standard', n: '标准', t: '只留静态层（噪点/扫描线/网格/光晕/光溢/招牌）' },
-      { v: 'silent', n: '静音', t: '全部关闭' }
+      { v: 'silent', n: '静谧', t: '关闭背景装饰，专注内容' },
+      { v: 'standard', n: '标准', t: '柔和底光与静态纹理（默认）' },
+      { v: 'pollution', n: '梦游', t: '首页与关于页增加稀疏星点，阅读时自动静止' }
     ];
     return MODES.map(function (m) {
       return '<button type="button" class="atmo-mode" role="radio"' +
         ' data-atmo-val="' + m.v + '" aria-checked="false" tabindex="-1"' +
         ' title="' + m.t + '">' + m.n + '</button>';
-    }).join('');
-  }
-
-  function atmoLayersHtml() {
-    /* 名字的单一来源：atmo.js 的 ATMO_LABEL（惰性取用，缺失回落 id 原文） */
-    var label = (window.NEONAtmo && window.NEONAtmo.ATMO_LABEL) || {};
-    return atmoOrder().map(function (id) {
-      return '<button type="button" class="atmo-layer-btn" data-atmo-layer="' + id + '"' +
-        ' aria-pressed="false" title="' + id + '">' + (label[id] || id) + '</button>';
     }).join('');
   }
 
@@ -1289,9 +1370,6 @@
         '<div class="theme-row" role="radiogroup" aria-labelledby="atmo-modes-label">' +
         atmoModesHtml() +
         '</div>' +
-        '<div class="atmo-layers" role="group" aria-label="氛围层开关（手动微调）">' +
-        atmoLayersHtml() +
-        '</div>' +
         '<button type="button" class="atmo-reset" id="atmo-reset" hidden>↺ 恢复场景自动</button>' +
       '</div>' +
       /* 装置区（v4.3 B4）：点击反馈 + 性能锁定 + 重播开机 */
@@ -1321,6 +1399,8 @@
     navEl.querySelectorAll('a').forEach(function (a) {
       a.classList.toggle('active', a.getAttribute('data-nav') === key);
     });
+    var menuToggle = document.getElementById('nav-menu-toggle');
+    if (menuToggle) menuToggle.classList.toggle('active', !!navEl.querySelector('.nav-menu-links a.active'));
   }
 
   /* ============ 路由 ============ */
@@ -1362,9 +1442,7 @@
     } catch (e) { /* 场景框架异常不拖累渲染 */ }
   }
 
-  /* ---------- v5.4.0：首页两栏（左全息读数 / 右身份卡） ----------
-     ⚠ 在 app.js 注入而不是改 homeView：homeView 结构被多处断言钉着，前置注入是**纯加法**。
-     ⚠ 读数沿用既有 id 与 class/data-born，所以"建站时间单一来源"那套契约不变（只是搬了位置）。 */
+  /* 首页欢迎区独立于文章列表，异步加载文章不会重建正在使用的电台。 */
   var holoTickTimer = null;
   /* ⚠ v5.4.0：**不许在这里写日期字面量** —— 单一来源是 views.js 的 SITE_BORN，
      运行时优先从 DOM 的 data-born 读（这正是既有那套"读数不重复日期"的契约）。 */
@@ -1405,6 +1483,7 @@
     var app = document.getElementById('app');
     if (!app || !V().holoHero) return;
     if (app.querySelector('.holo-hero')) {
+      syncRadioDock();
       holoPaint();
       /* v5.7.3：面板已存在（重渲染路径）—— DOM 可能是新换的，必须重新绑定电台点击 */
       bindRadioStations();
@@ -1415,8 +1494,9 @@
     app.insertAdjacentHTML('afterbegin', V().holoHero({
       stations: RADIO_STATIONS,
       days: p.days, hours: p.hours, mins: p.mins, secs: p.secs, bootDate: p.date,
-      uptimeText: holoText(p), nickname: State.nickname || '漓光', tags: ['站长', '作者']
+      uptimeText: holoText(p), nickname: 'NEON://DIARY', tags: ['私人频道', '日常与灵感']
     }));
+    syncRadioDock();
     holoPaint();
     bindHoloTilt();   /* v5.4.2：卡片挂上全息倾斜 */
     bindRadioStations();   /* v5.7.3：电台榜单点击（幂等，靠 data-bound 守） */
@@ -1435,6 +1515,7 @@
      ⚠ 只改 transform，不动布局；离开时复位，避免卡片歪着回不去。 */
   function bindHoloTilt() {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    if (document.documentElement.getAttribute('data-tier') === 'low') return;
     var card = document.querySelector('[data-holo-card]');
     if (!card || card._holoBound) return;
     var hoverOK = true, reduceOK = true;
@@ -1442,7 +1523,7 @@
     try { reduceOK = !window.matchMedia || !window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) {}
     if (!hoverOK || !reduceOK) return;
     card._holoBound = true;
-    var MAX = 8;   /* 最大倾角（度）—— 再大就晕了 */
+    var MAX = 3;   /* 保持轻微全息倾斜，避免大幅透视影响文字。 */
     function tilt(ev) {
       var r = card.getBoundingClientRect();
       if (!r.width || !r.height) return;
@@ -1459,13 +1540,27 @@
   }
 
 
-function route() {
+  /* 每次真正切页换一代；只比 hash 无法区分 A → B → A 的两轮请求。
+     同时检查实际 hash，拦住 hashchange 事件尚未处理时返回的旧响应。 */
+  var routeGeneration = 0;
+  function routeIsCurrent(generation) {
+    return generation === routeGeneration && (location.hash || '#/') === State.lastHash;
+  }
+
+  function route() {
     var h = location.hash || '#/';
     if (h === State.lastHash) return;
     State.lastHash = h;
+    routeGeneration++;
     closeModal();
+    closeNavMenu(false);
     releaseToc(); /* C2：离开当前页前释放上一页目录的滚动监听，避免跨页累积 */
     stopUptimeTicker(); /* v2.9.9：同理，离开 ABOUT 页就停掉在线时长计时器 */
+    if (holoTickTimer) { clearInterval(holoTickTimer); holoTickTimer = null; }
+    /* v5.9.4：不再搬动播放器节点（搬动会重建浏览上下文 ⇒ 断音）。
+       这里只登记"路由变了、稍后重算停靠"—— 真正的定位在渲染完成后由
+       syncRadioDock / injectHoloHero 做（首页有锚点用内联，其余用右下常驻卡）。 */
+    scheduleRadioDock();
     var r = parseHash();
     applyScene(r.name); /* v4.0 B1：场景框架（写 data-scene / data-atmo；惰性降级） */
     var titles = {
@@ -1502,37 +1597,23 @@ function route() {
   }
 
   /* ============ 首页 / 标签过滤 ============ */
-  /* ---------- v2.9.9 站点在线时长（ABOUT 页 HUD）----------
-     为什么不用「每秒都跑的全局定时器」：那是拿"全站每个页面都付一点 CPU"
-     换"ABOUT 页少写两行"——绝大多数时间用户根本不在 ABOUT 页。
-     这里沿用 releaseToc() 的同一路子：进页开表、离页停表（route 顶部统一停）。
-     建站时间从 DOM 的 data-born 读 —— 日期字面量只活在 views.js 一处。
-     v2.9.9 读数口径（用户指正后修正）：天/时/分/秒 四段分解，
-     时/分/秒各补零两位；v2.9.8 的「累计总秒数 + 千分位」读法退役。 */
+  /* 关于页只显示建站天数，每分钟更新；离页释放定时器。
+     建站时间从 DOM 的 data-born 读取，保留 views.js 的单一来源。 */
   var uptimeTimer = null;
 
-  function pad2(n) { return (n < 10 ? '0' : '') + n; }
-
   function uptimeTick() {
-    var secEl = document.getElementById('uptime-sec');
-    if (!secEl || !secEl.closest) return;   /* 不在 ABOUT 页，静默退出 */
-    var hud = secEl.closest('.uptime-hud');
+    var daysEl = document.getElementById('uptime-days');
+    if (!daysEl || !daysEl.closest) return;
+    var hud = daysEl.closest('.about-uptime');
     var start = new Date(hud ? (hud.getAttribute('data-born') || '') : '').getTime();
     if (!isFinite(start)) return;           /* data-born 缺失/畸形，宁可显示 — 也别算错 */
-    var s = Math.floor(Math.max(0, Date.now() - start) / 1000);
-    var daysEl = document.getElementById('uptime-days');
-    var hoursEl = document.getElementById('uptime-hours');
-    var minEl = document.getElementById('uptime-min');
-    if (daysEl) daysEl.textContent = String(Math.floor(s / 86400));
-    if (hoursEl) hoursEl.textContent = pad2(Math.floor(s % 86400 / 3600));
-    if (minEl) minEl.textContent = pad2(Math.floor(s % 3600 / 60));
-    secEl.textContent = pad2(s % 60);
+    daysEl.textContent = String(Math.floor(Math.max(0, Date.now() - start) / 86400000));
   }
 
   function startUptimeTicker() {
     stopUptimeTicker();
     uptimeTick();                           /* 先立刻画一帧，避免首秒停在「—」 */
-    uptimeTimer = setInterval(uptimeTick, 1000);
+    uptimeTimer = setInterval(uptimeTick, 60000);
   }
 
   function stopUptimeTicker() {
@@ -1546,12 +1627,111 @@ function route() {
         https://music.163.com/outchain/player?type=<2|0>&id=<id>&auto=0&height=<66|430>
         ⚠ 旧式路径 /outchain/<type>/<id>/m/use/html 实测 302，不可用。
      ⚠ 需要 CSP frame-src https://music.163.com，否则 iframe 被 default-src 'self' 拦掉。
-     ⚠ 已知限制：本区块位于 #app 内，首页重渲染会重建它（播放可能中断）。
-        彻底解法是把电台挪到 #app 之外（v5.1.0 对旧电台就是这么做的）。 */
+     首页列表只更新 #home-content，保留电台节点与播放状态；切换路由时
+     将已挂载的 iframe 暂存到 body 外的常驻卡，返回首页再移回原位。 */
   function radioEsc(s) {
     return String(s).replace(/[&<>"']/g, function (ch) {
       return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch];
     });
+  }
+  function syncRadioButtons(type, id) {
+    document.querySelectorAll('[data-radio-id]').forEach(function (b) {
+      var selected = b.getAttribute('data-radio-id') === id &&
+        b.getAttribute('data-radio-type') === type;
+      b.classList.toggle('is-on', selected);
+      b.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+  }
+  /* v5.9.4：电台的"跨路由常驻"改为**永不搬动 DOM**。
+     ------------------------------------------------------------
+     为什么推翻 v5.9.2 的"移进/移回"做法（实测取证）：
+       本机 Chromium 里，只要重新挂载 iframe **或它的任何祖先**，浏览上下文就会被
+       销毁重建 —— iframe 的 src 不变、DOM 节点也还是同一个对象，但文档会重新加载
+       （实测：切换路由后 12~13ms 内出现新的 outchain Document 请求，且 iframe target
+       被重建、伴随 net::ERR_ABORTED）⇒ 音乐从头开始，正是"切页断音"。
+     所以：播放器只创建一次、常驻 #radio-persistent（在 #app 之外），此后**不移动**；
+       首页靠 fixed 定位**视觉上**盖到面板锚点 [data-radio-anchor] 上，
+       其余路由回到右下角常驻卡。只有一个实例、一次加载 ⇒ 播放真正连续。 */
+  function radioAnchor() {
+    return document.querySelector('#app [data-radio-anchor]');
+  }
+  /* 只有"面板展开"时锚点位置才有视觉意义。
+     折叠的 <details> 里 ::details-content 是 content-visibility:hidden —— 锚点仍有几何盒
+     （getBoundingClientRect 照样返回值），但它并没有被绘制。此时若还按它内联停靠，
+     播放器就会浮在正文上面（实测会盖住"最新广播"区域）。折叠时改走右下常驻卡。 */
+  function radioInlineAnchor() {
+    var anchor = radioAnchor();
+    if (!anchor) return null;
+    var host = anchor.closest ? anchor.closest('details') : null;
+    if (host && !host.open) return null;
+    return anchor;
+  }
+  function placeRadioInline() {
+    var aside = document.getElementById('radio-persistent');
+    var anchor = radioInlineAnchor();
+    if (!aside || !anchor || aside.getAttribute('data-dock') !== 'inline') return;
+    var r = anchor.getBoundingClientRect();
+    aside.style.setProperty('--dock-x', r.left + 'px');
+    aside.style.setProperty('--dock-y', r.top + 'px');
+    aside.style.setProperty('--dock-w', r.width + 'px');
+  }
+  var radioPlaceTick = 0;
+  function scheduleRadioPlacement() {
+    if (typeof requestAnimationFrame !== 'function') { placeRadioInline(); return; }
+    if (radioPlaceTick) return;
+    radioPlaceTick = requestAnimationFrame(function () {
+      radioPlaceTick = 0;
+      placeRadioInline();
+    });
+  }
+  var radioDockBound = false;
+  function bindRadioDockTracking() {
+    if (radioDockBound || typeof window === 'undefined') return;
+    radioDockBound = true;
+    /* 内联定位是按锚点实时算的，滚动/尺寸变化都要重算（rAF 节流） */
+    window.addEventListener('scroll', scheduleRadioPlacement, { passive: true });
+    window.addEventListener('resize', scheduleRadioPlacement);
+    /* details 的 toggle 事件**不冒泡** ⇒ 必须用捕获阶段监听，
+       否则用户展开/折叠电台面板后停靠方式不会切换。 */
+    document.addEventListener('toggle', scheduleRadioDock, true);
+  }
+  function syncRadioDock() {
+    if (typeof document === 'undefined') return;
+    var aside = document.getElementById('radio-persistent');
+    var shell = document.querySelector('[data-radio-shell]');
+    if (!aside || !shell) return;
+    var anchor = radioInlineAnchor();
+    var mounted = !!shell.getAttribute('data-mounted');
+    if (!mounted) {
+      /* 还没选曲目：不占屏，由锚点显示提示 */
+      aside.hidden = true;
+      aside.removeAttribute('data-dock');
+      var anyAnchor = radioAnchor();
+      if (anyAnchor) anyAnchor.classList.remove('has-player');
+      return;
+    }
+    bindRadioDockTracking();
+    aside.hidden = false;
+    var panelAnchor = radioAnchor();
+    if (panelAnchor) panelAnchor.classList.toggle('is-tall', shell.classList.contains('is-tall'));
+    if (anchor) {
+      /* 首页且面板展开：内联贴合锚点；锚点高度跟随单曲/歌单两种体型 */
+      aside.setAttribute('data-dock', 'inline');
+      if (panelAnchor) panelAnchor.classList.add('has-player');
+      placeRadioInline();
+    } else {
+      aside.setAttribute('data-dock', 'card');
+      aside.style.removeProperty('--dock-x');
+      aside.style.removeProperty('--dock-y');
+      aside.style.removeProperty('--dock-w');
+    }
+  }
+  function scheduleRadioDock() {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(function () { syncRadioDock(); });
+    } else {
+      setTimeout(syncRadioDock, 0);
+    }
   }
   function mountNetease(type, id, opts) {
     if (typeof document === 'undefined') return;
@@ -1561,7 +1741,11 @@ function route() {
     id = String(id || '').replace(/\D/g, '');
     if (!id) return;
     var key = type + ':' + id;
-    if (shell.getAttribute('data-mounted') === key) return;   /* 幂等 */
+    if (shell.getAttribute('data-mounted') === key) {
+      syncRadioButtons(type, id);
+      syncRadioDock();   /* 幂等：已挂载时只需重绘选中态与停靠位置 */
+      return;
+    }
     var h = type === '0' ? 430 : 66;
     var src = 'https://music.163.com/outchain/player?type=' + type + '&id=' + id + '&auto=0&height=' + h;
     shell.className = 'holo-radio-shell' + (type === '0' ? ' is-tall' : '');
@@ -1569,13 +1753,11 @@ function route() {
     shell.innerHTML = '<iframe src="' + src + '" width="330" height="' + h + '" frameborder="0" ' +
       'loading="lazy" title="网易云音乐外链播放器" ' +
       'sandbox="allow-scripts allow-same-origin allow-popups allow-forms"></iframe>';
-    document.querySelectorAll('[data-radio-id]').forEach(function (b) {
-      b.classList.toggle('is-on', b.getAttribute('data-radio-id') === id &&
-        b.getAttribute('data-radio-type') === type);
-    });
+    syncRadioButtons(type, id);
+    syncRadioDock();   /* 挂载后立刻决定内联/常驻卡 */
     try { localStorage.setItem(RADIO_KEY, key); } catch (e) { /* 忽略 */ }
     if (!opts || !opts.silent) {
-      if (typeof toast === 'function') toast('已挂载网易云外链：' + id, 'ok');
+      if (typeof toast === 'function') toast('曲目已就绪，请在播放器中开始播放', 'ok');
     }
   }
   function bindRadioStations() {
@@ -1601,31 +1783,41 @@ function route() {
   }
 
   function renderHome(tag) {
-    State.home = { page: 1, pageSize: 8, posts: [], total: 0, loading: true, error: null, tagName: tag, hasMore: false };
-    app.innerHTML = V().homeView(State.home);
-    injectHoloHero();
+    State.home = { page: 1, pageSize: 8, posts: [], total: 0, loading: true, error: null, tagName: tag, hasMore: false, featuredId: null };
+    app.innerHTML = '<div id="home-content">' + V().homeView(State.home) + '</div>';
+    if (!tag) injectHoloHero();
     window.scrollTo(0, 0);
-    loadHome(false);
+    return loadHome(false);
   }
 
   async function loadHome(append) {
+    var generation = routeGeneration;
     var s = State.home;
     if (!append) s.page = 1;
     s.loading = true;
     try {
       var r = await need('Posts').listPublished({ page: s.page, pageSize: s.pageSize, tag: s.tagName });
+      if (!routeIsCurrent(generation)) return;
       /* C19：渲染前把本地收藏态盖到数据上（postCard 读 _marked） */
       applyMarks(r.posts || []);
       s.posts = append ? s.posts.concat(r.posts) : r.posts;
+      /* 首次有文章时锁定主卡；追加分页不会把刚读过的内容换到别处。 */
+      if (s.featuredId == null && s.posts.length) {
+        var featured = s.posts.find(function (p) { return !!p.cover_ref; }) || s.posts[0];
+        s.featuredId = featured.id;
+      }
       s.total = r.total;
       s.hasMore = s.posts.length < r.total;
       s.error = null;
     } catch (e) {
+      if (!routeIsCurrent(generation)) return;
       s.error = errMsg(e, '数据流连接失败，请稍后重试');
     }
     s.loading = false;
-    app.innerHTML = V().homeView(s);
-    injectHoloHero();
+    /* 全息面板与 iframe 保持原节点，列表完成加载时不重启电台。 */
+    var content = document.getElementById('home-content');
+    if (!content) return;
+    content.innerHTML = V().homeView(s);
     /* 列表页封面：只要缩略图（B1），无缩略图的旧图由数据层自动回退 */
     hydrateImages(app, { thumb: true });
     if (append) {
@@ -1648,6 +1840,7 @@ function route() {
      用 parallelSafe 保证单条失败不影响其余（收藏的文章可能已被删除，
      这条失败是**正常情况**，必须静默跳过而不是整页报错）。 */
   async function renderMarks() {
+    var generation = routeGeneration;
     var state = { loading: true, posts: [], needLogin: false, offline: false };
 
     if (!isLoggedIn()) {
@@ -1664,6 +1857,7 @@ function route() {
     window.scrollTo(0, 0);
 
     if (!marksLoaded) await refreshMarks();
+    if (!routeIsCurrent(generation)) return;
     /* 云端不可达时 list() 返回空表 —— 与"真的没有收藏"要分开说，
        否则用户会以为自己 5 条收藏丢了（靠 isSnapshot 判） */
     state.offline = !markSet().size && need('isSnapshot')();
@@ -1678,6 +1872,7 @@ function route() {
       return function () { return need('Posts').get(id); };
     });
     var res = await parallelSafe(tasks);
+    if (!routeIsCurrent(generation)) return;
     var posts = [];
     res.forEach(function (r) {
       /* 只有公开可见的才展示：草稿/已删除在公开语义下等同于"不在"。 */
@@ -1739,6 +1934,7 @@ function route() {
      并告诉作者"这次会改动 N 篇"。执行后给出精确结果
      （成功几篇、失败几篇），不做"成功了"这种模糊反馈。 */
   async function renderTagAdmin() {
+    var generation = routeGeneration;
     if (!State.session) {
       app.innerHTML = '<div class="page-head"><h1>TAG CONTROL</h1>' +
         '<div class="crumb">频段管理 · <b>需要作者身份</b></div></div>' +
@@ -1753,6 +1949,7 @@ function route() {
     window.scrollTo(0, 0);
 
     var res = await parallelSafe([function () { return need('Posts').tagStats(); }]);
+    if (!routeIsCurrent(generation)) return;
     deapplyTags(state, res[0]);
     state.loading = false;
     app.innerHTML = V().tagAdminView(state);
@@ -1788,6 +1985,7 @@ function route() {
   }
 
   async function doRename(from) {
+    var generation = routeGeneration;
     var input = document.getElementById('tg-new');
     var to = input ? input.value.trim() : '';
     if (!to) { toast('新频段名不能为空', 'warn'); return; }
@@ -1809,7 +2007,7 @@ function route() {
       toast(errMsg(e, '重命名失败'), 'error');
     }
     /* 重新拉统计，让列表反映最新状态 */
-    renderTagAdmin();
+    if (routeIsCurrent(generation)) renderTagAdmin();
   }
 
   /* ============ 标签总览 ============ */
@@ -1820,11 +2018,13 @@ function route() {
      不必再改错误处理结构 —— 这正是方案要求"为后续留好接口"的落点。
      语义上与原来一致：统计失败只让统计区降级，页面骨架照常渲染。 */
   async function renderTags() {
+    var generation = routeGeneration;
     var state = { loading: true, stats: {}, error: null };
     app.innerHTML = V().tagsView(state);
     window.scrollTo(0, 0);
 
     var res = await parallelSafe([function () { return need('Posts').tagStats(); }]);
+    if (!routeIsCurrent(generation)) return;
     deapplyTags(state, res[0]);
 
     state.loading = false;
@@ -2000,6 +2200,7 @@ function route() {
      （C14 要在详情页加"相关信号"，那时直接往数组里加一项即可并行）。
      语义与原来完全一致：失败时 post=null → 渲染 404 视图 + 弹错误提示。 */
   async function renderPost(id) {
+    var generation = routeGeneration;
     if (!id || isNaN(id)) { location.hash = '#/'; return; }
     var state = { loading: true, post: null, renderedMd: '', related: [], prev: null, next: null, marked: false };
     app.innerHTML = V().postView(state);
@@ -2017,6 +2218,7 @@ function route() {
       function () { return need('Posts').get(id); },
       function () { return need('Posts').listPublished({ page: 1, pageSize: SEARCH_FETCH_SIZE }); }
     ]);
+    if (!routeIsCurrent(generation)) return;
     var getS = res[0];
     var listS = res[1];
     var post = null;
@@ -2031,7 +2233,8 @@ function route() {
     state.loading = false;
     if (post) {
       var tmp = document.createElement('div');
-      renderMarkdownInto(tmp, post.content);
+      await renderMarkdownInto(tmp, post.content);
+      if (!routeIsCurrent(generation)) return;
       state.renderedMd = tmp.innerHTML;
       /* 邻居候选：列表取失败只影响三件套，不影响正文 —— 降级为空 */
       var pool = (listS.ok && listS.value && listS.value.posts) ? listS.value.posts : [];
@@ -2042,7 +2245,7 @@ function route() {
     app.innerHTML = V().postView(state);
     if (post) hydrateImages(app); /* 详情页：完整图（正文 + 封面） */
     else renderMarkdownInto(document.getElementById('md-target') || document.createElement('div'), '');
-    if (post) { buildToc(); bindCodeCopy(); bindLineNumbers(); } /* C2：DOM 落地后再挂，否则会被 innerHTML 清掉 */
+    if (post) { buildToc(); bindCodeCopy(); bindLineNumbers(); bindPostImages(); } /* DOM 落地后再挂，避免被重建清除 */
     window.scrollTo(0, 0);
     scheduleScrollUI(); /* C9：详情页换文后重算（长文进度条依赖真实高度） */
   }
@@ -2141,28 +2344,48 @@ function route() {
       it.seg = Math.max(6, Math.min(100, Math.round(((end - tops[i]) / totalH) * 100)));
     });
 
-    nav.innerHTML = '<div class="toc-head">▤ INDEX // 目录</div>' +
+    var expanded = !(window.matchMedia && window.matchMedia('(max-width: 768px)').matches);
+    nav.innerHTML = '<button type="button" class="toc-head toc-toggle" aria-expanded="' + expanded + '" aria-controls="post-toc-list">' +
+      '<span>文章目录</span><span class="toc-count">' + items.length + ' 节</span><span class="toc-toggle-icon" aria-hidden="true">⌄</span></button>' +
       /* 迷你地图游标：随当前章节移动到对应条目旁（CSS 负责视觉，JS 只写 top） */
       '<span class="toc-cursor" aria-hidden="true"></span>' +
-      '<ul class="toc-list">' + items.map(function (it) {
+      '<ul class="toc-list" id="post-toc-list"' + (expanded ? '' : ' hidden') + '>' + items.map(function (it) {
         return '<li class="toc-item toc-lv' + it.level + '">' +
           '<a class="toc-link" href="#' + it.id + '" data-toc="' + it.id + '">' + V().esc(it.text) + '</a>' +
           '<span class="toc-bar" style="--seg:' + it.seg + '%" aria-hidden="true"></span>' +
         '</li>';
       }).join('') + '</ul>';
     nav.hidden = false;
+    nav.classList.toggle('is-collapsed', !expanded);
     /* v4.2 B3：迷你地图游标（元素已在 innerHTML 里，此处取引用） */
     var cursor = nav.querySelector('.toc-cursor');
 
     /* 点击：锚点定位 + 高亮。nav 每次渲染都是全新元素，绑一次不会累积。 */
     nav.addEventListener('click', function (ev) {
+      var toggle = ev.target.closest ? ev.target.closest('.toc-toggle') : null;
+      if (toggle) {
+        expanded = !expanded;
+        toggle.setAttribute('aria-expanded', String(expanded));
+        nav.querySelector('.toc-list').hidden = !expanded;
+        nav.classList.toggle('is-collapsed', !expanded);
+        return;
+      }
       var a = ev.target.closest ? ev.target.closest('a[data-toc]') : null;
       if (!a) return;
       ev.preventDefault();
       var target = document.getElementById(a.getAttribute('data-toc'));
       if (!target) return;
-      var top = target.getBoundingClientRect().top + window.pageYOffset - 78;
-      window.scrollTo({ top: top < 0 ? 0 : top, behavior: 'smooth' });
+      if (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+        expanded = false;
+        nav.querySelector('.toc-toggle').setAttribute('aria-expanded', 'false');
+        nav.querySelector('.toc-list').hidden = true;
+        nav.classList.add('is-collapsed');
+      }
+      var topbar = document.querySelector('.topbar');
+      var offset = topbar ? topbar.getBoundingClientRect().height + 16 : 78;
+      var top = target.getBoundingClientRect().top + window.pageYOffset - offset;
+      var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: top < 0 ? 0 : top, behavior: reduceMotion ? 'auto' : 'smooth' });
       setTocActive(a.getAttribute('data-toc'));
     });
 
@@ -2209,14 +2432,13 @@ function route() {
     }
   }
 
-  /* ============ v4.2 B3：终端阅读框的行号开关 ============
-     状态存 localStorage（'0' = 关闭；其余/缺省 = 开启）。
-     视觉全部交给 CSS（body.linenum-off 下的 .md-body 规则），JS 只切类与记忆。 */
+  /* 阅读偏好只存本机：默认关闭段落行号，保留已有显式开启选择。
+     字号/宽度只影响文章正文，不改变内容或后端数据。 */
   function bindLineNumbers() {
     var btn = document.getElementById('ln-toggle');
     if (!btn) return;
-    var off = false;
-    try { off = localStorage.getItem('neon_linenum') === '0'; } catch (e) { /* 隐私模式 */ }
+    var off = true;
+    try { off = localStorage.getItem('neon_linenum') !== '1'; } catch (e) { /* 隐私模式 */ }
     document.body.classList.toggle('linenum-off', off);
     btn.setAttribute('aria-pressed', off ? 'false' : 'true');
     btn.addEventListener('click', function () {
@@ -2224,6 +2446,34 @@ function route() {
       document.body.classList.toggle('linenum-off', off);
       btn.setAttribute('aria-pressed', off ? 'false' : 'true');
       try { localStorage.setItem('neon_linenum', off ? '0' : '1'); } catch (e) { /* 忽略 */ }
+      scheduleScrollUI();
+    });
+    ['size', 'width'].forEach(function (setting) {
+      var attr = 'data-reading-' + setting;
+      var key = 'neon_reading_' + setting;
+      var choices = setting === 'size' ? ['standard', 'large'] : ['standard', 'wide'];
+      var value = 'standard';
+      try {
+        var saved = localStorage.getItem(key);
+        if (choices.indexOf(saved) !== -1) value = saved;
+      } catch (e) { /* 隐私模式沿用默认值 */ }
+      var buttons = app.querySelectorAll('button[' + attr + ']');
+      function apply(value) {
+        document.body.setAttribute(attr, value);
+        Array.prototype.forEach.call(buttons, function (item) {
+          item.setAttribute('aria-pressed', String(item.getAttribute(attr) === value));
+        });
+        scheduleScrollUI();
+      }
+      apply(value);
+      Array.prototype.forEach.call(buttons, function (item) {
+        item.addEventListener('click', function () {
+          value = item.getAttribute(attr);
+          if (choices.indexOf(value) === -1) return;
+          apply(value);
+          try { localStorage.setItem(key, value); } catch (e) { /* 忽略 */ }
+        });
+      });
     });
   }
 
@@ -2285,16 +2535,19 @@ function route() {
   var SEARCH_FETCH_SIZE = 200;
 
   async function renderSearch(q) {
+    var generation = routeGeneration;
     var state = { loading: true, q: q || '', hits: [], source: [], total: 0, error: null };
     app.innerHTML = V().searchView(state);
     window.scrollTo(0, 0);
     try {
       var r = await need('Posts').listPublished({ page: 1, pageSize: SEARCH_FETCH_SIZE });
+      if (!routeIsCurrent(generation)) return;
       state.source = r.posts || [];
       state.total = r.total;
       state.scanned = state.source.length; /* 实际纳入检索的量，用于提示截断 */
       state.error = null;
     } catch (e) {
+      if (!routeIsCurrent(generation)) return;
       state.error = errMsg(e, '数据流连接失败，请稍后重试');
     }
     state.loading = false;
@@ -2339,16 +2592,19 @@ function route() {
 
   /* ============ C3：归档页（按月分组） ============ */
   async function renderArchive() {
+    var generation = routeGeneration;
     var state = { loading: true, groups: [], total: 0, error: null };
     app.innerHTML = V().archiveView(state);
     window.scrollTo(0, 0);
     try {
       var r = await need('Posts').listPublished({ page: 1, pageSize: SEARCH_FETCH_SIZE });
+      if (!routeIsCurrent(generation)) return;
       state.total = r.total;
       state.scanned = (r.posts || []).length;
       state.groups = groupByMonth(r.posts || []);
       state.error = null;
     } catch (e) {
+      if (!routeIsCurrent(generation)) return;
       state.error = errMsg(e, '数据流连接失败，请稍后重试');
     }
     state.loading = false;
@@ -2587,6 +2843,7 @@ function route() {
 
   /* ============ 控制台 ============ */
   async function renderAdmin() {
+    var generation = routeGeneration;
     if (!State.session) {
       toast('请先接入系统', 'warn');
       location.hash = '#/login';
@@ -2597,7 +2854,9 @@ function route() {
     window.scrollTo(0, 0);
     try {
       state.posts = await need('Posts').listMine(State.session.user.id);
+      if (!routeIsCurrent(generation)) return;
     } catch (e) {
+      if (!routeIsCurrent(generation)) return;
       state.error = errMsg(e, '档案读取失败');
     }
     state.loading = false;
@@ -2607,6 +2866,7 @@ function route() {
 
   /* ============ 编辑器 ============ */
   async function renderEdit(postId) {
+    var generation = routeGeneration;
     if (!State.session) {
       toast('请先接入系统', 'warn');
       location.hash = '#/login';
@@ -2616,10 +2876,12 @@ function route() {
     if (postId) {
       try {
         var post = await need('Posts').get(postId);
+        if (!routeIsCurrent(generation)) return;
         if (!post) { toast('文章不存在', 'error'); location.hash = '#/admin'; return; }
         if (post.owner_id !== State.session.user.id) { toast('这条信号不属于你', 'error'); location.hash = '#/admin'; return; }
         state.post = post;
       } catch (e) {
+        if (!routeIsCurrent(generation)) return;
         toast(errMsg(e, '文章加载失败'), 'error');
         location.hash = '#/admin';
         return;
@@ -3122,6 +3384,7 @@ function route() {
      renderNav 会被反复调用（登录/登出/路由），逐次绑定会累积监听；
      委托一次即可，面板被 innerHTML 重建也不影响。 */
   document.addEventListener('mousedown', function (ev) {
+    if (ev.target && ev.target.closest && !ev.target.closest('#nav')) closeNavMenu(false);
     if (!themeMenuOpen()) return;
     if (!ev.target || !ev.target.closest) return;
     /* 点面板内 / 点触发器 → 交给各自的 click 处理，这里不插手 */
@@ -3131,6 +3394,10 @@ function route() {
   });
 
   document.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') {
+      var navToggle = document.getElementById('nav-menu-toggle');
+      if (navToggle && navToggle.getAttribute('aria-expanded') === 'true') closeNavMenu(true);
+    }
     if (!themeMenuOpen()) return;
     if (ev.key === 'Escape') { closeThemeMenu(true); return; }
     /* v3.4.0：滑杆上的方向键交给**原生行为**（增减 1 度）。
@@ -3189,6 +3456,16 @@ function route() {
   });
 
   document.addEventListener('click', async function (e) {
+    var navToggle = e.target.closest('#nav-menu-toggle');
+    if (navToggle) {
+      var navLinks = document.getElementById('nav-menu-links');
+      var open = navToggle.getAttribute('aria-expanded') !== 'true';
+      navToggle.setAttribute('aria-expanded', String(open));
+      if (navLinks) navLinks.classList.toggle('is-open', open);
+      closeThemeMenu(false);
+      return;
+    }
+    if (e.target.closest('#nav a, #btn-theme')) closeNavMenu(false);
     /* 文章卡片 → 详情 */
     var card = e.target.closest('.post-card');
     if (card && !e.target.closest('a')) {
@@ -3217,6 +3494,7 @@ function route() {
     if (e.target.id === 'atmo-lock') {
       var wasLocked = e.target.getAttribute('aria-checked') === 'true';
       try { localStorage.setItem('neon_atmo_lock', wasLocked ? '0' : '1'); } catch (err) { /* 忽略 */ }
+      if (window.NEONAtmo && window.NEONAtmo.sync) window.NEONAtmo.sync();
       syncAtmoPanel();
       return;
     }
@@ -3526,8 +3804,10 @@ function route() {
      故必须显式接住返回值里的 thenable。 */
   function safeRoute() {
     var ret;
+    var generation;
     try {
       ret = route();
+      generation = routeGeneration;
     } catch (e) {
       try { console.error('[NEON] 路由渲染失败：', e); } catch (e2) {}
       fatalPanel('页面加载异常：' + (e && e.message ? e.message : '未知错误'));
@@ -3536,6 +3816,7 @@ function route() {
     /* async 渲染函数的 rejection 同步 try 抓不到，必须在这里补一道 */
     if (ret && typeof ret.then === 'function') {
       ret.catch(function (e) {
+        if (!routeIsCurrent(generation)) return;
         try { console.error('[NEON] 路由异步渲染失败：', e); } catch (e2) {}
         fatalPanel('页面加载异常：' + (e && e.message ? e.message : '未知错误'));
       });

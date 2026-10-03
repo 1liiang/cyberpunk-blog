@@ -69,7 +69,7 @@ async function run() {
   const S = makeSuite();
   const T = S.T;
   const results = S.results;
-  const css = stripComments(SRC.css);
+  const css = stripComments(SRC.css + '\n' + fs.readFileSync(path.join(ROOT, 'css/holo-ui.css'), 'utf8'));
   const app = stripComments(SRC.app);
 
   /* ================= ① 无障碍审计（jsdom 真渲染） ================= */
@@ -97,14 +97,13 @@ async function run() {
       a.positiveTabindex.length === 0,
       a.positiveTabindex.join(',') || '无');
 
-    /* 装饰层一律 aria-hidden（氛围 / 字标 / 背景 / 各类粒子） */
-    T(CN, 'R240d 装饰层 aria-hidden：氛围双层 / 字标 / hero 背景 / 街区母线',
-      /class="atmo atmo-under" aria-hidden="true"/.test(SRC.html) &&
-      /class="atmo atmo-over" aria-hidden="true"/.test(SRC.html) &&
-      /class="wordmark"[^>]*aria-hidden="true"/.test(SRC.views) &&
-      /class="hero-bg" aria-hidden="true"/.test(SRC.views) &&
-      /class="district-line" aria-hidden="true"/.test(SRC.views),
-      '装饰层语义缺项');
+    /* 检查正在展示的装饰，避免已删除的旧字标残留在源码里形成假绿。 */
+    const decorations = ['.atmo-under', '.holo-mascot'];
+    T(CN, 'R240d 氛围层与全息装饰不进入阅读顺序',
+      decorations.every(function (selector) {
+        const el = ctx.doc.querySelector(selector);
+        return el && el.getAttribute('aria-hidden') === 'true';
+      }), '装饰层语义缺项');
 
     /* 对话框/浮层的语义三件：组 / 对话框 / 日志区 */
     T(CN, 'R240e 浮层语义：装置面板 role=group / 终端 dialog / 输出区 log+aria-live',
@@ -145,15 +144,15 @@ async function run() {
 
     /* 直连路由（不需要登录的九条）—— 每条切 hash 后核对场景与层集 */
     const routes = [
-      ['#/', 'tower', 9],
-      ['#/archive', 'archive', 5],
-      ['#/tags', 'bands', 5],
-      ['#/search/test', 'scanner', 5],
-      ['#/marks', 'stash', 4],
-      ['#/about', 'idcard', 4],
+      ['#/', 'tower', 2],
+      ['#/archive', 'archive', 2],
+      ['#/tags', 'bands', 2],
+      ['#/search/test', 'scanner', 2],
+      ['#/marks', 'stash', 2],
+      ['#/about', 'idcard', 2],
       ['#/post/1', 'reading', 2],
-      ['#/login', 'gate', 3],
-      ['#/', 'tower', 9]
+      ['#/login', 'gate', 2],
+      ['#/', 'tower', 2]
     ];
     var lines = [];
     var allOk = true;
@@ -203,13 +202,13 @@ async function run() {
       '保底缺项');
 
     /* 关键入场动画只用 transform/opacity（合成器友好）——v4.4.1 起含数字雨 */
-    var kfOk = ['block-in', 'block-light', 'console-in', 'rain-fall'].every(function (name) {
+    var kfOk = ['block-in', 'block-light', 'console-in', 'atmo-dust-drift'].every(function (name) {
       var m = new RegExp('@keyframes ' + name + '\\s*\\{([\\s\\S]*?)\\n\\}').exec(css);
       if (!m) return false;
       /* 帧内不得出现会触发布局的属性 */
       return !/(width|height|top|left|margin|padding)\s*:/.test(m[1]);
     });
-    T(CN, 'R242c 入场/下落动画只动 transform/opacity（不触发逐帧布局）',
+    T(CN, 'R242c 入场/星点动画只动 transform/opacity（不触发逐帧布局）',
       kfOk,
       kfOk ? '四组关键帧合规' : '存在布局属性动画');
   }

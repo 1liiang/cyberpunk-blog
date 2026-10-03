@@ -19,8 +19,10 @@ const { makeSuite, standalone } = require('../case-runner');
 const { SRC, ROOT, bootDom, waitFor, stripComments, cssRuleBody } = require('../common');
 
 function fnBody(src, name) {
-  const at = src.indexOf('function ' + name);
-  if (at === -1) return '';
+  const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const declaration = new RegExp('\\bfunction\\s+' + escapedName + '\\s*\\(').exec(src);
+  if (!declaration) return '';
+  const at = declaration.index;
   const open = src.indexOf('{', at);
   if (open === -1) return '';
   let depth = 0;
@@ -70,11 +72,11 @@ async function run() {
       .split(',').map(function (s) { return s.trim().replace(/['"]/g, ''); })
       .filter(Boolean).join(' ');
     const bootStatic = (/var ATMO_STATIC\s*=\s*'([^']+)'/.exec(SRC.themeBoot) || [, ''])[1];
-    T(CN, 'R210 层集常量双处一致（scene.js ↔ theme-boot.js），共 9 层',
-      sceneAll.split(' ').length === 9 &&
+    T(CN, 'R210 层集常量双处一致（scene.js ↔ theme-boot.js），共 3 类',
+      sceneAll.split(' ').length === 3 &&
       sceneAll === bootAll &&
       sceneStatic === bootStatic &&
-      sceneStatic.split(' ').length === 6,
+      sceneStatic.split(' ').length === 2,
       'scene=[' + sceneAll + '] boot=[' + bootAll + ']');
 
     /* app.js 接入：route 里调 applyScene + helper 惰性降级 */
@@ -87,162 +89,92 @@ async function run() {
       'route 未接入或 applyScene 缺防护');
   }
 
-  /* ================= ② 氛围载体与样式 ================= */
+  /* ================= ② 三类背景与安全边界 ================= */
   {
-    const CN = 'v4.0 B1 地基重铸';
-    const LAYERS = ['noise', 'scanline', 'grid', 'glow', 'bloom', 'signs', 'stardust', 'pulse', 'rain'];
-
-    T(CN, 'R211 index.html 双层载体 + 9 层注册齐全（aria-hidden 装饰）',
+    const CN = '全息背景整合';
+    const LAYERS = ['glow', 'grid', 'stardust'];
+    const retired = ['rain', 'signs', 'pulse', 'scanline', 'noise', 'bloom'];
+    T(CN, 'R211 三类背景共用内容下方载体，移除全屏覆盖层',
       /class="atmo atmo-under"[^>]*aria-hidden="true"/.test(html) &&
-      /class="atmo atmo-over"[^>]*aria-hidden="true"/.test(html) &&
-      LAYERS.every(function (id) { return html.indexOf('data-layer="' + id + '"') !== -1; }),
-      LAYERS.filter(function (id) { return html.indexOf('data-layer="' + id + '"') === -1; }).join(',') || '9 层齐');
-
-    /* 逐层开关：id 与 data-layer 必须配对（写错一个 = 那层永远不显示） */
+      !/class="atmo atmo-over"/.test(html) &&
+      LAYERS.every(function (id) { return html.indexOf('data-layer="' + id + '"') !== -1; }) &&
+      retired.every(function (id) { return html.indexOf('data-layer="' + id + '"') === -1; }),
+      '底光 / 纹理 / 星点');
     const pairs = [];
     const re = /html\[data-atmo~="([a-z]+)"\]\s+\.atmo-layer\[data-layer="([a-z]+)"\]/g;
     let m;
     while ((m = re.exec(css))) pairs.push([m[1], m[2]]);
-    T(CN, 'R211b 9 条逐层开关规则，id 与 data-layer 严格配对',
-      pairs.length === 9 && pairs.every(function (p) { return p[0] === p[1]; }),
-      pairs.length + ' 条' + (pairs.every(function (p) { return p[0] === p[1]; }) ? '' : '（有错配）'));
-
-    /* 材质层低强度（红线：颗粒纹理加深只会变花屏，不会变"更多光"） */
-    const noiseOpacity = parseFloat((/opacity:\s*([\d.]+)/.exec(
-      cssRuleBody(css, '.atmo-layer[data-layer="noise"]') || '') || [, '1'])[1]);
-    const scanLine = parseFloat((/rgba\(0,\s*0,\s*0,\s*([\d.]+)\)/.exec(
-      cssRuleBody(css, '.atmo-layer[data-layer="scanline"]') || '') || [, '1'])[1]);
-    T(CN, 'R211c 材质层保持低强度（噪点 ≤5% / 扫描线暗线 ≤16%）',
-      noiseOpacity <= 0.05 && scanLine <= 0.16,
-      'noise=' + noiseOpacity + ' / scanline=' + scanLine);
-
-    /* reduce 块：动画层直接不渲染 */
+    T(CN, 'R211b 三条逐层规则与三个 DOM id 严格配对',
+      pairs.length === 3 && pairs.every(function (p) { return p[0] === p[1]; }), pairs.length + ' 条');
+    const opacity = parseFloat((/opacity:\s*([\d.]+)/.exec(cssRuleBody(css, '.atmo-layer[data-layer="grid"]') || '') || [, '1'])[1]);
+    T(CN, 'R211c 空间纹理低强度且没有全屏扫描线',
+      opacity <= .05 && !/\.atmo-layer\[data-layer="scanline"\]/.test(css), 'opacity=' + opacity);
     const reduceBlk = mediaBlockOf(css, /prefers-reduced-motion/);
-    T(CN, 'R211d reduce 下动画层（雨/星尘/脉冲/招牌）不渲染，静态层保留',
-      /rain/.test(reduceBlk) && /stardust/.test(reduceBlk) &&
-      /pulse/.test(reduceBlk) && /signs/.test(reduceBlk) &&
-      /display:\s*none\s*!important/.test(reduceBlk),
-      reduceBlk ? '规则缺项' : '未找到 reduce 块');
-
-    /* 闪烁守 WCAG 2.3.1：周期 ≥2s 且明暗变化 ≤5 次（最坏 2.5 次/秒 < 3Hz） */
-    const flickPeriod = parseFloat((/animation:\s*atmo-flicker\s+([\d.]+)s/.exec(css) || [, '0'])[1]);
-    const flickKf = (/@keyframes atmo-flicker\s*\{([\s\S]*?)\n\}/.exec(css) || [, ''])[1];
-    const flickChanges = (flickKf.match(/opacity:/g) || []).length;
-    T(CN, 'R211e 招牌闪烁守 WCAG 2.3.1（周期 ≥2s、每周期明暗变化 ≤5 次 ⇒ <3Hz）',
-      flickPeriod >= 2 && flickChanges >= 2 && flickChanges <= 5,
-      flickPeriod + 's / ' + flickChanges + ' 次变化');
+    T(CN, 'R211d 减少动效时星点不渲染，静态底光保留',
+      /stardust/.test(reduceBlk) && /display:\s*none\s*!important/.test(reduceBlk) && /glow/.test(reduceBlk), 'reduce');
+    const drift = (/@keyframes atmo-dust-drift\s*\{([\s\S]*?)\n\}/.exec(css) || [, ''])[1];
+    T(CN, 'R211e 星点只用低频 transform / opacity，不做逐帧布局或闪烁',
+      /atmo-dust-drift 32s/.test(css) && !!drift && !/(background-position|top|left|width|height)\s*:/.test(drift) &&
+      !/@keyframes atmo-flicker/.test(css), '32s 缓动');
+    const bad = Number((/BAD_LIMIT\s*=\s*(\d+)/.exec(atmoSrc) || [, '0'])[1]);
+    const sample = Number((/SAMPLE_MS\s*=\s*(\d+)/.exec(atmoSrc) || [, '0'])[1]);
+    T(CN, 'R211f 降档只移除星点，45fps 以下触发窗口不超过 3 秒',
+      /DOWNGRADE_ORDER\s*=\s*\['stardust'\]/.test(atmoSrc) && /FPS_MIN\s*=\s*45/.test(atmoSrc) &&
+      bad >= 1 && sample > 0 && bad * sample <= 3000, sample + 'ms × ' + bad);
+    const c = bootDom({ skipApp: true, skipAtmo: true });
+    c.doc.body.setAttribute('data-scene', 'tower');
+    c.doc.documentElement.setAttribute('data-atmo', 'glow grid stardust');
+    c.doc.querySelector('[data-layer="stardust"]').remove();
+    c.w.eval(SRC.atmo);
+    T(CN, 'R211g 星点载体缺失时不启动探针，运行时不抛错',
+      !!c.w.NEONAtmo && !c.w.NEONAtmo._probe.raf && !c.w.NEONAtmo._probe.timer, '无探针');
+    c.dom.window.close();
   }
 
-  /* ================= ③ 氛围运行时（源码契约） ================= */
+  /* ================= ③ 场景与档位行为 ================= */
   {
-    const CN = 'v4.0 B1 地基重铸';
-    const order = (/DOWNGRADE_ORDER\s*=\s*\[([^\]]*)\]/.exec(atmoSrc) || [, ''])[1]
-      .split(',').map(function (s) { return s.trim().replace(/['"]/g, ''); }).filter(Boolean);
-    /* ⚠ v5.7.0（P1）：阈值仍是 45fps，但"几个坏样本才降档"从 4 收紧到 2，
-       采样从 3s 收紧到 1s —— 原组合等于"连续 12 秒不达标才降一层"，
-       而 downgrade() 一次只摘一层 ⇒ 最坏 100+ 秒才关到不卡（实测体感：先卡十几秒，
-       机器才开始自救，且远远跟不上）。降档**顺序**这条契约没变，仍然钉死。
-       触发窗口/连降/冷却的**行为**判据在 56 号用例里（那里把探针真跑起来）。 */
-    const badLimit = (/BAD_LIMIT\s*=\s*(\d+)/.exec(atmoSrc) || [, '?'])[1];
-    const sampleMs = (/SAMPLE_MS\s*=\s*(\d+)/.exec(atmoSrc) || [, '?'])[1];
-    T(CN, 'R211f 降档顺序：雨最先、静态纹理最后；阈值 45fps，触发窗口 ≤3s',
-      order.length === 9 && order[0] === 'rain' && order.indexOf('noise') === order.length - 1 &&
-      /FPS_MIN\s*=\s*45/.test(atmoSrc) &&
-      Number(badLimit) >= 1 && Number(sampleMs) * Number(badLimit) <= 3000,
-      order.join('>') + ' | 45fps / ' + sampleMs + 'ms×' + badLimit + '=' + (Number(sampleMs) * Number(badLimit)) + 'ms');
-
-    T(CN, 'R211g 运行时的三层防御：reduce 直通 / 层缺失静默跳过 / 用户锁定不降档',
-      /prefers-reduced-motion: reduce/.test(atmoSrc) &&
-      /* v4.4.1：雨改 DOM 列实现后，防御点从"无 2D canvas 跳过"升级为"层缺失跳过"——
-         判据同步演进（原 if (!ctx) 是 Canvas 时代的限制，已随实现退役）。 */
-      /if\s*\(!layer\)\s*return;/.test(atmoSrc) &&
-      /neon_atmo_lock/.test(atmoSrc),
-      '防御缺失');
-  }
-
-  /* ================= ④ 行为（jsdom 真渲染） ================= */
-  {
-    const CN = 'v4.0 B1 地基重铸';
+    const CN = '全息背景整合';
     const ctx = bootDom({ url: 'https://x.test/#/archive' });
-    await waitFor(function () {
-      return ctx.doc.body.getAttribute('data-scene') === 'archive';
-    }, 5000);
-
-    T(CN, 'R212 归档路由 → data-scene=archive；层集 = 档案库温差（5 层）',
-      ctx.doc.body.getAttribute('data-scene') === 'archive' &&
-      (ctx.doc.documentElement.getAttribute('data-atmo') || '').split(' ').filter(Boolean).length === 5,
-      'scene=' + ctx.doc.body.getAttribute('data-scene') +
-        ' atmo=[' + ctx.doc.documentElement.getAttribute('data-atmo') + ']');
-
-    /* 切换到详情页（reading 专注档）：hashchange 触发真实路由 */
+    await waitFor(function () { return ctx.doc.body.getAttribute('data-scene') === 'archive'; }, 5000);
+    T(CN, 'R212 首访默认标准档：归档只有静态底光与纹理',
+      ctx.w.NEONScene.readMode() === 'standard' && ctx.doc.documentElement.getAttribute('data-atmo') === 'glow grid',
+      ctx.doc.documentElement.getAttribute('data-atmo'));
+    ctx.w.localStorage.setItem('neon_atmo_manual', JSON.stringify(['glow', 'grid', 'stardust']));
     ctx.w.location.hash = '#/post/1';
-    await waitFor(function () {
-      return ctx.doc.body.getAttribute('data-scene') === 'reading';
-    }, 5000);
-    const atmoReading = (ctx.doc.documentElement.getAttribute('data-atmo') || '')
-      .split(' ').filter(Boolean);
-    T(CN, 'R212b 切到详情页 → reading 专注档（仅静态光 + 噪点，无动画层）',
-      ctx.doc.body.getAttribute('data-scene') === 'reading' &&
-      atmoReading.length === 2 && atmoReading.indexOf('rain') === -1 &&
-      atmoReading.indexOf('noise') !== -1,
-      '[' + atmoReading.join(' ') + ']');
-
-    /* layersFor 三态纯函数（tower 场景：9 / 6 / 0） */
+    await waitFor(function () { return ctx.doc.body.getAttribute('data-scene') === 'reading'; }, 5000);
+    T(CN, 'R212b 旧手动星点也受阅读场景限制，正文始终静态',
+      ctx.doc.documentElement.getAttribute('data-atmo') === 'glow grid' && !ctx.w.NEONAtmo._probe.raf,
+      ctx.doc.documentElement.getAttribute('data-atmo'));
     const S2 = ctx.w.NEONScene;
-    const pol = S2.layersFor('tower', 'pollution');
-    const std = S2.layersFor('tower', 'standard');
-    const sil = S2.layersFor('tower', 'silent');
-    T(CN, 'R212c layersFor 三态：光污染=全开 / 标准=仅静态 6 层 / 静音=空',
-      pol.length === 9 && std.length === 6 && sil.length === 0 &&
-      std.every(function (id) { return S2.ATMO_STATIC.indexOf(id) !== -1; }),
-      pol.length + '/' + std.length + '/' + sil.length);
-
+    T(CN, 'R212c 三档：梦游 3 类 / 标准 2 类 / 静谧为空，内页没有动态星点',
+      S2.layersFor('tower', 'pollution').length === 3 && S2.layersFor('tower', 'standard').length === 2 &&
+      S2.layersFor('tower', 'silent').length === 0 && S2.layersFor('workshop', 'pollution').join(' ') === 'glow grid',
+      '3 / 2 / 0');
     ctx.dom.window.close();
-  }
-
-  /* 首绘前写入（theme-boot 三态）+ rain 在 jsdom 的降级 */
-  {
-    const CN = 'v4.0 B1 地基重铸';
-    const c1 = bootDom({
-      url: 'https://x.test/#/', themeBoot: true,
-      storage: { neon_atmo_mode: 'silent' }
-    });
-    await waitFor(function () { return !!c1.w.NEONAtmo; }, 5000);
-    T(CN, 'R212d 静音模式：data-atmo 为空（首绘前由 theme-boot 写入，路由校正一致）',
-      c1.doc.documentElement.getAttribute('data-atmo') === '',
-      'atmo=[' + c1.doc.documentElement.getAttribute('data-atmo') + ']');
-
-    const c2 = bootDom({
-      url: 'https://x.test/#/', themeBoot: true,
-      storage: { neon_atmo_mode: 'standard' }
-    });
-    await waitFor(function () { return !!c2.w.NEONAtmo; }, 5000);
-    const atmoStd = (c2.doc.documentElement.getAttribute('data-atmo') || '')
-      .split(' ').filter(Boolean);
-    T(CN, 'R212e 标准模式：塔台场景只落静态 6 层（动画层被模式过滤）',
-      atmoStd.length === 6 && atmoStd.indexOf('rain') === -1 && atmoStd.indexOf('stardust') === -1,
-      '[' + atmoStd.join(' ') + ']');
-
-    /* jsdom 无 2D canvas：startRain 应静默跳过（rain 对象保持 null），页面不崩 */
-    /* v4.4.1：雨改为 DOM 列实现 —— 不再依赖 Canvas，jsdom 也能真实启动。
-       ⚠⚠ 考证（本次迁移的意外收获）：旧断言写在 c2 上，而 c2 是 **standard 模式**
-       （雨不在层集）⇒ "rain === null" 在它上面**恒真**——那句"无 canvas 静默跳过"
-       其实从未被真正检验过（历史假绿）。新断言必须用 **pollution 实例**（雨在层集）
-       才能测到"启动"这条路。
-       ⚠ 另：旧断言对时序不敏感，新断言要**等 sync 链跑完**
-       （app boot → scene.apply → NEONAtmo.sync）。 */
-    const c3 = bootDom({ url: 'https://x.test/#/', themeBoot: true });
-    await waitFor(function () {
-      return !!(c3.w.NEONAtmo && c3.w.NEONAtmo._rain());
-    }, 5000);
-    var r3 = c3.w.NEONAtmo._rain();
-    T(CN, 'R212f jsdom 下 DOM 列实现照常启动（雨已不依赖 Canvas）',
-      !!r3 && r3.cols.length > 0 && r3.layer.getAttribute('data-layer') === 'rain',
-      'rain=' + (r3 ? '已启动 ' + r3.cols.length + ' 列（预期）' : 'null（异常）'));
-    c3.dom.window.close();
-
-    c1.dom.window.close();
-    c2.dom.window.close();
+    const silent = bootDom({ url: 'https://x.test/#/', themeBoot: true, storage: { neon_atmo_mode: 'silent' } });
+    await waitFor(function () { return silent.doc.body.getAttribute('data-scene') === 'tower'; }, 5000);
+    T(CN, 'R212d 静谧首绘和路由校正都关闭背景且不启动探针',
+      silent.doc.documentElement.getAttribute('data-atmo') === '' && !silent.w.NEONAtmo._probe.raf,
+      '[' + silent.doc.documentElement.getAttribute('data-atmo') + ']');
+    silent.dom.window.close();
+    const standard = bootDom({ url: 'https://x.test/#/', themeBoot: true });
+    await waitFor(function () { return standard.doc.body.getAttribute('data-scene') === 'tower'; }, 5000);
+    T(CN, 'R212e 标准档无 rAF、无采样计时器，数字雨节点和运行函数已移除',
+      standard.doc.documentElement.getAttribute('data-atmo') === 'glow grid' &&
+      !standard.w.NEONAtmo._probe.raf && !standard.w.NEONAtmo._probe.timer &&
+      !standard.doc.querySelector('.rain-col') && !/function (startRain|churnRain|buildColumns)/.test(atmoSrc), '静态背景零循环');
+    standard.dom.window.close();
+    const legacy = ['noise', 'scanline', 'grid', 'glow', 'bloom', 'signs', 'stardust', 'pulse', 'rain', '__proto__'];
+    const migrated = bootDom({ url: 'https://x.test/#/', themeBoot: true, skipApp: true,
+      storage: { neon_atmo_manual: JSON.stringify(legacy) } });
+    const first = migrated.doc.documentElement.getAttribute('data-atmo');
+    const manual = migrated.w.NEONScene.readManual().join(' ');
+    migrated.w.localStorage.setItem('neon_atmo_manual', '[]');
+    migrated.w.NEONScene.apply('home');
+    T(CN, 'R212f 旧九层偏好归并去重且首绘/运行时一致；空数组保持明确关闭',
+      first === 'glow grid stardust' && manual === first &&
+      migrated.doc.documentElement.getAttribute('data-atmo') === '', first + ' → []');
+    migrated.dom.window.close();
   }
 
   /* ================= ⑤ 排版 2.0 ================= */

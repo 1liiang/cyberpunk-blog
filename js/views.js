@@ -197,20 +197,13 @@
     return map;
   }
 
-  /* ---------- 文章卡片 ---------- */
-  /* ---------- v3.4.2 批 B：空态块的统一产出 ----------
-     此前 loading / error 两种空态在 9 个视图里各写一遍（共 16 处几乎相同的拼接），
-     差异只在"有没有 code 行"和"hint 说什么"。抽成两个函数后：
-       ① 少 40 余行；
-       ② 措辞集中 —— 原来"正在接入数据流 / 正在扫描频段 / 正在读取档案"散落各处，
-          想统一口径得改九处；
-       ③ "空态长什么样"从此只有一处可改（将来加插画/改结构不用九处同步）。
-     ⚠ 参数保留全部差异：抽象是为了复用结构，不是为了抹平文案。
-     ⚠ 产出的 HTML 与替换前逐字节一致 —— 行为断言（waitFor('.empty-state')）不受影响。 */
+  /* 统一加载和错误状态。静态骨架预留高度，取数结束后由结果替换；
+     错误文字仍保留具体原因，不用装饰遮盖失败。 */
   function loadingBlock(code, hint) {
-    return '<div class="empty-state"><span class="empty-glyph">▚</span>' +
+    return '<div class="empty-state loading-state" role="status" aria-live="polite">' +
+      '<div class="loading-skeleton" aria-hidden="true"><i></i><i></i><i></i></div>' +
       (code ? '<span class="empty-code">' + esc(code) + '</span>' : '') +
-      '<span class="empty-hint type-cursor">' +
+      '<span class="empty-hint">' +
       esc(hint || '正在接入数据流') + '</span></div>';
   }
 
@@ -240,20 +233,10 @@
   function postCard(p) {
     /* 注意：数据库行字段是 cover_ref（snake_case）。
        此处曾误写 coverRef（camelCase）导致首页封面从不渲染，v1.5.0 修复。 */
-    /* F4/F5（v2.4.0 插单）C1 HUD 读数 + C6 标题压字：
-       有封面时，kick 行（SIG_三位编号 // 日期）与标题一起压进封面底部渐变区；
-       无封面时不渲染 cover-press，标题回退卡身原位 —— 分支天然回退，无第三种状态。 */
+    /* 封面与文字分开，标题不再压在图片上；同一结构适配精选横卡和双列文章流。 */
     var hasCover = !!p.cover_ref;
-    var coverPressHtml = '';
-    if (hasCover) {
-      var sig = 'SIG_' + (p.id < 10 ? '00' : p.id < 100 ? '0' : '') + p.id;
-      coverPressHtml = '<div class="cover-press">' +
-        '<div class="cover-kick">' + sig + ' // ' + fmtDate(p.created_at) + '</div>' +
-        '<h2>' + esc(p.title) + '</h2>' +
-        '</div>';
-    }
     var coverHtml = hasCover
-      ? '<div class="card-cover" data-cover="' + esc(p.cover_ref) + '">' + coverPressHtml + '</div>'
+      ? '<div class="card-cover" data-cover="' + esc(p.cover_ref) + '" aria-hidden="true"></div>'
       : '';
     var statusHtml = p.status && p.status !== 'published'
       ? '<span class="card-status draft">DRAFT</span>'
@@ -281,17 +264,20 @@
          告诉读屏这是一个"链接到文章"的元素及其目的地。
          ⚠ 不能用 <a> 包整卡 —— 卡内已有 <a> 标签（tag 链接），HTML 禁止 a 嵌套；
          Enter/Space 的激活由 app.js 的 keydown 代理完成。 */
-      '<article class="post-card" data-id="' + p.id + '"' +
+      '<article class="post-card' + (hasCover ? ' has-cover' : ' no-cover') + '" data-id="' + p.id + '"' +
       ' tabindex="0" role="link" aria-label="阅读：' + esc(p.title) + '">' +
         statusHtml +
         coverHtml +
-        (hasCover ? '' : '<h2>' + esc(p.title) + '</h2>') +
-        (p.summary ? '<div class="card-summary">' + esc(p.summary) + '</div>' : '') +
-        '<div class="card-meta">' +
-          '<span class="meta-date">' + fmtDate(p.created_at) + '</span>' +
-          (p.owner_name ? '<span class="meta-author">' + esc(p.owner_name) + '</span>' : '') +
-          readHtml +
-          '<span class="card-tags">' + tagChips(p.tags) + '</span>' +
+        (!hasCover ? '<span class="card-spark" aria-hidden="true">✧</span>' : '') +
+        '<div class="card-copy">' +
+          '<h2>' + esc(p.title) + '</h2>' +
+          (p.summary ? '<div class="card-summary">' + esc(p.summary) + '</div>' : '') +
+          '<div class="card-meta">' +
+            '<span class="meta-date">' + fmtDate(p.created_at) + '</span>' +
+            (p.owner_name ? '<span class="meta-author">' + esc(p.owner_name) + '</span>' : '') +
+            readHtml +
+            '<span class="card-tags">' + tagChips(p.tags) + '</span>' +
+          '</div>' +
         '</div>' +
         markHtml +
       '</article>';
@@ -301,18 +287,8 @@
   function homeView(state) {
     var posts = state.posts || [];
 
-    /* ---------- v3.1.0 B2 / v4.1 B2：首页 = 字标 Hero + 街区；标签页仍走连续列表 ----------
-       三条设计取舍（都为了"大改但不砸掉既有判据"）：
-
-       ① **街区只给真正的首页**（`!state.tagName`）。#/tag/x 是"某个频段的全部信号"，
-          用户来这里是"找东西"，连续列表才是对的形态；街区是"逛站台"的形态。
-
-       ② **Hero 内部保留 `.page-head`**。它是全站页头装饰（标题斜纹、分隔线、菱形锚）
-          的挂载点，也是既有断言的判据（"页头存在"）。摘掉它会同时丢掉装饰与判据 ——
-          所以不是"换掉页头"，而是"把页头请进 Hero 里当字标"。
-
-       ③ **精选卡不套 `.post-list`**（它是单张，不是列表），`.post-list` 保持唯一 ——
-          避免踩到"取第一个 .post-list 却只有一张卡"这类历史断言。 */
+    /* 首页主视觉由独立的 holoHero 承载，这里只更新文章区。
+       标签页保留连续列表；精选卡独立于唯一的 .post-list。 */
     if (!state.tagName) {
       if (state.loading) {
         return heroHtml(state) + loadingBlock('LOADING...');
@@ -354,34 +330,7 @@
     return html;
   }
 
-  /* ============ v3.1.0 B2 / v4.1 B2 街区化：Hero 字标与街区 ============
-     数据口径说明：所有数字都从**已加载的文章**在本地聚合得出（标签、月份），
-     不新增任何网络请求 —— 面板渲染绝不 await 网络是本项目的铁律。
-     代价是"频段数/归档节奏"基于当前已加载的信号，故在模块内用小字注明口径。 */
-
-  /* 色相读数：与 app.js 的 HUE_KEY 同一个存储键。views 层不引 app 层变量
-     （两者都是 IIFE，互不可见），故这里只读一个原始数字，不做名称映射 ——
-     色号由 CSS 的 hsl(var(--hue)) 自行呈现，天然不会与 app.js 的清单漂移。
-     ⚠ v4.5.0：这里的"未选过"判据必须与 theme-boot.js / app.js 同口径 ——
-       否则侧栏会显示 184° 而实际配色是 285（"读数与实物不符"）。 */
-  function hueReadout() {
-    try {
-      var raw = localStorage.getItem('neon_hue');
-      if (raw && /^\d{1,3}$/.test(raw)) {
-        var n = parseInt(raw, 10);
-        var picked = localStorage.getItem('neon_hue_pick') === '1';
-        if (!(n === 184 && !picked)) return n;
-      }
-    } catch (e) { /* 隐私模式：回落默认 */ }
-    return 285;
-  }
-
-  function daysSinceBorn() {
-    var start = new Date(SITE_BORN).getTime();
-    if (!isFinite(start)) return 0;
-    return Math.max(0, Math.floor((Date.now() - start) / 86400000));
-  }
-
+  /* 标签数量从已加载的文章聚合，不增加网络请求。 */
   function localTagStats(posts) {
     var map = {};
     (posts || []).forEach(function (p) {
@@ -390,87 +339,18 @@
     return map;
   }
 
-  /* 近 6 个月的信号密度（按 created_at 本地聚合）。
-     条形宽度用百分比 —— 用 px 要算 max 值再乘系数，多一层取整误差。 */
-  function monthStats(posts) {
-    var map = {};
-    (posts || []).forEach(function (p) {
-      var d = new Date(p.created_at);
-      if (!isFinite(d.getTime())) return;
-      var k = d.getFullYear() + '.' + ('0' + (d.getMonth() + 1)).slice(-2);
-      map[k] = (map[k] || 0) + 1;
-    });
-    var keys = Object.keys(map).sort().reverse().slice(0, 6).reverse();
-    var max = keys.reduce(function (m, k) { return Math.max(m, map[k]); }, 1);
-    return keys.map(function (k) {
-      return { key: k, count: map[k], pct: Math.round((map[k] / max) * 100) };
-    });
-  }
-
-  /* v4.1 B2：霓虹字标 —— 「NEON://DIARY」的 SVG 字形描边。
-     路径数据来自 js/wordmark-paths.js（由字体转曲生成，见该文件头注释）；
-     动画全在 CSS（stroke-dasharray + pathLength 归一化，零 JS 测量），
-     错峰用行内 --i 变量控制（借 taozhiyy 的 0.6s/字 + 0.24s 错峰参数）。
-     惰性取用 + 降级：路径数据缺失时返回空串，h1 落到纯文字兜底（不让首页依赖它）。 */
-  function wordmarkSvg() {
-    var W = null;
-    try { W = window.NEONWordmark; } catch (e) { W = null; }
-    if (!W || !W.glyphs || !W.glyphs.length || !W.width) return '';
-    var h = W.maxY - W.minY;
-    var paths = W.glyphs.map(function (g, i) {
-      /* 单字母强调（.hl）延续到字标：R 单独高亮（见 CSS 的 .wordmark .hl）。
-         ⚠ 翻转变换写在**每个 path 的 transform 上**（而非包一层 <g>）——
-         这样 CSS 可以自由给 <g class="wordmark-echo"> 加偏移（CSS transform
-         会覆盖 SVG 的 transform 属性；写在 g 上会把翻转一起覆盖掉，字形倒转）。 */
-      var hl = g.char === 'R' ? ' hl' : '';
-      return '<path class="wordmark-glyph' + hl + '" style="--i:' + i +
-        '" pathLength="100" transform="translate(' + g.x + ' ' + W.maxY + ') scale(1 -1)" d="' + g.d + '"/>';
-    }).join('');
-    return '' +
-      '<svg class="wordmark" viewBox="0 0 ' + W.width + ' ' + h + '"' +
-        ' preserveAspectRatio="xMidYMid meet" aria-hidden="true" focusable="false">' +
-        /* echo 层：偏移描边做 RGB 分裂残影（同路径第二条，纯装饰） */
-        '<g class="wordmark-echo">' + paths + '</g>' +
-        '<g class="wordmark-main">' + paths + '</g>' +
-      '</svg>';
-  }
-
   function heroHtml(state) {
-    /* v4.1 B2：Hero 2.0 —— 主视觉从「文字标题」升级为「霓虹字标」。
-       契约（40 号断言迁移后的口径）：
-         · h1 语义完整（sr-only 全文 "NEON://DIARY"），可访问名不受 SVG 影响；
-         · 单字母强调保留：字标里 R 的 path 带 .hl（恰一处）；
-         · MODULE 00 编号与信号数留在 .crumb（沿用）；
-         · 字标数据缺失时整段回退为旧版文字标题（含 .hl）。 */
-    var svg = wordmarkSvg();
-    return '' +
-      '<section class="hero">' +
-        '<div class="hero-bg" aria-hidden="true"></div>' +
-        '<div class="hero-inner">' +
-          '<div class="page-head">' +
-            '<h1 class="hero-title">' +
-              (svg || 'NEON://DIA<span class="hl">R</span>Y') +
-              '<span class="sr-only">NEON://DIARY</span>' +
-            '</h1>' +
-            '<div class="crumb">MODULE 00 · STATION LOG ▸ 共 <b>' + state.total + '</b> 条信号</div>' +
-          '</div>' +
-          '<p class="hero-sub">NIGHT CITY 边缘的一座信号塔 · ' +
-            '记录代码、小说，以及深夜的一切胡思乱想</p>' +
+    return '<section class="hero hero-feed" aria-label="最新广播">' +
+        '<div class="page-head"><h2>最新广播</h2>' +
+          '<div class="crumb">SIGNAL FEED · 共 <b>' + state.total + '</b> 条信号</div>' +
         '</div>' +
-        /* ⚠ 不做成 <a href="#district"> —— 本站是 hash 路由，
-           任何 #xxx 锚点都会被 parseHash 当成路由解析（#district → 未知路由 → 404 视图）。
-           所以滚动引导只做"提示"，不做跳转。 */
-        '<p class="hero-scroll" aria-hidden="true">向下滚动 · KEEP SCROLLING <i>▾</i></p>' +
       '</section>';
   }
 
-  /* v4.1 B2：街区招牌 —— 模块头从"小字行"升级为「灯牌」：
-     挂架节点（装饰）+ BLOCK 编号 + 名称。编号语义从"模块"变为"街块"，
-     与全站既有的 SECTOR 编号线并存（Block ⊂ Sector，同一体系的两种部件）。 */
-  function blockSign(no, name, en) {
+  /* 栏目页签：去掉工程编号，保留真实栏目名称。 */
+  function blockSign(name, en) {
     return '<header class="block-sign">' +
-      '<span class="block-node" aria-hidden="true"></span>' +
-      '<span class="block-no">BLOCK ' + no + '</span>' +
+      '<span class="block-spark" aria-hidden="true">✦</span>' +
       '<span class="block-name">' + name + '<i> / ' + en + '</i></span>' +
       '</header>';
   }
@@ -482,25 +362,10 @@
     return '<span class="page-no">SECTOR ' + code + '</span>';
   }
 
-  function statModule(state) {
-    var tags = localTagStats(state.posts);
-    return '<article class="block block-stat" data-block="03">' +
-      blockSign('03', '站台状态', 'STATION') +
-      '<ul class="stat-list">' +
-        '<li><span class="stat-k">建站</span><span class="stat-v">' + daysSinceBorn() + '</span><i>天</i></li>' +
-        '<li><span class="stat-k">信号</span><span class="stat-v">' + state.total + '</span><i>条</i></li>' +
-        '<li><span class="stat-k">频段</span><span class="stat-v">' + Object.keys(tags).length + '</span><i>个</i></li>' +
-        '<li><span class="stat-k">色相</span><span class="stat-v">' + hueReadout() + '</span><i>°</i>' +
-          '<span class="hue-dot" aria-hidden="true"></span></li>' +
-      '</ul>' +
-      '<p class="block-note">实时在线读数见 ABOUT 页</p>' +
-      '</article>';
-  }
-
   function tagModule(tagKeys, tags) {
     if (!tagKeys.length) return '';
     return '<article class="block block-freq" data-block="04">' +
-      blockSign('04', '标签频段', 'FREQ') +
+      blockSign('标签频段', 'FREQ') +
       '<div class="freq-list">' + tagKeys.map(function (k) {
         /* 复用 .tag-chip 的色号映射（[data-tone="tN"] { --tone: … }）——
            不在这里再写第三份"色号 → 颜色"表：那种表多一份就多一处漂移点。 */
@@ -511,68 +376,39 @@
       '</article>';
   }
 
-  function monthModule(months) {
-    if (!months.length) return '';
-    return '<article class="block block-rhythm" data-block="05">' +
-      blockSign('05', '归档节奏', 'RHYTHM') +
-      '<ul class="rhythm-list">' + months.map(function (m) {
-        return '<li><span class="rhythm-k">' + m.key + '</span>' +
-          '<span class="rhythm-bar" style="width:' + m.pct + '%" aria-hidden="true"></span>' +
-          '<b class="rhythm-n">' + m.count + '</b></li>';
-      }).join('') + '</ul>' +
-      '<p class="block-note">按已加载信号的月份分布</p>' +
-      '</article>';
-  }
-
-  function idCardModule() {
-    return '<article class="block block-id" data-block="06">' +
-      blockSign('06', '身份卡', 'OPERATOR') +
-      '<div class="id-card">' +
-        '<span class="id-glyph" aria-hidden="true">◈</span>' +
-        '<p class="id-name">漓江</p>' +
-        '<p class="id-line">「在霓虹废墟里写代码、写小说，以及深夜的一切胡思乱想。」</p>' +
-        '<a class="btn btn-ghost" href="#/about">进入档案 ▸</a>' +
-      '</div>' +
-      '</article>';
-  }
-
   function districtHtml(state) {
     var posts = state.posts || [];
-    var featured = posts[0];
-    var rest = posts.slice(1);
+    /* 主卡由首页首次取数锁定，追加内容保持原有时间顺序。
+       独立渲染视图时也可省略 featuredId，自动选取一篇封面文章。 */
+    var featuredIndex = state.featuredId == null
+      ? posts.findIndex(function (p) { return !!p.cover_ref; })
+      : posts.findIndex(function (p) { return p.id === state.featuredId; });
+    if (featuredIndex < 0) featuredIndex = 0;
+    var featured = posts[featuredIndex];
+    var rest = posts.filter(function (p, i) { return i !== featuredIndex; });
     var tags = localTagStats(posts);
     var tagKeys = Object.keys(tags)
       .sort(function (a, b) { return tags[b] - tags[a]; }).slice(0, 8);
 
-    /* v4.1 B2：街区化 —— bento 网格 →「塔台街区」。
-       布局骨架沿用 12 列制（"一屏看全站状态"是这个首页的优点，不砸），
-       变的是视觉语言与入场方式：
-         · 每个街块 = 建筑立面：灯牌招牌（.block-sign）+ 挂架节点 + 门面纹理；
-         · 街道主干线 .district-line（宽屏在内容左侧留白处，窄屏由 CSS 隐藏）；
-         · 入场从"错峰淡入"改为"沿街点亮"（animation-timeline: view()，
-           降级 = 原有错峰入场 —— @supports 双路径）。
-       ⚠ 契约保留：.post-list 唯一（精选不套 list）、加载更多按钮、全部本地聚合。 */
-    return '<section class="district" id="district" aria-label="站台街区">' +
-      '<span class="district-line" aria-hidden="true"></span>' +
+    /* 文章区只保留精选、信号流与标签入口。即使只有一张精选卡，
+       hasMore 仍能显示加载按钮，避免分页入口被 rest.length 隐藏。 */
+    return '<section class="district" id="district" aria-label="文章与标签">' +
       (featured
         ? '<article class="block block-featured" data-block="01">' +
-            blockSign('01', '精选信号', 'SPOTLIGHT') +
+            blockSign(featured.cover_ref ? '封面信号' : '最新信号', 'SPOTLIGHT') +
             '<div class="block-body">' + postCard(featured) + '</div>' +
           '</article>'
         : '') +
-      (rest.length
+      (rest.length || state.hasMore
         ? '<article class="block block-stream" data-block="02">' +
-            blockSign('02', '信号流', 'STREAM') +
+            blockSign('继续探索', 'STREAM') +
             '<div class="block-body"><div class="post-list">' + rest.map(postCard).join('') + '</div></div>' +
             (state.hasMore
               ? '<div class="load-more-wrap"><button class="btn" id="btn-load-more">加载更多信号 ▾</button></div>'
               : '') +
           '</article>'
         : '') +
-      statModule(state) +
       tagModule(tagKeys, tags) +
-      monthModule(monthStats(posts)) +
-      idCardModule() +
       '</section>';
   }
 
@@ -641,7 +477,7 @@
              : '输入关键词，扫描全部广播') +
         '</div>' +
       '</div>' +
-      '<div class="search-bar hud-frame">' +
+      '<div class="search-bar hud-frame' + (state.loading && q ? ' is-searching' : '') + '" aria-busy="' + (state.loading ? 'true' : 'false') + '">' +
         /* v2.9.5：加一层 .search-field 包住输入框 —— 旋转光晕需要一个
            position:relative 的宿主来挂 ::before（<input> 不支持伪元素）。
            输入框的 id/class 都没动，JS 取用与既有测试不受影响。 */
@@ -677,7 +513,7 @@
       return html;
     }
     if (hits.length === 0) {
-      html += '<div class="empty-state"><span class="empty-glyph">∅</span><span class="empty-code">NO MATCH</span>' +
+      html += '<div class="empty-state has-mascot">' + holoMascot('search') + '<span class="empty-code">NO MATCH</span>' +
         '<span class="empty-hint">没有信号包含「' + esc(q) + '」</span></div>' + partialNote(state);
       return html;
     }
@@ -813,15 +649,14 @@
        · 确定没有文章（404 / 取不到）→ 「信号丢失」 */
     var crumbTail = (state.post || state.loading) ? '详情' : '信号丢失';
     var html = '' +
-      '<div class="page-head"><h1>' + esc(state.post ? state.post.title : '信号丢失') + '</h1>' +
-      '<div class="crumb"><a href="#/">所有信号</a> ▸ <b>' + crumbTail + '</b></div></div>';
+      '<div class="page-head post-back"><div class="crumb"><a href="#/">← 所有信号</a> ▸ <b>' + crumbTail + '</b></div></div>';
 
     if (state.loading) {
       html += loadingBlock(null, '正在解码信号');
       return html;
     }
     if (!state.post) {
-      html += '<div class="empty-state"><span class="empty-glyph">⚠</span><span class="empty-code">404 // SIGNAL NOT FOUND</span>' +
+      html += '<div class="empty-state"><span class="empty-glyph">⚠</span><h1 class="empty-code">404 // SIGNAL NOT FOUND</h1>' +
         '<span class="empty-hint">信号不存在，或尚未公开（草稿仅作者可见）</span>' +
         '<div style="margin-top:22px"><a class="btn" href="#/">返回信号列表</a></div></div>';
       return html;
@@ -866,9 +701,21 @@
              读数（段数/字数）在服务端渲染阶段就从 renderedMd 算出（零 DOM 依赖）。 */
           '<div class="reading-frame">' +
             '<div class="rf-bar">' +
-              '<span class="rf-tag">▤ SIGNAL DECODED // 正文</span>' +
+              '<span class="rf-tag">正文</span>' +
               '<span class="rf-stats">' + blockCount + ' 段 · 约 ' + charCount + ' 字</span>' +
-              '<button type="button" class="rf-btn" id="ln-toggle" aria-pressed="true"># 行号</button>' +
+              '<details class="reading-options"><summary>阅读设置</summary>' +
+                '<div class="reading-options-panel" aria-label="阅读设置">' +
+                  '<div class="reading-setting"><span>字号</span><div role="group" aria-label="正文字号">' +
+                    '<button type="button" class="rf-btn" data-reading-size="standard" aria-pressed="true">标准</button>' +
+                    '<button type="button" class="rf-btn" data-reading-size="large" aria-pressed="false">大字</button>' +
+                  '</div></div>' +
+                  '<div class="reading-setting"><span>正文宽度</span><div role="group" aria-label="正文宽度">' +
+                    '<button type="button" class="rf-btn" data-reading-width="standard" aria-pressed="true">适中</button>' +
+                    '<button type="button" class="rf-btn" data-reading-width="wide" aria-pressed="false">宽版</button>' +
+                  '</div></div>' +
+                  '<div class="reading-setting"><span>段落辅助</span><button type="button" class="rf-btn" id="ln-toggle" aria-pressed="false">显示行号</button></div>' +
+                '</div>' +
+              '</details>' +
             '</div>' +
             '<div class="md-body" id="md-target">' + state.renderedMd + '</div>' +
           '</div>' +
@@ -948,7 +795,7 @@
   /* v2.9.9：建站时间的**单一来源**。
      v2.9.8 曾误取「最早一条广播」2026.07.03 —— 用户指正：应以博主本人
      创建博客的时间为准，即 2026-09-28 00:18（本站项目目录的创建时刻）。
-     ⚠ 只改这一个值：页面显示、data-born、四段读数全部跟着走，
+     ⚠ 只改这一个值：首页与关于页的显示和 data-born 全部跟着走，
        不存在第二处要同步的日期字面量。 */
   var SITE_BORN = '2026-09-28T00:18:00+08:00';
   function bornDisplay() {
@@ -958,61 +805,29 @@
 
   function aboutView() {
     return '' +
-      '<div class="page-head">' + pageNo('11') + '<h1>关于 / ABOUT</h1><div class="crumb">身份卡 · <b>ID-CARD</b></div></div>' +
-      /* v2.9.9 站点在线时长 HUD：天 / 时 / 分 / 秒 四段分解读数。
-         app.js 的 startUptimeTicker() 每秒写 #uptime-days/#uptime-hours/#uptime-min/#uptime-sec；
-         建站时间经 data-born 传给 app.js —— 日期字面量只活在这一处。 */
-      '<section class="uptime-hud" data-born="' + SITE_BORN + '" aria-label="站点在线时长">' +
-        '<div class="uptime-head">' +
-          '<span class="uptime-tag">STATION UPTIME</span>' +
-          '<span class="uptime-live"><i aria-hidden="true"></i>LIVE</span>' +
-        '</div>' +
-        '<div class="uptime-grid">' +
-          '<div class="uptime-cell"><span class="uptime-label">BOOT DATE / 建站</span>' +
-            '<span class="uptime-num">' + bornDisplay() + '</span></div>' +
-          '<div class="uptime-cell"><span class="uptime-label">DAYS / 天</span>' +
-            '<span class="uptime-num"><b id="uptime-days">—</b><i>天</i></span></div>' +
-          '<div class="uptime-cell"><span class="uptime-label">HOURS / 时</span>' +
-            '<span class="uptime-num"><b id="uptime-hours">—</b><i>时</i></span></div>' +
-          '<div class="uptime-cell"><span class="uptime-label">MIN / 分</span>' +
-            '<span class="uptime-num"><b id="uptime-min">—</b><i>分</i></span></div>' +
-          '<div class="uptime-cell"><span class="uptime-label">SEC / 秒</span>' +
-            '<span class="uptime-num"><b id="uptime-sec">—</b><i>秒</i></span></div>' +
-        '</div>' +
-        '<div class="uptime-arc" aria-hidden="true"></div>' +
-        '<p class="uptime-foot">信号自 ' + bornDisplay() + ' 起持续广播 · 每一秒都在变长</p>' +
-      '</section>' +
+      '<div class="page-head"><h1>关于这里</h1><div class="crumb">日常、代码与深夜的灵感</div></div>' +
+      '<p class="about-uptime" data-born="' + SITE_BORN + '" aria-label="站点在线时长">' +
+        '<span aria-hidden="true">✦</span> 自 ' + bornDisplay() + ' 持续广播 <b id="uptime-days">—</b> 天' +
+      '</p>' +
       '<div class="about-grid">' +
-        '<div class="about-card"><span class="about-file" aria-hidden="true">FILE 01</span>' +
-          '<h3>OPERATOR / 博主</h3>' +
-          '<p><b>漓江</b> —— 本站唯一的信号源。</p>' +
+        '<div class="about-card about-intro">' +
+          '<h2>你好，我是漓江。</h2>' +
           '<p>这座霓虹废墟里的日记本，记录代码、小说、以及深夜的一切胡思乱想。如果你读到了这里，说明信号没有衰减。</p>' +
-          '<div class="about-stat"><span>代号</span><span>LIJIANG</span></div>' +
-          '<div class="about-stat"><span>状态</span><span>ONLINE ▮</span></div>' +
-          '<div class="about-stat"><span>坐标</span><span>NIGHT CITY 边缘</span></div>' +
-          '<div class="about-stat"><span>频道</span><span>NEON://DIARY</span></div>' +
+          '<p class="about-topics"><span>代码</span><span>小说</span><span>日常</span></p>' +
+          '<a class="btn btn-ghost" href="#/archive">翻阅日记</a>' +
         '</div>' +
-        '<div class="about-card"><span class="about-file" aria-hidden="true">FILE 02</span>' +
-          '<h3>SYSTEM / 本站架构</h3>' +
-          '<p>一台纯前端的赛博朋克终端，接驳云端神经：</p>' +
-          '<div class="about-stat"><span>文章数据</span><span>云端数据库</span></div>' +
-          '<div class="about-stat"><span>图片 / 附件</span><span>云端存储</span></div>' +
-          '<div class="about-stat"><span>登录认证</span><span>邮箱（密码 / 验证码）</span></div>' +
-          '<div class="about-stat"><span>正文格式</span><span>Markdown + 代码高亮</span></div>' +
-          '<p style="margin-top:14px">想在这里留下自己的广播？注册一个账号，进入控制台即可写作。注册即可成为作者。</p>' +
-        '</div>' +
-        '<div class="about-card"><span class="about-file" aria-hidden="true">FILE 03</span>' +
-          '<h3>PROTOCOL / 使用守则</h3>' +
-          '<p>▸ 文章版权归各信号源作者所有。</p>' +
-          '<p>▸ 欢迎通过标签频段检索感兴趣的内容。</p>' +
-          '<p>▸ 附件下载需要登录后获取授权链接。</p>' +
-          '<p>▸ 本站拒绝任何形式的信号干扰（垃圾广播将被删除）。</p>' +
-        '</div>' +
-        '<div class="about-card"><span class="about-file" aria-hidden="true">FILE 04</span>' +
-          '<h3>TRANSMISSION / 联系</h3>' +
-          '<p>信号接收确认中……</p>' +
-          '<p>如果你收到了来自这座城市的消息，那是你的终端还没有生锈。</p>' +
-          '<p style="margin-top:10px"><span class="tag-chip">#cyberpunk</span> <span class="tag-chip">#写作</span> <span class="tag-chip">#代码</span></p>' +
+        '<div class="about-card about-notes">' +
+          '<h2>在这里慢慢逛</h2>' +
+          '<p>可以按标签寻找感兴趣的内容，也可以登录后收藏喜欢的文章。</p>' +
+          '<p>文章版权归作者所有；附件需要登录后下载。请尊重每一位作者的表达。</p>' +
+          '<details class="about-system"><summary>关于网站与写作</summary>' +
+            '<div class="about-system-body">' +
+              '<p>页面以静态文件加载，文章、登录与收藏接入云端服务。</p>' +
+              '<div class="about-stat"><span>正文格式</span><span>Markdown + 代码高亮</span></div>' +
+              '<div class="about-stat"><span>登录方式</span><span>邮箱密码 / 验证码</span></div>' +
+              '<p>注册后进入控制台，即可写下自己的广播。</p>' +
+            '</div>' +
+          '</details>' +
         '</div>' +
       '</div>';
   }
@@ -1250,7 +1065,7 @@
       return html;
     }
     if (posts.length === 0) {
-      html += '<div class="empty-state"><span class="empty-glyph">◇</span><span class="empty-code">STASH EMPTY</span>' +
+      html += '<div class="empty-state has-mascot">' + holoMascot('stash') + '<span class="empty-code">STASH EMPTY</span>' +
         '<span class="empty-hint">还没有收藏任何信号 · 在卡片或文章页点 ◇ 即可收藏</span>' +
         '<div style="margin-top:22px"><a class="btn" href="#/">去信号流里逛逛</a></div></div>';
       return html;
@@ -1319,86 +1134,43 @@
      （注：本行刻意不写出被禁属性的字面形式 —— 源码扫描类断言会把它当真实用法。）
      ============================================================ */
 
-  /* ---------- v5.1.0：电台页面 ----------
-     播放器本体**不在这里** —— 它在 #app 之外的 #radio-stage（常驻控制台），
-     所以这一页只负责：说明 + 条目列表 + 管理入口。
-     这样从别的页面切回电台，歌不会断（iframe 从未被销毁）。 */
+  /* 同一只小猫用于欢迎区、搜索空态与收藏空态；始终为纯装饰。 */
+  function holoMascot(mood) {
+    var label = mood === 'search' ? '再换个关键词试试' : (mood === 'stash' ? '等一篇喜欢的故事' : 'NEKO://ONLINE');
+    return '<div class="holo-mascot' + (mood ? ' is-' + mood : '') + '" aria-hidden="true">' +
+      '<span class="holo-mascot-orbit"></span>' +
+      '<span class="holo-mascot-ear is-left"></span><span class="holo-mascot-ear is-right"></span>' +
+      '<span class="holo-mascot-face"><i class="holo-mascot-eye is-left"></i><i class="holo-mascot-eye is-right"></i>' +
+        '<i class="holo-mascot-mouth"></i><i class="holo-mascot-cheek is-left"></i><i class="holo-mascot-cheek is-right"></i></span>' +
+      '<span class="holo-mascot-spark is-one">✦</span><span class="holo-mascot-spark is-two">✧</span>' +
+      '<span class="holo-mascot-tag">' + label + '</span>' +
+      '</div>';
+  }
 
-  /* ---------- v5.4.0：首页两栏（左·全息读数 / 右·身份卡） ----------
-     只产出标记；数据与事件在 app.js（injectHoloHero）。
-     ⚠ 左侧**刻意沿用** class="uptime-hud" data-born="…" 与既有 id（uptime-days…）：
-       "建站时间单一来源"那条契约与每秒 ticker 因此都不用改 —— 只是它现在长在首页。
-     ⚠ 大读数那格带 data-holo-uptime + data-text：故障字需要 data-text 复制两层。
-     技法出处见 style.css（故障字 alddesign/cyberpunk-css；全息倾斜 DevCard 3D 思路）。 */
+  /* 首页全息欢迎区。时长只显示一份；电台默认折叠，其节点位于
+     #home-content 外，列表更新不会替换播放器。折叠不会卸载 iframe。 */
   function holoHero(state) {
     state = state || {};
-    var days = state.days || 0, hours = state.hours || 0, mins = state.mins || 0, secs = state.secs || 0;
     var bootDate = state.bootDate || '----------';
-    var nickname = state.nickname || '漓光';
-    var tags = state.tags || ['站长', '作者'];
+    var nickname = state.nickname || 'NEON://DIARY';
+    var tags = state.tags || ['私人频道', '日常与灵感'];
     var stations = state.stations || [];
-    function pad(n) { return (n < 10 ? '0' : '') + n; }
-    function cell(id, label, value, unit) {
-      return '<div class="uptime-cell"><span class="uptime-label">' + label + '</span>' +
-        '<span class="uptime-num"><b id="' + id + '">' + value + '</b><i>' + unit + '</i></span></div>';
-    }
     return '' +
       '<div class="holo-hero">' +
-        '<section class="uptime-hud holo-readout" data-born="' + SITE_BORN + '" aria-label="站点在线时长">' +
-          '<div class="uptime-head">' +
-            '<span class="uptime-tag">STATION UPTIME</span>' +
-            '<span class="uptime-live"><i aria-hidden="true"></i>LIVE</span>' +
+        '<section class="holo-welcome">' +
+          '<p class="holo-kicker"><span aria-hidden="true">✦</span> PERSONAL SIGNAL / 私人频道</p>' +
+          '<h1 class="holo-heading"><span class="holo-brand">NEON://DIARY</span>把日常，写成发光的信号。</h1>' +
+          '<p class="holo-intro">NIGHT CITY 边缘的一座小小信号塔。记录代码、小说，以及深夜的一切胡思乱想。</p>' +
+          '<div class="holo-actions"><a class="btn" href="#/search">寻找一段信号 <span aria-hidden="true">↗</span></a>' +
+            '<a class="btn btn-ghost" href="#/about">认识站长</a></div>' +
+          '<div class="holo-status" data-born="' + SITE_BORN + '" aria-label="建站时间 ' + esc(bootDate) + '；站点在线时长" title="自 ' + esc(bootDate) + ' 起广播">' +
+            '<span class="holo-boot"><span>BOOT DATE</span><b>' + esc(bootDate) + '</b></span>' +
+            '<span class="uptime-live"><i aria-hidden="true"></i>持续广播</span>' +
+            '<span class="uptime-num" data-holo-uptime>' + esc(String(state.uptimeText || '----')) + '</span>' +
           '</div>' +
-          '<div class="holo-uptime glitch" data-holo-uptime data-text="' + esc(String(state.uptimeText || '----')) + '">' +
-            esc(String(state.uptimeText || '----')) + '</div>' +
-          '<div class="uptime-grid">' +
-            '<div class="uptime-cell"><span class="uptime-label">BOOT DATE / 建站</span>' +
-              '<span class="uptime-num">' + esc(bootDate) + '</span></div>' +
-            cell('uptime-days', 'DAYS / 天', days, '天') +
-            cell('uptime-hours', 'HOURS / 时', pad(hours), '时') +
-            cell('uptime-min', 'MIN / 分', pad(mins), '分') +
-            cell('uptime-sec', 'SEC / 秒', pad(secs), '秒') +
-          '</div>' +
-          /* v5.5.0：花样区（雷达扫掠 + 信号频谱）—— 技法来源见 style.css 的 .holo-radar 注释 */
-          '<div class="holo-gauge">' +
-            '<div class="holo-radar" aria-hidden="true"><i></i><i></i><i></i></div>' +
-            '<div class="holo-gauge-text">' +
-              '扫描频段 <b>SECTOR 07</b><br>' +
-              '链路状态 <b>ENCRYPTED</b><br>' +
-              '遥测 <b>NOMINAL</b>' +
-            '</div>' +
-          '</div>' +
-          /* ⚠ v5.7.3：主页电台 = **网易云官方外链播放器**（outchain iframe）。
-             为什么用 iframe：版权与播放都由平台负责，本站不托管音频。
-             代价（如实写在视图里，别让接手的人以为是 bug）：
-               · iframe 内部是官方 UI，**样式改不了**（浅色底，与本站暗紫会有跳色）
-               · 它挂在 #app 内的左半侧面板里 ⇒ 首页重渲染（拉列表完成时也会）会重建 iframe，
-                 播放**可能中断**。彻底解法是像 v5.1.0 那样把它挪到 #app 之外；
-                 当前保留在面板内是站长的选择。
-             台账 RADIO_STATIONS 在 app.js —— 改榜单只动那一处。 */
-          '<section class="holo-radio" data-holo-radio aria-label="电台">' +
-            '<div class="holo-radio-head">' +
-              '<span class="holo-radio-tag">RADIO LINK</span>' +
-              '<span class="holo-radio-live"><i aria-hidden="true"></i>NETEASE</span>' +
-            '</div>' +
-            '<div class="holo-radio-list" data-radio-list>' +
-              stations.map(function (st) {
-                return '<button type="button" class="holo-radio-item" data-radio-id="' + esc(String(st.id)) +
-                  '" data-radio-type="' + esc(String(st.type)) + '">' +
-                  '<span class="holo-radio-name">' + esc(st.name) + '</span>' +
-                  '<span class="holo-radio-kind">' + (String(st.type) === '0' ? '歌单' : '单曲') + '</span>' +
-                '</button>';
-              }).join('') +
-            '</div>' +
-            '<div class="holo-radio-shell" data-radio-shell>' +
-              '<div class="holo-radio-ph" data-radio-ph>未挂载 · <b>点上面任意一条</b></div>' +
-            '</div>' +
-            '<p class="holo-radio-foot">官方外链播放器 · 版权与播放由网易云负责</p>' +
-          '</section>' +
-          '<div class="holo-bars" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>' +
-          '<p class="uptime-foot">信号自 ' + esc(bootDate) + ' 起持续广播 · 每一秒都在变长</p>' +
         '</section>' +
         '<div class="holo-card" data-holo-card>' +
+          holoMascot() +
           '<div class="holo-id-top">' +
             '<span class="holo-avatar" aria-hidden="true">' + esc(nickname.slice(0, 1)) + '</span>' +
             '<span>' +
@@ -1406,7 +1178,28 @@
               '<span class="holo-tags">' + tags.map(function (x) { return '<span class="holo-tag">' + esc(x) + '</span>'; }).join('') + '</span>' +
             '</span>' +
           '</div>' +
+          '<p class="holo-card-note">在代码与故事之间，收集一点灵感，也留一点可爱。</p>' +
         '</div>' +
+        '<details class="holo-radio" data-holo-radio>' +
+          '<summary class="holo-radio-head"><span class="holo-radio-tag">♫ RADIO LINK</span>' +
+            '<span>给阅读加一点背景音乐</span><span class="holo-radio-live">展开收听 <i aria-hidden="true"></i></span></summary>' +
+          '<div class="holo-radio-body">' +
+            '<div class="holo-radio-list" data-radio-list>' +
+              stations.map(function (st) {
+                return '<button type="button" class="holo-radio-item" data-radio-id="' + esc(String(st.id)) +
+                  '" data-radio-type="' + esc(String(st.type)) + '" aria-pressed="false">' +
+                  '<span class="holo-radio-name">' + esc(st.name) + '</span>' +
+                  '<span class="holo-radio-kind">' + (String(st.type) === '0' ? '歌单' : '单曲') + '</span>' +
+                '</button>';
+              }).join('') +
+            '</div>' +
+            /* v5.9.4：面板里只留**占位锚点**。真正的播放器常驻在 #radio-persistent
+               （永不搬动，避免浏览上下文重建导致断音），首页时用 fixed 定位覆盖到这里。
+               未挂载时锚点自己显示提示文案。 */
+            '<div class="holo-radio-anchor" data-radio-anchor><div class="holo-radio-ph" data-radio-ph>选择上方曲目，<b>开始收听</b></div></div>' +
+            '<p class="holo-radio-foot">网易云官方播放器 · 点击播放器开始播放</p>' +
+          '</div>' +
+        '</details>' +
       '</div>';
   }
 
