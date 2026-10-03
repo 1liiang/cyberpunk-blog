@@ -29,8 +29,7 @@ const SRC = {
      与线上 index.html 的加载顺序一致（都在 app.js 之前）。 */
   scene: fs.readFileSync(path.join(ROOT, 'js/scene.js'), 'utf8'),
   atmo: fs.readFileSync(path.join(ROOT, 'js/atmo.js'), 'utf8'),
-  /* v4.1 B2：霓虹字标路径数据（须在 views 之前）与开场序列 */
-  wordmark: fs.readFileSync(path.join(ROOT, 'js/wordmark-paths.js'), 'utf8'),
+  /* 开场序列 */
   boot: fs.readFileSync(path.join(ROOT, 'js/boot.js'), 'utf8'),
   /* v4.3 B4：装置 —— 点击反馈与命令终端（终端惰性建 DOM：eval 时无副作用） */
   tap: fs.readFileSync(path.join(ROOT, 'js/tap.js'), 'utf8'),
@@ -533,7 +532,6 @@ function bootDom(opts) {
   if (!opts.skipVer) w.eval(SRC.ver);
   if (!opts.skipCloud) w.eval(SRC.cloud);
   /* v4.1：字标路径数据必须在 views 之前（views 渲染 Hero 时惰性读取） */
-  if (!opts.skipWordmark) w.eval(SRC.wordmark);
   if (!opts.skipViews) w.eval(SRC.views);
   if (!opts.skipKeys) w.eval(SRC.keys);
   /* v4.0：场景 + 氛围运行时（在 app 之前 —— 与 index.html 的加载顺序一致）。

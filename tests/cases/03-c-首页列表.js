@@ -6,7 +6,7 @@
    独立运行：node tests/cases/03-c-首页列表.js
    ============================================================ */
 const { makeSuite, standalone } = require('../case-runner');
-const { bootDom, waitFor } = require('../common');
+const { bootDom, waitFor, FIXTURES } = require('../common');
 
 async function run() {
   const S = makeSuite();
@@ -46,6 +46,37 @@ async function run() {
     T('C 首页列表', 'R22b 回退走了完整图查询',
       imgQueries.some(function (q) { return /(^|,)data(,|$)/.test(String(q.fields || '')); }),
       imgQueries.map(function (q) { return q.fields; }).join(' | '));
+    ctx.dom.window.close();
+  }
+
+  /* 首页异步首屏和加载更多只替换列表，保留正在使用的全息面板。 */
+  {
+    const ctx = bootDom({ url: 'https://x.test/#/about', storage: { neon_radio_pick: '2:2003621098' } });
+    await waitFor(function () { return ctx.doc.querySelector('.about-card'); }, 3000);
+    const pending = [];
+    ctx.w.NEON.Posts.listPublished = function () {
+      return new Promise(function (resolve) { pending.push(resolve); });
+    };
+    ctx.w.location.hash = '#/';
+    await waitFor(function () { return pending.length === 1; }, 1000);
+    const hero = ctx.doc.querySelector('.holo-hero');
+    const iframe = ctx.doc.querySelector('[data-radio-shell] iframe');
+    const frameWindow = iframe && iframe.contentWindow;
+    /* 首批只有一篇无封面文章，追加带封面的文章也不能更换主卡。 */
+    const firstPost = Object.assign({}, FIXTURES.posts[0], { cover_ref: null });
+    pending[0]({ posts: [firstPost], total: 3 });
+    await waitFor(function () { return ctx.doc.getElementById('btn-load-more'); }, 1000);
+    const featuredId = ctx.doc.querySelector('.block-featured .post-card').getAttribute('data-id');
+    const firstKept = hero === ctx.doc.querySelector('.holo-hero') && iframe === ctx.doc.querySelector('[data-radio-shell] iframe');
+    ctx.doc.getElementById('btn-load-more').click();
+    await waitFor(function () { return pending.length === 2; }, 1000);
+    pending[1]({ posts: [FIXTURES.posts[1], FIXTURES.posts[2]], total: 3 });
+    await waitFor(function () { return ctx.doc.querySelectorAll('#home-content .post-card').length === 3; }, 1000);
+    T('C 首页列表', 'R22c 首页追加保留主卡、面板及播放器浏览上下文',
+      firstKept && !!iframe && iframe.isConnected && hero === ctx.doc.querySelector('.holo-hero') &&
+      iframe === ctx.doc.querySelector('[data-radio-shell] iframe') && iframe.contentWindow === frameWindow &&
+      featuredId === String(firstPost.id) && ctx.doc.querySelector('.block-featured .post-card').getAttribute('data-id') === featuredId &&
+      ctx.doc.querySelectorAll('#home-content .post-card').length === 3);
     ctx.dom.window.close();
   }
 

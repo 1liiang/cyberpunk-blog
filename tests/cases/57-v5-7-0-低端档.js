@@ -1,25 +1,12 @@
 'use strict';
-/* ============================================================
-   tests/cases/57-v5-7-0-低端档.js — 低端设备档（P2 硬化）
-
-   背景（取证）：全站 64 条规则用了 box-shadow / filter:blur / backdrop-filter，
-   其中 35 条**常驻**（每帧都在付）。高端显卡无感，集显/老机器上就是拖帧主因。
-   策略不是删效果，而是**按设备降一档**：
-     · js/theme-boot.js 首绘前判档 → html[data-tier="low"]，并在"自动模式"下少开
-       最重的三层氛围（rain/stardust/signs）
-     · js/scene.js 路由校正时同样按档位裁剪（否则一切页面就被打回全开）
-     · style.css 用 html[data-tier="low"] 关掉最贵的常驻效果
-
-   ⚠ 两条纪律必须钉住（本文件存在的主要理由）：
-     1. 用户**手动**选的层集不降级（尊重用户优先于省性能）
-     2. theme-boot 与 scene 裁剪的必须是**同一批层**，且与 atmo.js 的降档顺序开头一致
-        —— 不一致就会出现"探针以为开着、其实没渲染"的错判
-   ============================================================ */
+/* 低端/减少动效首绘即关闭星点，静态底光与纹理保留。
+   手动偏好归并后仍保存完整选择；显示按设备和场景限制，不反复启停动画。
+   theme-boot / scene / atmo 必须对同一个动态层使用一致规则。 */
 const { makeSuite, standalone } = require('../case-runner');
 const { SRC, bootDom, waitFor, stripComments } = require('../common');
 
 const CASE = 'v5.7.0 低端档';
-const LIGHT_LAYERS = ['rain', 'stardust', 'signs', 'pulse', 'bloom', 'glow', 'grid', 'scanline', 'noise'];
+const LIGHT_LAYERS = ['glow', 'grid', 'stardust'];
 
 /* jsdom 里 navigator.deviceMemory / hardwareConcurrency 多为只读 getter —— 必须 defineProperty */
 function setNav(w, key, val) {
@@ -73,9 +60,9 @@ async function run() {
       'data-tier 规则数 ' + (css.match(/html\[data-tier="low"\]/g) || []).length);
   }
 
-  /* ================= ② 动态：低配信号 → 少开三层 ================= */
+  /* ================= ② 动态：低配信号 → 关闭星点 ================= */
   {
-    const ctx = bootDom({ url: 'https://x.test/#/' });
+    const ctx = bootDom({ url: 'https://x.test/#/', storage: { neon_atmo_mode: 'pollution' } });
     const w = ctx.w;
     const memOk = setNav(w, 'deviceMemory', 2);
     const cpuOk = setNav(w, 'hardwareConcurrency', 2);
@@ -86,15 +73,15 @@ async function run() {
       .split(/\s+/).filter(Boolean);
     const dropped = LIGHT_LAYERS.filter(function (id) { return layers.indexOf(id) === -1; });
 
-    T(CASE, 'R308 ★ 低配设备（2GB / 2 核）判定为 low，并首绘前少开最重的三层',
+    T(CASE, 'R308 ★ 低配设备（2GB / 2 核）判定为 low，并首绘前关闭动态星点',
       memOk && cpuOk && tier === 'low' &&
-      dropped.sort().join(',') === 'rain,signs,stardust' && layers.length === 6,
+      dropped.sort().join(',') === 'stardust' && layers.length === 2,
       'tier=' + tier + ' 层数=' + layers.length + ' 少了=[' + dropped.sort() + ']');
 
     let tier2 = '', n2count = -1;
-    T(CASE, 'R308b 高配设备（8GB / 12 核）仍判 high，氛围全开（不误伤）',
+    T(CASE, 'R308b 高配设备（8GB / 12 核）仍判 high，梦游显示三类背景（不误伤）',
       (function () {
-        const c2 = bootDom({ url: 'https://x.test/#/' });
+        const c2 = bootDom({ url: 'https://x.test/#/', storage: { neon_atmo_mode: 'pollution' } });
         const w2 = c2.w;
         setNav(w2, 'deviceMemory', 8);
         setNav(w2, 'hardwareConcurrency', 12);
@@ -103,7 +90,7 @@ async function run() {
         const n2 = (w2.document.documentElement.getAttribute('data-atmo') || '').split(/\s+/).filter(Boolean).length;
         tier2 = t2; n2count = n2;
         c2.dom.window.close();
-        return t2 === 'high' && n2 === 9;
+        return t2 === 'high' && n2 === 3;
       })(),
       '8GB/12 核 → tier=' + tier2 + ' 层数=' + n2count);
 
@@ -127,24 +114,24 @@ async function run() {
     ctx.dom.window.close();
   }
 
-  /* ================= ③ 手动层集优先：用户选过就不降级 ================= */
+  /* ================= ③ 手动偏好保留，低端设备显示静态背景 ================= */
   {
-    const ctx = bootDom({ url: 'https://x.test/#/' });
+    const ctx = bootDom({ url: 'https://x.test/#/', storage: { neon_atmo_mode: 'pollution' } });
     const w = ctx.w;
     setNav(w, 'deviceMemory', 2);
     setNav(w, 'hardwareConcurrency', 2);
-    /* 手动勾选了全部 9 层（装置面板写的就是这个键） */
+    /* 预置三类手动偏好（旧设置迁移后的形态） */
     w.localStorage.setItem('neon_atmo_manual', JSON.stringify(LIGHT_LAYERS));
     w.eval(SRC.themeBoot);
     const n = (w.document.documentElement.getAttribute('data-atmo') || '').split(/\s+/).filter(Boolean).length;
-    T(CASE, 'R308d ★ 用户手动选过的层集不降级（省性能不能凌驾于用户选择）',
-      n === 9, '手动 9 层 → 实际 ' + n + ' 层');
+    T(CASE, 'R308d ★ 旧手动星点在低端设备上静态化，保留偏好供高配使用',
+      n === 2 && JSON.parse(w.localStorage.getItem('neon_atmo_manual')).length === 3, '手动偏好保留，显示 ' + n + ' 类');
     ctx.dom.window.close();
   }
 
   /* ================= ④ 路由校正时也守档位（否则一切页就打回全开） ================= */
   {
-    const ctx = bootDom({ url: 'https://x.test/#/' });
+    const ctx = bootDom({ url: 'https://x.test/#/', storage: { neon_atmo_mode: 'pollution' } });
     const w = ctx.w;
     setNav(w, 'deviceMemory', 2);
     setNav(w, 'hardwareConcurrency', 2);
@@ -153,7 +140,7 @@ async function run() {
     const got = w.NEONScene.layersFor ? w.NEONScene.layersFor('tower', 'pollution') : null;
     const eff = w.NEONScene.effectiveLayers ? w.NEONScene.effectiveLayers('tower') : null;
     T(CASE, 'R308e ★ 路由校正也按档位裁剪（低端机切页面不会被打回全开）',
-      Array.isArray(eff) && eff.length <= 6 && eff.indexOf('rain') === -1,
+      Array.isArray(eff) && eff.length === 2 && eff.indexOf('stardust') === -1,
       'tower 生效层数=' + (eff ? eff.length : '?') + (got ? '（原始 ' + got.length + '）' : ''));
     ctx.dom.window.close();
   }
